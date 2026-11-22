@@ -21,6 +21,7 @@ How it works today:
 - **An explicit, verified tasks home.** The tasks home holds every team's tasks and both layers of docs, so it is chosen or created explicitly with the user, and proven to support docs before anything is written there.
 - **Checks cover every repo.** No repo can quietly break what the game counts as done: evidence, clean state, rollback and regressions all span every component a session touches.
 - **Work outside the workflow is checked too.** Each component repo runs a CI check against the game's state, so a hand-made fix in the server repo can't break a passing feature unnoticed.
+- **Parallel sessions.** Several people (or several unattended loops) can run `/game-next` at once, on different steps, without corrupting the game's state.
 - **Several components tested together.** Bots that join a running server, several clients, simulated network conditions, and a server people can join for a human playtest.
 
 ## Non-goals
@@ -37,7 +38,7 @@ How it works today:
 
 ## Constraints
 
-- One step per session, via `/game-next`; no orchestrator conversation.
+- One step per session, via `/game-next`; no orchestrator conversation. Many sessions may run at once.
 - Ideation and brainstorming happen with a person; the slice verdict waits for a person's playtest.
 - `gamestate.py`: Python 3.8+, standard library only, git-based checks.
 - Claude Code sessions: locally the working directory is one repo, but sibling checkouts are reachable by path. Cloud sessions can attach several repos.
@@ -61,6 +62,9 @@ How it works today:
 6. Testing several components together (the "stack") is part of the adapter.
 7. Platform and region variants are declared per game: separate components, or variants of one component's build.
 8. The tasks home is chosen or created explicitly with the user, never defaulted, and setup proves it supports docs before going further. Setup is therefore always a conversation with the user (`with-user:`).
+9. How work lands is chosen per component: **direct push** (the default) or **pull requests**. Either way, sessions work in their own copy of each repo, never in a developer's checkout.
+10. **Parallel sessions are supported**: several sessions run at once, each on its own step.
+11. **People only comment on wiki pages.** Their comments become topics, as with the GDD; a direct edit is detected and becomes a topic too.
 
 ## Design
 
@@ -97,14 +101,42 @@ The map lives in two forms in the home repo: `docs/game/components.json`, which 
 - **GDD staleness** becomes `git diff gdd_synced..HEAD -- docs/game/wiki.json docs/game/own-calls.md`: any page updated since the last sync. The rest of today's mechanism stays.
 - **Vision facts the gates need** move to `docs/game/vision.json`: pillars (id and statement), anti-pillars, whether a kill condition is set, the slice's quality bar and test question. The vision and slice pages are the prose; `vision.json` is their checked summary, written by ideation and updated by any session that changes them. Gates read the JSON, not the pages.
 - **Files in the repo only by the user's choice.** When the user explicitly chooses local files (a solo or offline game), the pages are markdown under `docs/game/wiki/` in the home repo, indexed by the same `wiki.json`: one mechanism, two storage places. Setup never falls back to this on its own.
+- **People comment; agents edit.** Wiki pages are written only by sessions. People comment, and game-gdd turns comments into topics, as for the GDD. Setup protects the wiki pages (agent-edit, everyone-comment) where the docs tool supports page permissions, and says so where it doesn't.
+- **Direct edits are detected.** `wiki.json` records each page's version or last-modified time from the docs tool, as the session last wrote it. A page whose version moved without a session recording it was edited by hand: game-gdd opens a topic quoting the change (from the tool's history, where it has one), and the page is marked "edited outside a session; under review in T0xx" until the topic resolves. The next brainstorm then rewrites it. *(My call: keep the edit visible rather than revert it, since not every docs tool can restore old versions.)*
+- **Pages are written last.** A session writes tracker pages only after `check` passes and its state transaction lands, so a rolled-back session never leaves a page changed. Parallel sessions claim the pages they will write.
 - **When the connector is unavailable**: every session that needs the docs checks the connection first (a cheap read of the index page) and stops with `stop: <tracker> docs unreachable` rather than working around it. Unattended loops need the connector set up too.
 
 ### Sessions across repos
 
-- `/game-next` always runs in the home repo.
-- A step that touches components (features, regressions) checks that each component's checkout exists at its `path`, cloning it if missing (or, in a cloud session, attaching the repo). It stops with instructions when it can't.
-- `gamestate.py tick` writes `docs/game/.session.json` (gitignored) with the base commit of the home and of every component checkout present. `check` reads it by default, so `--since` keeps working for the home alone.
-- **Rollback** resets each repo in `.session.json` to its base.
+- `/game-next` always starts in the home repo.
+- **Session-owned copies.** A session works in its own copy of every repo it touches: a git worktree of a local checkout, or a fresh clone (in a cloud session, an attached repo). It never commits in, resets or switches a developer's own checkout. *(My call: protects people's uncommitted work, and is what makes parallel sessions possible.)*
+- `gamestate.py tick` (now `claim`, below) records the base commit of every copy in `docs/game/.session.json`, which is gitignored and per copy. `check` reads it by default.
+- **Rollback** resets the session's own copies to their bases. Nothing pushed is ever rolled back: pushing happens only after `check` passes.
+
+### How work lands
+
+Each component's map entry has `integration: "push"` (the default) or `"pr"`.
+
+- **push:** after `check` passes, the session rebases onto the latest `branch` of each component it changed, re-runs that component's `test`, and pushes, components first and the home last. A rebase conflict is resolved in the session (the `resolving-merge-conflicts` skill), or the session stops and leaves its claim to expire. If a push fails after a component already landed, the home's next state transaction records what landed; the following session finishes the rest. *(My call.)*
+- **pr:** the session pushes its own branch and opens a pull request in each component it changed, linking the feature and the ticket, and the feature becomes `awaiting-merge` with the pull request recorded. The pull request is merged by the component's own rules: automatically once its CI check passes, or by a person. A short **confirm** step (`game-build confirm F012`) then checks out the component's `branch`, re-runs the feature's verify there, and records the evidence commit on `branch`. Squash and rebase merges therefore work: evidence always names a commit on `branch`. Awaiting-merge features don't block other work, but they do block the gates (a verdict judges merged code only). *(My call on the confirm step.)*
+- The home repo always uses push for state (below), because state transactions must land immediately.
+
+### Parallel sessions
+
+The home repo's `branch` is the single place sessions coordinate. Git provides the lock: a push that isn't a fast-forward fails, and the session fetches and retries.
+
+- **Claims.** `gamestate.py claim` replaces `tick`. It fetches the home, computes the frontier of steps that can run now, picks the first one no live claim holds, and adds a claim `{id, step, components, pages, session, started, expires}` to `docs/game/claims.json`. Then it commits and pushes; a rejected push means fetch and retry. `/game-next` takes the step it claimed. *(My call on the mechanism.)*
+- **The frontier.** Steps that can run side by side: features in the current milestone whose tickets aren't blocked and whose components and pages no live claim holds; brainstorm topics whose pages no claim holds; a GDD sync when nothing else is editing pages. **Exclusive steps** run alone: ideation, consolidate, plan (except checkpoint and unblock on unclaimed features), verdicts, and every phase transition (`advance` waits until no claims remain for the phase).
+- **State transactions.** Sessions no longer hand-edit shared state files during build and brainstorm. Small changes go through tool commands that fetch, apply, commit and push with retry:
+  - `gamestate.py record F012 --passes --evidence ...`
+  - `gamestate.py topic T014 --resolve ...`
+  - `gamestate.py queue ...`
+  - `gamestate.py release`, which drops the claim.
+
+  Exclusive steps (plan, consolidate, verdicts) may still edit files directly, since nothing runs beside them.
+- **Leases.** A claim expires (default 4 hours, a limit in `state.json`). A crashed session's step returns to the frontier, and its unpushed work is lost with its copy.
+- **Counters.** `sessions`, `attempts` and `last_dispatch` become per-claim records, so parallel ticks don't collide. Stall detection counts claims of the same step in a row.
+- **Code conflicts.** Two sessions on the same component work on different features, in different copies. They meet at rebase (push) or merge (pr), as people do.
 
 ### Checks across repos
 
@@ -156,21 +188,38 @@ Setup is now always a conversation with the user (`with-user: game-setup`): it m
 
 The setup gate (in `gamestate.py`) gains `docs_verified`: set only when the smoke test passed, with the date and the docs place. Setup can't complete without it, the same way plan can't complete without `adapter_verified`.
 
-- game-plan's tech decisions recommend a layout for a new multiplayer game, and record it in an ADR.
-- **A new upgrade mode in game-setup** refreshes a game repo's copies (`gamestate.py`, the `game.md` template sections the skills own, new state files, the docs move) while keeping project choices: autonomy, commands, tracker, docs location. When an existing game's tasks home was never verified for docs, upgrade runs steps 1–3 with the user. EveLikeBrawl, set up with 0.3.0, needs it first.
+- **Layout decided later.** game-plan's tech decisions recommend a layout for a new multiplayer game and record it in an ADR. When the layout has more than one component, plan runs game-setup's new **components mode**, a sub-step like adapter mode: map rows, pointer blocks, adapters, CI. *(My call.)*
+- **Agents never create repos on their own.** A component that needs a new repo becomes a human-queue entry with a wizard; in a session with the user present, the agent may create it with their go-ahead. *(My call.)*
+- **The plan gate covers every component:** each has verified adapter commands, its pointer block, and a CI check written or queued for a person (when it needs a credential). *(My call.)*
+- **A new upgrade mode in game-setup** refreshes a game repo's copies (`gamestate.py`, the `game.md` template sections the skills own, new state files, the docs move) while keeping project choices: autonomy, commands, tracker, docs location. When an existing game's tasks home was never verified for docs, upgrade runs steps 1–3 with the user. **Migrations are versioned:** each release that changes the game files ships a migration step, and upgrade applies them in order from the game's recorded version. *(My call.)* The first supports EveLikeBrawl's case: a game set up with 0.3.0, still at setup. Games partway through a run on an older version aren't supported, since none exist.
 
 ## What the skills change
 
 | Skill | Change |
 | --- | --- |
 | game-setup | always with the user; tasks home chosen or created explicitly; docs smoke test; wiki and GDD skeletons; layout question, component map, pointer blocks, CI checks, stack rows; upgrade mode |
-| gamestate.py | setup as a `with-user:` step gated on `docs_verified`; components.json, wiki.json and vision.json checks; per-component evidence and checks; `.session.json`; `--component` mode; `stack` verify kind |
-| game-next | home-repo rule, a docs connection check before steps that need docs, checkouts, per-repo rollback, milestone regression run across components |
+| gamestate.py | setup as a `with-user:` step gated on `docs_verified`; components.json, wiki.json and vision.json checks; per-component evidence and checks; `.session.json`; `--component` mode; `stack` verify kind; claims, leases and the parallel frontier; state transactions (`record`, `topic`, `queue`, `release`); `awaiting-merge` and confirm steps; versioned migrations |
+| game-next | home-repo rule; `claim` instead of `tick`; session-owned copies; a docs connection check before steps that need docs; push or pull request per component; per-copy rollback; milestone regression run across components |
 | ideation, brainstorm, consolidate | pages via the docs tool; keep wiki.json and vision.json in step |
 | game-plan | features name components; layout recommendation; stack features |
-| game-build | work in the component checkout; per-component evidence; page updates via the docs tool |
+| game-build | work in session-owned copies; push or pull request per component; confirm mode for merged pull requests; `record` for results; per-component evidence; pages last, via the docs tool |
 | game-verdict | stack bots and `playtest-server` for multiplayer scopes |
-| game-gdd | both layers in the same docs tool; staleness from wiki.json |
+| game-gdd | both layers in the same docs tool; staleness from wiki.json; comments become topics; direct wiki edits detected and flagged |
+
+## Calls I made (for the user to check)
+
+- Sessions work in session-owned copies (worktrees or clones), never in a developer's checkout.
+- Push order components first, home last; a partial push is finished by the next session.
+- Pull-request integration uses a confirm step that re-verifies on the component's branch after the merge.
+- Claims in `claims.json` on the home's branch, with git's fast-forward rule as the lock, and 4-hour leases.
+- During build and brainstorm, shared state changes only through tool commands that retry on conflict.
+- A direct wiki edit is kept, flagged, and turned into a topic, not reverted.
+- The layout's components are set up through a components mode that plan calls.
+- Agents never create repos on their own.
+- The plan gate requires every component's adapter, pointer and CI.
+- Upgrade migrations are versioned; mid-run games on old versions aren't migrated.
+- `human-docs.md` is renamed `docs.md`.
+- The string form of feature evidence stays valid for single-component games.
 
 ## Left to the builder
 
@@ -183,3 +232,5 @@ The setup gate (in `gamestate.py`) gains `docs_verified`: set only when the smok
 - **Connector dependence.** Every session that reads pages needs the tracker's docs connector. Mitigation: a clear stop, and the markdown fallback for local-files trackers.
 - **Cross-repo cost.** Sessions with several checkouts are slower; fetching each component for the ancestor check costs time. Mitigation: fetch only components the session touched, and every component only at milestone boundaries.
 - **CI credentials.** Each component's CI needs read access to the home repo, which needs a person to set it up.
+- **Parallel complexity.** Claims, leases and state transactions are the biggest change to the state machine. Mitigation: single-session use stays the default path; one session simply claims everything in order.
+- **Claim contention.** Many sessions on a small frontier retry often. Mitigation: a session that can't claim anything stops with `stop: nothing to claim (N sessions running)` instead of spinning.
