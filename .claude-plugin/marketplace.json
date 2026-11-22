@@ -1,0 +1,21 @@
+{
+  "name": "notfluffygames",
+  "owner": {
+    "name": "NotFluffyGames",
+    "url": "https://github.com/NotFluffyGames"
+  },
+  "description": "Agent skills for building a whole game from one prompt.",
+  "plugins": [
+    {
+      "name": "game-director",
+      "source": "./",
+      "description": "Director plus phase skills that take a game from idea to release candidate, engine- and genre-agnostic.",
+      "category": "development",
+      "keywords": [
+        "gamedev",
+        "games",
+        "skills"
+      ]
+    }
+  ]
+}

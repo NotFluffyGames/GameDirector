@@ -1,0 +1,5 @@
+interface:
+  display_name: "Game Setup"
+  short_description: "Configure a repo for the game workflow"
+policy:
+  allow_implicit_invocation: false

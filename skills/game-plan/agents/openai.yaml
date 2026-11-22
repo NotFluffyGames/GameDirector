@@ -1,0 +1,5 @@
+interface:
+  display_name: "Game Plan"
+  short_description: "Tech ADRs, definition of done, tickets"
+policy:
+  allow_implicit_invocation: false

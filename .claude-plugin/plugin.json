@@ -1,0 +1,28 @@
+{
+  "name": "game-director",
+  "version": "0.1.0",
+  "description": "Take a game from idea to release candidate in one prompt: a director skill drives phase skills (setup, ideate, plan, build, verdict, release) one fresh session at a time, gated by a machine-checked definition of done. Engine-, genre-, platform- and tracker-agnostic.",
+  "author": {
+    "name": "NotFluffyGames",
+    "url": "https://github.com/NotFluffyGames"
+  },
+  "repository": "https://github.com/NotFluffyGames/GameDirector",
+  "license": "MIT",
+  "keywords": [
+    "gamedev",
+    "games",
+    "skills",
+    "autonomous",
+    "definition-of-done",
+    "playtesting"
+  ],
+  "skills": [
+    "./skills/game-director",
+    "./skills/game-setup",
+    "./skills/game-ideate",
+    "./skills/game-plan",
+    "./skills/game-build",
+    "./skills/game-verdict",
+    "./skills/game-release"
+  ]
+}

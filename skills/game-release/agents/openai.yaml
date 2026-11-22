@@ -1,0 +1,5 @@
+interface:
+  display_name: "Game Release"
+  short_description: "Plan polish and release work"
+policy:
+  allow_implicit_invocation: false

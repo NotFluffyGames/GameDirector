@@ -1,0 +1,5 @@
+interface:
+  display_name: "Game Verdict"
+  short_description: "Judge a build: ship, adjust or restart"
+policy:
+  allow_implicit_invocation: false
