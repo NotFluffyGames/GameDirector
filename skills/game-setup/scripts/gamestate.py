@@ -49,13 +49,10 @@ SCORE_RESULTS = ["pass", "fail", "not-assessed", "pending-human"]
 ASPECTS = ["depth", "breadth", "variety"]
 TOPIC_STATUSES = ["open", "resolved", "deferred"]
 PRIORITIES = ["core", "support", "later"]
-VISION_HEADINGS = ["## Pitch", "## Audience and platforms", "## Pillars", "## Anti-pillars", "## Core loop",
-                   "## Target feeling", "## Tone, art and world", "## References", "## Scope", "## Kill condition"]
-SLICE_HEADINGS = ["## What it proves", "## In the slice", "## Out of the slice", "## Quality bar", "## Playtest"]
-CONCEPT_HEADINGS = ["## Concepts", "## Choice"]
-INDEX_SECTIONS = ["## Vision", "## Mechanics", "## Controls", "## Systems", "## Content", "## Modes and sessions",
-                  "## Screens and onboarding", "## Feel", "## Tone, art and world"]
-SLICE_INDEX_SECTIONS = [h for h in INDEX_SECTIONS if h != "## Modes and sessions"]
+AREAS = ["Vision", "Mechanics", "Controls", "Systems", "Content", "Modes and sessions",
+         "Screens and onboarding", "Feel", "Tone, art and world"]
+SLICE_AREAS = [a for a in AREAS if a != "Modes and sessions"]
+REQUIRED_PAGES = ["vision", "slice", "concepts"]
 FUN_FIELDS = ["statement", "scope", "kind", "metric", "threshold", "how"]
 RICH_FIELDS = ["aspect", "scope", "statement", "metric", "threshold", "how"]
 MIN_SEED_TOPICS = 5
@@ -90,6 +87,8 @@ DEFAULT_FUN = {"items": []}
 DEFAULT_RICHNESS = {"targets": []}
 DEFAULT_TOPICS = {"topics": []}
 DEFAULT_KEEP = {"keep": []}
+DEFAULT_WIKI = {"pages": []}
+DEFAULT_VISION = {}
 MISSING = object()
 DEFAULT_TEXT = {
     "progress.md": "# Progress\n\nAppend-only session log. One entry per session, newest last, at most 10 lines each.\n",
@@ -106,35 +105,26 @@ def copy(data):
     return json.loads(json.dumps(data))
 
 
-def sections(text):
-    """Map each '## ' heading line to the lines under it."""
-    out, current = {}, None
-    for line in text.splitlines():
-        if line.startswith("## "):
-            current = line.strip()
-            out[current] = []
-        elif current:
-            out[current].append(line)
-    return out
-
-
 class Game:
     def __init__(self, root: Path):
         self.root = root
         self.dir = root / "docs" / "game"
-        self.wiki = self.dir / "wiki"
         self.state_path = self.dir / "state.json"
         self.features_path = self.dir / "features.json"
         self.fun_path = self.dir / "fun-checklist.json"
         self.richness_path = self.dir / "richness.json"
         self.topics_path = self.dir / "topics.json"
         self.keep_path = self.dir / "keep.json"
+        self.wiki_index_path = self.dir / "wiki.json"
+        self.vision_path = self.dir / "vision.json"
         self.state = self._load(self.state_path, DEFAULT_STATE)
         self.features = self._load(self.features_path, DEFAULT_FEATURES)
         self.fun = self._load(self.fun_path, DEFAULT_FUN)
         self.richness = self._load(self.richness_path, DEFAULT_RICHNESS)
         self.topics_data = self._load(self.topics_path, DEFAULT_TOPICS)
         self.keep = self._load(self.keep_path, DEFAULT_KEEP)
+        self.wiki_index = self._load(self.wiki_index_path, DEFAULT_WIKI)
+        self.vision_data = self._load(self.vision_path, DEFAULT_VISION)
 
     def _load(self, path, default):
         merged = copy(default)
@@ -181,12 +171,20 @@ class Game:
     def text(path):
         return path.read_text(encoding="utf-8") if path.exists() else ""
 
+    def wiki_pages(self):
+        return self.wiki_index.get("pages", [])
+
+    def page_ids(self):
+        return {p.get("id") for p in self.wiki_pages()}
+
+    def vision(self):
+        return self.vision_data
+
     def pillars(self):
-        vision = self.wiki / "vision.md"
-        if not vision.exists():
+        pillars = self.vision().get("pillars")
+        if pillars is None:
             return None
-        lines = sections(self.text(vision)).get("## Pillars", [])
-        return [m.group(1) for m in (re.match(r"\s*[-*]\s*\*\*(P\d+)\*\*", line) for line in lines) if m]
+        return [p.get("id") for p in pillars]
 
     def items(self):
         return self.features.get("features", [])
@@ -291,13 +289,13 @@ class Game:
         return bool(budget) and st["counters"]["brainstorm_sessions"] >= st["limits"]["brainstorm_share"] * budget
 
     def gdd_stale(self):
-        """True when wiki pages or the AI's own calls changed since the human GDD was last synced from them."""
-        if not self.wiki.exists() or not any(self.wiki.rglob("*.md")):
+        """True when the wiki index or the AI's own calls changed since the human GDD was last synced from them."""
+        if not self.wiki_pages():
             return False
         synced = self.state.get("gdd_synced")
         if not synced or not self.in_git():
             return True
-        sources = [p.relative_to(self.root).as_posix() for p in (self.wiki, self.dir / "own-calls.md")]
+        sources = [p.relative_to(self.root).as_posix() for p in (self.wiki_index_path, self.dir / "own-calls.md")]
         r = self._git("diff", "--name-only", synced, "HEAD", "--", *sources)
         return r.returncode != 0 or bool(r.stdout.strip())
 
@@ -338,6 +336,7 @@ class Game:
         errs += self._check_features()
         errs += self._check_targets()
         errs += self._check_topics()
+        errs += self._check_wiki()
         errs += self._check_keep()
         if self.stage() not in STAGES:
             errs.append(f"state.stage must be one of {STAGES}")
@@ -358,7 +357,7 @@ class Game:
         return errs
 
     def _check_features(self):
-        errs, seen = [], set()
+        errs, seen, page_ids = [], set(), self.page_ids()
         pillars, archived, milestones = self.pillars(), self._archived_ids(), self.milestones()
         for f in self.items():
             fid = f.get("id") or "<no id>"
@@ -374,7 +373,7 @@ class Game:
             if f.get("milestone") not in milestones:
                 errs.append(f"{fid}: milestone '{f.get('milestone')}' is not in features.milestones")
             if not f.get("pillar") or (pillars is not None and f.get("pillar") not in pillars):
-                errs.append(f"{fid}: pillar '{f.get('pillar')}' is not a pillar in wiki/vision.md")
+                errs.append(f"{fid}: pillar '{f.get('pillar')}' is not a pillar in vision.json")
             if not f.get("acceptance") or not isinstance(f.get("acceptance"), list):
                 errs.append(f"{fid}: acceptance must be a non-empty list")
             verify = f.get("verify") or {}
@@ -388,7 +387,7 @@ class Game:
                 errs.append(f"{fid}: a human-verified feature passes only with evidence starting 'human:'")
             if f.get("tier") == "cut" and not f.get("cut_reason"):
                 errs.append(f"{fid}: cut without cut_reason")
-            errs += [f"{fid}: page '{p}' does not exist" for p in f.get("pages", []) if not (self.dir / p).exists()]
+            errs += [f"{fid}: page '{p}' is not in wiki.json" for p in f.get("pages", []) if p not in page_ids]
         return errs
 
     def _check_targets(self):
@@ -421,7 +420,7 @@ class Game:
 
     def _check_topics(self):
         errs, seen = [], set()
-        ids = {t.get("id") for t in self.topics()}
+        ids, page_ids = {t.get("id") for t in self.topics()}, self.page_ids()
         for t in self.topics():
             tid = t.get("id") or "<no id>"
             if tid in seen:
@@ -443,7 +442,27 @@ class Game:
                 pages = t.get("pages", [])
                 if not pages:
                     errs.append(f"topic {tid}: resolved without a wiki page it wrote or updated")
-                errs += [f"topic {tid}: page '{p}' does not exist" for p in pages if not (self.dir / p).exists()]
+                errs += [f"topic {tid}: page '{p}' is not in wiki.json" for p in pages if p not in page_ids]
+        return errs
+
+    def _check_wiki(self):
+        errs, seen = [], set()
+        open_topics = {t.get("id") for t in self.topics() if t.get("status") == "open"}
+        for p in self.wiki_pages():
+            pid = p.get("id") or "<no id>"
+            if pid in seen:
+                errs.append(f"page {pid}: duplicate id")
+            seen.add(pid)
+            if p.get("area") not in AREAS:
+                errs.append(f"page {pid}: area '{p.get('area')}' is not one of {AREAS}")
+            link = p.get("link") or ""
+            if not link:
+                errs.append(f"page {pid}: missing link")
+            elif "://" not in link and not (self.root / link).exists():
+                errs.append(f"page {pid}: local link '{link}' does not exist")
+            flagged = p.get("flagged")
+            if flagged and flagged.get("topic") not in open_topics:
+                errs.append(f"page {pid}: flagged for topic {flagged.get('topic')}, which is not open")
         return errs
 
     def _check_keep(self):
@@ -571,22 +590,17 @@ class Game:
         return why
 
     def _ideation_gate(self):
-        vision = self.text(self.wiki / "vision.md").splitlines()
-        why = [f"wiki/vision.md lacks '{h}'" for h in VISION_HEADINGS if h not in vision]
+        why = []
         n = len(self.pillars() or [])
         if not 3 <= n <= 4:
-            why.append(f"wiki/vision.md has {n} pillars; needs 3-4 written as '- **P1**: ...'")
-        sec = sections(self.text(self.wiki / "concepts.md"))
-        why += [f"wiki/concepts.md lacks '{h}'" for h in CONCEPT_HEADINGS if h not in sec]
-        concepts = [line for line in sec.get("## Concepts", []) if re.match(r"### C\d+", line)]
-        if not 3 <= len(concepts) <= 5:
-            why.append(f"wiki/concepts.md has {len(concepts)} directions; needs 3-5 headed '### C1: ...'")
-        if not any(re.search(r"\bC\d+\b", line) for line in sec.get("## Choice", [])):
-            why.append("wiki/concepts.md's Choice names no direction")
-        if not (self.wiki / "index.md").exists():
-            why.append("wiki/index.md is missing")
-        slice_page = self.text(self.wiki / "slice.md").splitlines()
-        why += [f"wiki/slice.md lacks '{h}'" for h in SLICE_HEADINGS if h not in slice_page]
+            why.append(f"vision.json has {n} pillars; needs 3-4")
+        directions = self.vision().get("directions") or {}
+        if not isinstance(directions.get("count"), int) or not 3 <= directions["count"] <= 5:
+            why.append(f"vision.json directions.count is {directions.get('count')}; needs 3-5")
+        if not re.search(r"\bC\d+\b", str(directions.get("choice") or "")):
+            why.append("vision.json directions.choice names no direction")
+        ids = self.page_ids()
+        why += [f"wiki.json has no page '{i}'" for i in REQUIRED_PAGES if i not in ids]
         seeded = [t for t in self.topics() if t.get("parent") is not None]
         if not any(t.get("stage") == "slice" for t in seeded):
             why.append("no topic marked for the vertical slice (stage: slice)")
@@ -598,12 +612,8 @@ class Game:
 
     def _consolidate_gate(self):
         slice_stage = self.stage() == "slice"
-        sec = sections(self.text(self.wiki / "index.md"))
-        why = []
-        for heading in SLICE_INDEX_SECTIONS if slice_stage else INDEX_SECTIONS:
-            links = [m for line in sec.get(heading, []) for m in re.findall(r"\]\(([^)#]+)", line)]
-            if not any((self.wiki / link).exists() for link in links):
-                why.append(f"wiki/index.md '{heading}' links no existing page")
+        have = {p.get("area") for p in self.wiki_pages()}
+        why = [f"wiki.json has no page in area '{a}'" for a in (SLICE_AREAS if slice_stage else AREAS) if a not in have]
         why += [f"topic {t['id']}: open ({t.get('priority')})"
                 for t in self.open_topics(["core", "support"]) if self.in_stage(t)]
         items = self.fun.get("items", [])
@@ -1023,7 +1033,8 @@ def main(argv):
         game.dir.mkdir(parents=True, exist_ok=True)
         for path, data in ((game.state_path, game.state), (game.features_path, game.features),
                            (game.fun_path, game.fun), (game.richness_path, game.richness),
-                           (game.topics_path, game.topics_data), (game.keep_path, game.keep)):
+                           (game.topics_path, game.topics_data), (game.keep_path, game.keep),
+                           (game.wiki_index_path, game.wiki_index), (game.vision_path, game.vision_data)):
             if not path.exists():
                 game._write(path, data)
                 print(f"created {path.relative_to(game.root)}")

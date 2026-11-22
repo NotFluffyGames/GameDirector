@@ -13,32 +13,28 @@ from pathlib import Path
 SCRIPT = Path(__file__).resolve().parents[1] / "skills" / "game-setup" / "scripts" / "gamestate.py"
 
 
-def page(title, headings):
-    return f"# {title}\n" + "".join(f"{h}\nx\n" for h in headings)
+VISION_JSON = {
+    "pillars": [{"id": "P1", "statement": "fast"}, {"id": "P2", "statement": "tense"},
+                {"id": "P3", "statement": "readable"}],
+    "anti_pillars": ["no grinding"],
+    "kill_condition": "nobody wants a second match",
+    "slice": {"test_question": "is one match fun?",
+              "quality_bar": {"code": "production", "feel": "representative", "art": "representative",
+                              "audio": "representative", "ui": "representative", "onboarding": "representative"}},
+    "directions": {"count": 4, "choice": "C2"},
+}
+
+AREAS = ["Vision", "Mechanics", "Controls", "Systems", "Content", "Modes and sessions",
+         "Screens and onboarding", "Feel", "Tone, art and world"]
+SLICE_AREAS = [a for a in AREAS if a != "Modes and sessions"]
+PAGE_IDS = {"Vision": ["vision", "slice", "concepts"], "Mechanics": ["mechanics"], "Controls": ["controls"],
+            "Systems": ["weapons"], "Content": ["content"], "Modes and sessions": ["modes"],
+            "Screens and onboarding": ["screens"], "Feel": ["feel"], "Tone, art and world": ["art"]}
 
 
-VISION = page("Vision", ["## Pitch", "## Audience and platforms"]) + \
-    "## Pillars\n- **P1**: fast\n- **P2**: tense\n- **P3**: readable\n" + \
-    page("", ["## Anti-pillars", "## Core loop", "## Target feeling", "## Tone, art and world", "## References",
-              "## Scope", "## Kill condition"])[3:]
-SLICE = page("Vertical slice", ["## What it proves", "## In the slice", "## Out of the slice", "## Quality bar",
-                                "## Playtest"])
-CONCEPTS = """# Directions considered
-## Concepts
-### C1: Weapon swap brawler
-### C2: Tag arena
-### C3: Ring-out sumo
-## Choice
-C1, because it fits the seed best.
-"""
-
-INDEX_AREAS = ["Vision", "Mechanics", "Controls", "Systems", "Content", "Modes and sessions",
-               "Screens and onboarding", "Feel", "Tone, art and world"]
-PAGES = {"Vision": "vision.md", "Mechanics": "mechanics.md", "Controls": "controls.md",
-         "Systems": "systems/weapons.md", "Content": "content.md", "Modes and sessions": "modes.md",
-         "Screens and onboarding": "screens.md", "Feel": "feel.md", "Tone, art and world": "art.md"}
-INDEX = "# Wiki\n" + "".join(f"## {a}\n- [{a}]({PAGES[a]})\n" for a in INDEX_AREAS)
-SLICE_INDEX = INDEX.replace("## Modes and sessions\n- [Modes and sessions](modes.md)\n", "## Modes and sessions\n")
+def wiki_index(*areas):
+    return {"pages": [{"id": i, "title": i.title(), "area": a, "link": f"https://docs.example/{i}",
+                       "version": "1", "updated": "x"} for a in areas for i in PAGE_IDS[a]]}
 
 
 def topic(tid, parent="T1", priority="support", status="open", stage="slice", pages=(), unblocks=()):
@@ -50,7 +46,7 @@ def topic(tid, parent="T1", priority="support", status="open", stage="slice", pa
 
 
 SEED_TOPICS = {"topics": [
-    topic("T1", parent=None, priority="core", status="resolved", pages=["wiki/vision.md"]),
+    topic("T1", parent=None, priority="core", status="resolved", pages=["vision"]),
     topic("T2", priority="core"), topic("T3"),
     topic("T4", stage="production"), topic("T5", stage="production"),
     topic("T6", priority="later", stage="production")]}
@@ -81,7 +77,7 @@ ANSWERS = "docs/game/playtests/slice/answers.md"
 def feature(fid, milestone, tier="must", kind="test", measures=()):
     return {"id": fid, "title": f"feature {fid}", "pillar": "P1", "tier": tier, "milestone": milestone,
             "acceptance": ["it works"], "verify": {"kind": kind, "how": "run the test"},
-            "measures": list(measures), "tickets": [f"#{fid}"], "pages": ["wiki/mechanics.md"],
+            "measures": list(measures), "tickets": [f"#{fid}"], "pages": ["mechanics"],
             "passes": False, "evidence": "", "blocked": ""}
 
 
@@ -159,12 +155,8 @@ class GameRun(unittest.TestCase):
         if complete:
             self.tool("complete")
 
-    def write_wiki(self, pages):
-        for rel in pages:
-            path = self.game / "wiki" / rel
-            path.parent.mkdir(parents=True, exist_ok=True)
-            if not path.exists():
-                path.write_text(f"# {rel}\n")
+    def write_wiki(self, areas):
+        self.write("docs/game/wiki.json", json.dumps(wiki_index(*areas)))
 
     def sync(self):
         self.assertEqual(self.next(), "game-gdd")
@@ -174,7 +166,7 @@ class GameRun(unittest.TestCase):
         def fn(d):
             for t in d["topics"]:
                 if t["id"] in ids:
-                    t.update(status="resolved", resolution="answered", pages=["wiki/mechanics.md"])
+                    t.update(status="resolved", resolution="answered", pages=["mechanics"])
         self.edit("topics.json", fn)
         self.commit()
 
@@ -189,11 +181,8 @@ class GameRun(unittest.TestCase):
         self.assertEqual(self.next(), "with-user: game-ideation")
 
     def ideate(self):
-        (self.game / "wiki").mkdir()
-        (self.game / "wiki" / "vision.md").write_text(VISION)
-        (self.game / "wiki" / "slice.md").write_text(SLICE)
-        (self.game / "wiki" / "concepts.md").write_text(CONCEPTS)
-        (self.game / "wiki" / "index.md").write_text("# Wiki\n## Vision\n- [Vision](vision.md)\n")
+        (self.game / "vision.json").write_text(json.dumps(VISION_JSON))
+        self.write_wiki(["Vision"])
         (self.game / "topics.json").write_text(json.dumps(SEED_TOPICS))
         self.commit()
         self.tool("complete")
@@ -205,12 +194,12 @@ class GameRun(unittest.TestCase):
         self.to_ideation()
         self.ideate()
         self.assertTrue(self.next().startswith("with-user: game-brainstorm T2"))  # core before support
-        self.write_wiki(PAGES.values())
+        self.write_wiki(SLICE_AREAS)
         self.resolve("T2", "T3")  # the slice's topics; T4-T6 wait for production
         self.sync()
         self.tool("advance")
         self.assertEqual(self.next(), "game-consolidate")
-        (self.game / "wiki" / "index.md").write_text(SLICE_INDEX)
+        self.edit("wiki.json", lambda d: d["pages"][0].update(version="2"))  # consolidate touches the wiki
         (self.game / "fun-checklist.json").write_text(json.dumps(FUN))
         (self.game / "richness.json").write_text(json.dumps(RICHNESS))
         self.commit()
@@ -263,12 +252,12 @@ class GameRun(unittest.TestCase):
         self.ship_slice()
         self.assertEqual((self.stage(), self.phase()), ("production", ("brainstorm", None)))
         self.assertTrue(self.next().startswith("with-user: game-brainstorm T4"))
-        (self.game / "wiki" / "modes.md").write_text("# Modes\nVersus, best of five.\n")
+        self.write_wiki(AREAS)
         self.resolve("T4", "T5")
         self.sync()
         self.tool("advance")
         self.assertEqual(self.next(), "game-consolidate production")
-        (self.game / "wiki" / "index.md").write_text(INDEX)
+        self.edit("wiki.json", lambda d: d["pages"][0].update(version="3"))  # consolidate touches the wiki
         self.commit()
         self.tool("complete")
         self.sync()
@@ -359,24 +348,24 @@ class GameRun(unittest.TestCase):
 
     def test_ideation_needs_the_slice_and_a_slice_topic(self):
         self.to_ideation()
-        (self.game / "wiki").mkdir()
-        (self.game / "wiki" / "vision.md").write_text(VISION)
-        (self.game / "wiki" / "concepts.md").write_text(CONCEPTS.replace("### C3: Ring-out sumo\n", ""))
+        (self.game / "vision.json").write_text(json.dumps(
+            dict(VISION_JSON, directions={"count": 2, "choice": "C1"})))
+        self.write_wiki([])
+        self.edit("wiki.json", lambda d: d["pages"].extend(wiki_index("Vision")["pages"][:1]))
         (self.game / "topics.json").write_text(json.dumps({"topics": [
             topic(f"T{i}", stage="production") for i in range(2, 8)]}))
         self.commit()
         out = self.tool("gate", ok=False)
-        for expected in ("2 directions", "wiki/index.md is missing", "wiki/slice.md lacks", "no topic marked"):
+        for expected in ("directions.count is 2", "wiki.json has no page 'slice'", "wiki.json has no page 'concepts'", "no topic marked"):
             self.assertIn(expected, out)
 
     def test_slice_consolidate_needs_a_human_item_and_production_needs_richness(self):
         self.to_ideation()
         self.ideate()
-        self.write_wiki(PAGES.values())
+        self.write_wiki(SLICE_AREAS)
         self.resolve("T2", "T3")
         self.sync()
         self.tool("advance")
-        (self.game / "wiki" / "index.md").write_text(SLICE_INDEX)
         (self.game / "fun-checklist.json").write_text(json.dumps(
             {"items": [i for i in FUN["items"] if i["id"] != "FC2"]}))
         self.commit()
@@ -517,6 +506,29 @@ class GameRun(unittest.TestCase):
         self.edit("topics.json", lambda d: d["topics"][1].update(status="resolved", resolution="x", pages=[]))
         self.assertIn("topic T2: resolved without a wiki page", self.tool("check", ok=False))
 
+    def test_wiki_index_rejects_duplicates_unknown_areas_and_missing_local_links(self):
+        self.to_ideation()
+        self.edit("wiki.json", lambda d: d["pages"].extend([
+            {"id": "dup", "title": "A", "area": "Mechanics", "link": "https://docs.example/a", "version": "1", "updated": "x"},
+            {"id": "dup", "title": "B", "area": "Mechanics", "link": "https://docs.example/b", "version": "1", "updated": "x"},
+            {"id": "odd", "title": "C", "area": "Lore", "link": "https://docs.example/c", "version": "1", "updated": "x"},
+            {"id": "gone", "title": "D", "area": "Feel", "link": "docs/game/wiki/gone.md", "version": "1", "updated": "x"}]))
+        out = self.tool("check", ok=False)
+        for expected in ("page dup: duplicate id", "page odd: area 'Lore' is not one of", "page gone: local link 'docs/game/wiki/gone.md' does not exist"):
+            self.assertIn(expected, out)
+
+    def test_flagged_pages_need_an_open_topic(self):
+        self.to_ideation()
+        self.ideate()
+        self.edit("wiki.json", lambda d: d["pages"][0].update(flagged={"topic": "T99", "note": "edited outside a session"}))
+        self.assertIn("page vision: flagged for topic T99, which is not open", self.tool("check", ok=False))
+
+    def test_topics_and_features_refer_to_page_ids(self):
+        self.to_plan()
+        self.plan()
+        self.edit("features.json", lambda d: d["features"][0].update(pages=["nope"]))
+        self.assertIn("F1: page 'nope' is not in wiki.json", self.tool("check", ok=False))
+
     # ---------- tests: flow control ----------
     def test_attempts_stalls_and_budget_stop_the_run(self):
         self.to_plan()
@@ -596,12 +608,11 @@ class GameRun(unittest.TestCase):
         for _ in range(2):
             self.tool("tick", "game-brainstorm T9 \"x\"")
         self.assertTrue(self.next().startswith("with-user: game-brainstorm T2"))  # core topics still run
-        self.write_wiki(PAGES.values())
+        self.write_wiki(SLICE_AREAS)
         self.resolve("T2")
         self.sync()
         self.tool("advance")  # support topic T3 waits: the brainstorm share is spent
         self.assertEqual(self.next(), "game-consolidate")
-        (self.game / "wiki" / "index.md").write_text(SLICE_INDEX)
         (self.game / "fun-checklist.json").write_text(json.dumps(FUN))
         self.commit()
         self.assertIn("topic T3: open (support)", self.tool("complete", ok=False))
@@ -614,18 +625,9 @@ class GameRun(unittest.TestCase):
 class Templates(unittest.TestCase):
     """The skills' templates must produce files the gates accept."""
 
-    def test_template_headings_match_the_gates(self):
-        import importlib.util
-        spec = importlib.util.spec_from_file_location("gamestate", SCRIPT)
-        gamestate = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(gamestate)
-        skills = SCRIPT.parents[2]
-        for template, headings in (("game-ideation/vision-template.md", gamestate.VISION_HEADINGS),
-                                   ("game-ideation/slice-template.md", gamestate.SLICE_HEADINGS),
-                                   ("game-ideation/concepts-template.md", gamestate.CONCEPT_HEADINGS),
-                                   ("game-ideation/index-template.md", gamestate.INDEX_SECTIONS)):
-            lines = (skills / template).read_text().splitlines()
-            self.assertEqual([h for h in headings if h not in lines], [], template)
+    def test_index_template_has_a_section_per_area(self):
+        template = (SCRIPT.parents[2] / "game-ideation" / "index-template.md").read_text().splitlines()
+        self.assertEqual([a for a in AREAS if f"## {a}" not in template], [])
 
 
 if __name__ == "__main__":
