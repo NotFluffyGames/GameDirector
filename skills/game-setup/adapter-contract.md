@@ -18,7 +18,7 @@ Write commands as thin wrappers (a `scripts/` or `tools/` file, a make target, a
 | `replay` | plays a recorded input file through the game: `FILE [--seed N]` | final state hash and metrics JSON | yes |
 | `bot` | runs a bot policy for N matches or runs: `--policy P --runs N --seed S [--knobs FILE]` | metrics JSON per run plus a summary | yes |
 | `capture` | renders a screenshot (and optionally video) at a seed and tick: `--seed N --tick T --out PATH` | image file(s) | if the platform can render off-screen |
-| `package` | produces a distributable build per target platform: `--platform P` | artifact path(s) | yes, by the release phase |
+| `package` | produces a distributable build per target platform: `--platform P` | artifact path(s) | yes, by the polish phase |
 
 Same seed, same input, same knobs → same state hash. That determinism is what makes `sim`, `replay` and `bot` evidence instead of anecdotes.
 

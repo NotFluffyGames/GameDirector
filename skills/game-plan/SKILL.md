@@ -1,12 +1,12 @@
 ---
 name: game-plan
-description: Turn the game design into tech ADRs, a verified walking skeleton, a definition of done (features.json) and tracer-bullet tickets in the configured tracker. Phase 2 of the game-* workflow; also handles adjust, restart, checkpoint and unblock re-plans.
+description: Turn the game definition into tech ADRs, a verified walking skeleton, a definition of done (features.json) and tracer-bullet tickets in the configured tracker. Phase 3 of the game-* workflow; also handles adjust, restart, checkpoint and unblock re-plans.
 disable-model-invocation: true
 ---
 
 # Game Plan
 
-Read `docs/agents/game.md` first and follow its session rules. The mode comes from the task:
+Derives everything from the game definition in `docs/game/design.md`. When the definition is silent on something a feature needs, the answer goes in an ADR as an assumption rather than into design.md. Read `docs/agents/game.md` first and follow its session rules. The mode comes from the task:
 
 | Task | Mode |
 | --- | --- |
@@ -45,14 +45,14 @@ Then fill and smoke-test the adapter: read the `game-setup` skill's SKILL.md (be
 
 Write `docs/game/features.json` items (schema in `docs/agents/game.md`; after a restart, number ids after the highest id in `docs/game/archive/`), in dependency order within each milestone:
 
-- **core-loop**: the core loop playable end to end with placeholder art.
-- **systems**: every system the loop needs (progression, UI, save, settings, audio, netcode, ...). Each system's features include its tuning knobs and on/off toggle.
-- **content**: levels, units, items and so on, functional but ugly: built from reusable kit pieces with placeholder art.
-- **verdict-build**: what the verdict needs: a metrics feature for every proxy item (listed in its `measures`), the bot policies those metrics require, and a build that runs on every target platform the agent can build for.
+- **core-loop**: the core loop playable end to end with placeholder art, following Mechanics and rules and Controls.
+- **systems**: every system in the definition's Systems section, with its interactions with the others. Each system's features include its tuning knobs and on/off toggle.
+- **content**: every content type at its target count, functional but ugly: built from the definition's kit pieces with placeholder art. Modes, sessions and the screen flow land here too.
+- **verdict-build**: what the verdicts need: a metrics feature for every fun proxy and richness target (listed in its `measures`), the bot policies those metrics require, and a build that runs on every target platform the agent can build for.
 
-Leave `polish` and `release` empty; game-release fills them. Every item needs a pillar, tier, observable acceptance criteria and a verify method. Choose verify kinds in this order of preference: `test`, `sim`, `replay`, `bot`, `capture`, `check`, `human`. When the adapter marks `sim`, `replay` or `bot` `n/a`, proxy metrics come from instrumented `test` runs or the item becomes `human`.
+Leave `polish` empty; game-polish fills it. Every item needs a pillar, tier, observable acceptance criteria and a verify method. Choose verify kinds in this order of preference: `test`, `sim`, `replay`, `bot`, `capture`, `check`, `human`. When the adapter marks `sim`, `replay` or `bot` `n/a`, proxy metrics come from instrumented `test` runs or the item becomes `human`.
 
-**Done when** every `must` feature traces to a pillar, the core loop is covered end to end, and `gamestate.py gate` shows no fun-checklist item missing from `measures`.
+**Done when** every `must` feature traces to a pillar, the core loop is covered end to end, every system and content type in the definition has features, and `gamestate.py gate` shows no fun proxy or richness target missing from `measures`.
 
 ## 4. Tickets
 
@@ -69,7 +69,7 @@ Write each ticket's references into its features' `tickets` lists. In interactiv
 
 ## 5. Budget
 
-Set `limits.budget_sessions` to sessions already used, plus 1.5 × the open tickets, plus 20 for verdicts and release. In interactive mode, the user confirms it.
+Set `limits.budget_sessions` to sessions already used, plus 1.5 × the open tickets, plus 25 for verdicts and polish. In interactive mode, the user confirms it.
 
 **Done when** the budget is set. Close: `gamestate.py check --since <base>`, commit, progress entry, `gamestate.py complete`.
 

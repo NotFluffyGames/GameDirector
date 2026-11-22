@@ -1,6 +1,6 @@
 # GameDirector
 
-Agent skills that take a game from idea to release candidate. See `README.md`.
+Agent skills that take a raw game idea to a fun, playable, rich, working and tested game. See `README.md`.
 
 - Skills live in `skills/<name>/`, one folder each, listed in `.claude-plugin/plugin.json`.
 - Write and edit skills following the `writing-for-agents` skill: steps end on completion criteria, reference sits behind pointers, leading words over restated triads.

@@ -1,6 +1,6 @@
 ---
 name: game-build
-description: Build and prove one feature of the game's definition of done in one fresh session - claim its ticket, build it test-first, run its verify method, review, commit and record the evidence. Phase 3 of the game-* workflow; also builds nice, polish and release features and fixes regressions.
+description: Build and prove one feature of the game's definition of done in one fresh session - claim its ticket, build it test-first, run its verify method, review, commit and record the evidence. Phase 4 of the game-* workflow; also builds nice and polish features and fixes regressions.
 disable-model-invocation: true
 ---
 

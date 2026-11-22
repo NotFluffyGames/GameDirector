@@ -1,5 +1,0 @@
-interface:
-  display_name: "Game Ideate"
-  short_description: "Pitch, pillars, core loop, fun checklist"
-policy:
-  allow_implicit_invocation: false

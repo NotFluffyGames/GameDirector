@@ -8,7 +8,7 @@ Commands:
   status             one-screen summary, ending with the `next:` action
   check [--since C]  invariants; exit 1 on violations. --since: the commit the
                      session started from (default HEAD), for the edit guard
-  gate               does the current phase's gate pass? exit 1 if not
+  gate               does the current task or phase gate pass? exit 1 if not
   complete           a phase skill's last step: clears the phase's task once
                      the task's gate passes
   advance            move to the next phase or milestone, when allowed
@@ -26,27 +26,34 @@ import subprocess
 import sys
 from pathlib import Path
 
-PHASES = ["setup", "ideate", "plan", "build", "verdict", "release", "awaiting-human", "done"]
+PHASES = ["setup", "brainstorm", "design", "plan", "build", "verdict", "polish", "awaiting-human", "done"]
 TIERS = ["must", "nice", "cut"]
 VERIFY_KINDS = ["test", "sim", "replay", "bot", "capture", "check", "human"]
-MILESTONES = ["core-loop", "systems", "content", "verdict-build", "polish", "release"]
-RELEASE_MILESTONES = ["polish", "release"]
+MILESTONES = ["core-loop", "systems", "content", "verdict-build", "polish"]
+POLISH = "polish"
+SCOPES = ["core-loop", "full", "final"]
 OUTCOMES = ["ship", "adjust", "restart"]
 SCORE_RESULTS = ["pass", "fail", "pending-human"]
-DESIGN_HEADINGS = ["## Pitch", "## Pillars", "## Core loop", "## Tone, art and world", "## Pillar test"]
+ASPECTS = ["depth", "breadth", "variety"]
+CONCEPT_HEADINGS = ["## Concepts", "## Scores", "## Prototypes", "## Choice"]
+DESIGN_HEADINGS = ["## Pitch", "## Pillars", "## Core loop", "## Mechanics and rules", "## Controls", "## Systems",
+                   "## Content", "## Modes and sessions", "## Screens and onboarding", "## Feel",
+                   "## Tone, art and world", "## Pillar test"]
 FUN_FIELDS = ["statement", "scope", "kind", "metric", "threshold", "how"]
-REOPENABLE = ["build", "release", "awaiting-human", "done"]
-NICE_RESERVE = 10  # sessions kept back for verdicts and release before nice features are built
+RICH_FIELDS = ["aspect", "statement", "metric", "threshold", "how"]
+DESIGN_PHASES = ["setup", "brainstorm", "design"]  # the bar (fun checklist, richness) is set here
+PLANNING_PHASES = DESIGN_PHASES + ["plan"]        # the definition of done is rewritten here
+REOPENABLE = ["build", "polish", "awaiting-human", "done"]
+NICE_RESERVE = 10  # sessions kept back for verdicts and polish before nice features are built
 
 DEFAULT_STATE = {
-    "version": 2,
+    "version": 3,
     "phase": "setup",
     "milestone": None,
     "task": "game-setup",
     "verdict_scope": None,
     "verdict_index": 0,
-    "core_verdict_done": False,
-    "full_verdict_done": False,
+    "passed_verdicts": [],
     "checkpoint_due": False,
     "adapter_verified": False,
     "restart_adr": None,
@@ -61,6 +68,7 @@ DEFAULT_STATE = {
 }
 DEFAULT_FEATURES = {"milestones": MILESTONES, "features": []}
 DEFAULT_FUN = {"items": []}
+DEFAULT_RICHNESS = {"targets": []}
 DEFAULT_TEXT = {
     "progress.md": "# Progress\n\nAppend-only session log. One entry per session, newest last, at most 10 lines each.\n",
     "assets.md": "# Assets\n\nEvery asset in the game, where it came from, and its license.\n\n"
@@ -73,6 +81,18 @@ def copy(data):
     return json.loads(json.dumps(data))
 
 
+def sections(text):
+    """Map each '## ' heading line to the lines under it."""
+    out, current = {}, None
+    for line in text.splitlines():
+        if line.startswith("## "):
+            current = line.strip()
+            out[current] = []
+        elif current:
+            out[current].append(line)
+    return out
+
+
 class Game:
     def __init__(self, root: Path):
         self.root = root
@@ -80,10 +100,13 @@ class Game:
         self.state_path = self.dir / "state.json"
         self.features_path = self.dir / "features.json"
         self.fun_path = self.dir / "fun-checklist.json"
+        self.richness_path = self.dir / "richness.json"
         self.design_path = self.dir / "design.md"
+        self.concepts_path = self.dir / "concepts.md"
         self.state = self._load(self.state_path, DEFAULT_STATE)
         self.features = self._load(self.features_path, DEFAULT_FEATURES)
         self.fun = self._load(self.fun_path, DEFAULT_FUN)
+        self.richness = self._load(self.richness_path, DEFAULT_RICHNESS)
 
     def _load(self, path, default):
         merged = copy(default)
@@ -126,18 +149,14 @@ class Game:
         self.commit(message, self.state_path)
 
     # ---------- derived views ----------
+    def text(self, path):
+        return path.read_text(encoding="utf-8") if path.exists() else ""
+
     def pillars(self):
         if not self.design_path.exists():
             return None
-        ids, inside = [], False
-        for line in self.design_path.read_text(encoding="utf-8").splitlines():
-            if line.startswith("## "):
-                inside = line.strip() == "## Pillars"
-                continue
-            m = re.match(r"\s*[-*]\s*\*\*(P\d+)\*\*", line)
-            if inside and m:
-                ids.append(m.group(1))
-        return ids
+        lines = sections(self.text(self.design_path)).get("## Pillars", [])
+        return [m.group(1) for m in (re.match(r"\s*[-*]\s*\*\*(P\d+)\*\*", line) for line in lines) if m]
 
     def items(self):
         return self.features.get("features", [])
@@ -146,15 +165,21 @@ class Game:
         return self.features.get("milestones", [])
 
     def build_ms(self):
-        return [m for m in self.milestones() if m not in RELEASE_MILESTONES]
+        return [m for m in self.milestones() if m != POLISH]
 
     @staticmethod
     def upto(pool, m):
         return pool[: pool.index(m) + 1] if m in pool else list(pool)
 
+    def queue(self, playtests=None):
+        q = self.state.get("human_queue", [])
+        if playtests is None:
+            return q
+        return [e for e in q if (e.get("kind") == "playtest") == playtests]
+
     def queued_ids(self):
         ids = set()
-        for entry in self.state.get("human_queue", []):
+        for entry in self.queue():
             unblocks = entry.get("unblocks", [])
             ids.update([unblocks] if isinstance(unblocks, str) else unblocks)
         return ids
@@ -175,30 +200,30 @@ class Game:
         fs = self.failing(pool)
         return fs[0]["milestone"] if fs else None
 
-    def has_release_features(self):
-        return any(f.get("tier") != "cut" and f.get("milestone") in RELEASE_MILESTONES for f in self.items())
+    def has_polish_features(self):
+        return any(f.get("tier") != "cut" and f.get("milestone") == POLISH for f in self.items())
 
     def green_pool(self):
         """Milestones whose must features have to pass in the current phase."""
         st = self.state
-        phase, m = st["phase"], st.get("milestone")
+        phase, scope = st["phase"], st.get("verdict_scope")
         if phase == "build":
-            return self.upto(self.build_ms(), m)
+            return self.upto(self.build_ms(), st.get("milestone"))
         if phase == "verdict":
-            return self.build_ms()[:1] if st.get("verdict_scope") == "core-loop" else self.build_ms()
-        if phase == "release":
-            return self.build_ms() + self.upto(RELEASE_MILESTONES, m)
-        if phase == "done":
+            return {"core-loop": self.build_ms()[:1], "full": self.build_ms()}.get(scope, self.milestones())
+        if phase in ("polish", "done"):
             return self.milestones()
         return []
 
-    def fun_in_scope(self, scope):
-        return [i for i in self.fun.get("items", []) if scope == "full" or i.get("scope") == "core-loop"]
+    def scored_ids(self, scope):
+        fun = [i["id"] for i in self.fun.get("items", []) if scope != "core-loop" or i.get("scope") == "core-loop"]
+        rich = [t["id"] for t in self.richness.get("targets", [])] if scope != "core-loop" else []
+        return fun + rich
 
     def pending_playtest(self):
-        for entry in self.state.get("human_queue", []):
+        for entry in self.queue(playtests=True):
             answers = entry.get("answers")
-            if entry.get("kind") == "playtest" and answers and (self.root / answers).exists():
+            if answers and (self.root / answers).exists():
                 return entry
         return None
 
@@ -213,14 +238,28 @@ class Game:
                 errs.append(f"state.limits.{key} must be an integer")
         if not self.in_git():
             errs.append("not inside a git repository: run git init (the edit guard needs history)")
+        if POLISH not in self.milestones():
+            errs.append(f"features.milestones must include '{POLISH}'")
+        errs += self._check_features()
+        errs += self._check_targets()
+        for e in self.queue():
+            if not e.get("id") or not e.get("what"):
+                errs.append("human_queue entries need id and what")
+            if e.get("kind") == "playtest" and not (e.get("scope") in SCOPES and e.get("answers")):
+                errs.append(f"human_queue {e.get('id')}: a playtest entry needs scope in {SCOPES} and answers")
+        for v in st.get("verdicts", []):
+            if v.get("outcome") not in OUTCOMES or not v.get("adr") or v.get("scope") not in SCOPES:
+                errs.append(f"verdict {v.get('scope')}: needs scope in {SCOPES}, outcome in {OUTCOMES} and an adr path")
+        if st.get("phase") not in PLANNING_PHASES:
+            errs += self._feature_guard(since)
+        if st.get("phase") not in DESIGN_PHASES:
+            errs += self._target_guard(since, self.fun_path, "items", FUN_FIELDS, "fun", self.fun)
+            errs += self._target_guard(since, self.richness_path, "targets", RICH_FIELDS, "richness", self.richness)
+        return errs
 
-        milestones = self.milestones()
-        for m in RELEASE_MILESTONES:
-            if m not in milestones:
-                errs.append(f"features.milestones must include '{m}'")
-        pillars = self.pillars()
-        archived = self._archived_ids()
-        seen = set()
+    def _check_features(self):
+        errs, seen = [], set()
+        pillars, archived, milestones = self.pillars(), self._archived_ids(), self.milestones()
         for f in self.items():
             fid = f.get("id") or "<no id>"
             if fid in seen:
@@ -249,13 +288,15 @@ class Game:
                 errs.append(f"{fid}: a human-verified feature passes only with evidence starting 'human:'")
             if f.get("tier") == "cut" and not f.get("cut_reason"):
                 errs.append(f"{fid}: cut without cut_reason")
+        return errs
 
-        fun_ids = set()
+    def _check_targets(self):
+        errs, seen = [], set()
         for i in self.fun.get("items", []):
             iid = i.get("id") or "<no id>"
-            if iid in fun_ids:
+            if iid in seen:
                 errs.append(f"fun {iid}: duplicate id")
-            fun_ids.add(iid)
+            seen.add(iid)
             if not i.get("statement"):
                 errs.append(f"fun {iid}: missing statement")
             if i.get("scope") not in ("core-loop", "full"):
@@ -264,20 +305,15 @@ class Game:
                 errs.append(f"fun {iid}: kind must be proxy or human")
             if i.get("kind") == "proxy" and not all(i.get(k) for k in ("metric", "threshold", "how")):
                 errs.append(f"fun {iid}: a proxy item needs metric, threshold and how")
-
-        for e in st.get("human_queue", []):
-            if not e.get("id") or not e.get("what"):
-                errs.append("human_queue entries need id and what")
-            if e.get("kind") == "playtest" and not (e.get("scope") and e.get("answers")):
-                errs.append(f"human_queue {e.get('id')}: a playtest entry needs scope and answers")
-        for v in st.get("verdicts", []):
-            if v.get("outcome") not in OUTCOMES or not v.get("adr"):
-                errs.append(f"verdict {v.get('scope')}: needs outcome in {OUTCOMES} and an adr path")
-
-        if st.get("phase") not in ("setup", "ideate", "plan"):
-            errs += self._feature_guard(since)
-        if st.get("phase") not in ("setup", "ideate"):
-            errs += self._fun_guard(since)
+        for t in self.richness.get("targets", []):
+            tid = t.get("id") or "<no id>"
+            if tid in seen:
+                errs.append(f"richness {tid}: duplicate id (fun and richness ids share one namespace)")
+            seen.add(tid)
+            if t.get("aspect") not in ASPECTS:
+                errs.append(f"richness {tid}: aspect must be one of {ASPECTS}")
+            if not all(t.get(k) for k in ("statement", "metric", "threshold", "how")):
+                errs.append(f"richness {tid}: needs statement, metric, threshold and how")
         return errs
 
     def _archived_ids(self):
@@ -327,19 +363,19 @@ class Game:
         ids = [i for i in re.split(r"[,\s]+", m.group(1)) if i]
         return bool(ids) and all(i in new and i != f.get("id") and new[i].get("tier") == "must" for i in ids)
 
-    def _fun_guard(self, since):
-        """The bar is set in ideate; later phases may add items but not lower or remove them."""
-        old_data = self._old(since, self.fun_path)
+    def _target_guard(self, since, path, key, fields, label, current):
+        """The bar is set in design; later phases may add to it but not lower or remove it."""
+        old_data = self._old(since, path)
         if old_data is None:
             return []
-        new = {i.get("id"): i for i in self.fun.get("items", [])}
+        new = {i.get("id"): i for i in current.get(key, [])}
         errs = []
-        for item in old_data.get("items", []):
+        for item in old_data.get(key, []):
             iid = item.get("id")
             if iid not in new:
-                errs.append(f"fun {iid}: removed outside ideate")
-            elif any(item.get(k) != new[iid].get(k) for k in FUN_FIELDS):
-                errs.append(f"fun {iid}: changed outside ideate")
+                errs.append(f"{label} {iid}: removed outside design")
+            elif any(item.get(k) != new[iid].get(k) for k in fields):
+                errs.append(f"{label} {iid}: changed outside design")
         return errs
 
     # ---------- gates ----------
@@ -349,44 +385,70 @@ class Game:
         if phase == "setup":
             if not (self.root / "docs" / "agents" / "game.md").exists():
                 why.append("docs/agents/game.md is missing")
-        elif phase == "ideate":
-            text = self.design_path.read_text(encoding="utf-8") if self.design_path.exists() else ""
-            why += [f"design.md lacks '{h}'" for h in DESIGN_HEADINGS if h not in text.splitlines()]
-            n = len(self.pillars() or [])
-            if not 3 <= n <= 4:
-                why.append(f"design.md has {n} pillars; needs 3-4 written as '- **P1**: ...'")
-            items = self.fun.get("items", [])
-            if not 3 <= len(items) <= 6:
-                why.append(f"fun checklist has {len(items)} items; needs 3-6")
-            if not any(i.get("scope") == "core-loop" for i in items):
-                why.append("fun checklist has no core-loop item")
-            if not any(i.get("kind") == "proxy" for i in items):
-                why.append("fun checklist has no proxy item")
+        elif phase == "brainstorm":
+            why += self._brainstorm_gate()
+        elif phase == "design":
+            why += self._design_gate()
         elif phase == "plan":
-            if not st.get("adapter_verified"):
-                why.append("adapter commands not verified (game-setup adapter mode)")
-            if not st["limits"].get("budget_sessions"):
-                why.append("limits.budget_sessions is not set")
-            build = [f for f in self.items() if f.get("tier") != "cut" and f.get("milestone") in self.build_ms()]
-            first = self.build_ms()[0]
-            if not any(f.get("tier") == "must" and f.get("milestone") == first for f in build):
-                why.append(f"no must feature in milestone '{first}'")
-            why += [f"{f['id']}: no tickets" for f in build if not f.get("tickets")]
-            measured = {m for f in build if f.get("tier") == "must" for m in f.get("measures", [])}
-            why += [f"fun {i['id']}: no must feature lists it in measures"
-                    for i in self.fun.get("items", []) if i.get("kind") == "proxy" and i.get("id") not in measured]
+            why += self._plan_gate()
         elif phase == "awaiting-human":
-            if st.get("human_queue"):
-                why.append(f"{len(st['human_queue'])} human queue entries open")
+            if self.queue(playtests=False):
+                why.append(f"{len(self.queue(playtests=False))} human queue entries open")
             if st.get("stop_reason"):
                 why.append(f"stopped: {st['stop_reason']} (a human decides, then sets stop_reason to null)")
-        if phase in ("build", "verdict", "release", "done"):
+        if phase in ("build", "verdict", "polish", "done"):
             why += [f"{f['id']}: not passing" + (" (blocked)" if self.is_blocked(f) else "")
                     for f in self.failing(self.green_pool())]
         if phase == "verdict":
             why += self._verdict_gate()
-        if phase == "release" and not self.has_release_features():
-            why.append("no polish/release features yet (game-release)")
+        if phase == "polish" and not self.has_polish_features():
+            why.append("no polish features yet (game-polish)")
+        return why
+
+    def _brainstorm_gate(self):
+        sec = sections(self.text(self.concepts_path))
+        why = [f"concepts.md lacks '{h}'" for h in CONCEPT_HEADINGS if h not in sec]
+        concepts = [line for line in sec.get("## Concepts", []) if re.match(r"### C\d+", line)]
+        if not 3 <= len(concepts) <= 5:
+            why.append(f"concepts.md has {len(concepts)} concepts; needs 3-5 headed '### C1: ...'")
+        if not any(line.strip() for line in sec.get("## Prototypes", [])):
+            why.append("concepts.md records no prototype results")
+        if not any(re.search(r"\bC\d+\b", line) for line in sec.get("## Choice", [])):
+            why.append("concepts.md's Choice names no concept")
+        return why
+
+    def _design_gate(self):
+        lines = self.text(self.design_path).splitlines()
+        why = [f"design.md lacks '{h}'" for h in DESIGN_HEADINGS if h not in lines]
+        n = len(self.pillars() or [])
+        if not 3 <= n <= 4:
+            why.append(f"design.md has {n} pillars; needs 3-4 written as '- **P1**: ...'")
+        items = self.fun.get("items", [])
+        if not 3 <= len(items) <= 6:
+            why.append(f"fun checklist has {len(items)} items; needs 3-6")
+        if not any(i.get("scope") == "core-loop" for i in items):
+            why.append("fun checklist has no core-loop item")
+        if not any(i.get("kind") == "proxy" for i in items):
+            why.append("fun checklist has no proxy item")
+        aspects = {t.get("aspect") for t in self.richness.get("targets", [])}
+        why += [f"richness.json has no {a} target" for a in ASPECTS if a not in aspects]
+        return why
+
+    def _plan_gate(self):
+        st, why = self.state, []
+        if not st.get("adapter_verified"):
+            why.append("adapter commands not verified (game-setup adapter mode)")
+        if not st["limits"].get("budget_sessions"):
+            why.append("limits.budget_sessions is not set")
+        build = [f for f in self.items() if f.get("tier") != "cut" and f.get("milestone") in self.build_ms()]
+        first = self.build_ms()[0]
+        if not any(f.get("tier") == "must" and f.get("milestone") == first for f in build):
+            why.append(f"no must feature in milestone '{first}'")
+        why += [f"{f['id']}: no tickets" for f in build if not f.get("tickets")]
+        measured = {m for f in build if f.get("tier") == "must" for m in f.get("measures", [])}
+        targets = [i["id"] for i in self.fun.get("items", []) if i.get("kind") == "proxy"]
+        targets += [t["id"] for t in self.richness.get("targets", [])]
+        why += [f"{t}: no must feature lists it in measures" for t in targets if t not in measured]
         return why
 
     def _verdict_gate(self):
@@ -395,16 +457,15 @@ class Game:
         if len(verdicts) <= st.get("verdict_index", 0) or verdicts[-1].get("scope") != scope:
             return [f"no {scope} verdict recorded since this phase began"]
         scores = verdicts[-1].get("scores", {})
-        return [f"fun {i['id']}: not scored" for i in self.fun_in_scope(scope)
-                if scores.get(i["id"], {}).get("result") not in SCORE_RESULTS]
+        return [f"{i}: not scored" for i in self.scored_ids(scope) if scores.get(i, {}).get("result") not in SCORE_RESULTS]
 
     def task_gate(self):
         """What the current task still owes before `complete` may clear it."""
         phase = self.state["phase"]
         if phase == "verdict":
             return self._verdict_gate()
-        if phase == "release":
-            return [] if self.has_release_features() else ["no polish/release features yet"]
+        if phase == "polish":
+            return [] if self.has_polish_features() else ["no polish features yet"]
         return self.gate()
 
     # ---------- transitions ----------
@@ -415,56 +476,52 @@ class Game:
         if entry and phase in REOPENABLE:
             self._reopen(entry)
             return [f"playtest answers for {entry['scope']}: verdict reopened"]
+        adr = st.get("restart_adr")
+        suffix = f" restart {adr}" if adr else ""
         if phase == "setup":
-            st.update(phase="ideate", task="game-ideate")
-        elif phase == "ideate":
-            adr = st.get("restart_adr")
-            st.update(phase="plan", task=f"game-plan restart {adr}" if adr else "game-plan", restart_adr=None)
-        elif phase == "plan":
-            self._enter_build()
-        elif phase == "build":
-            notes.append(f"milestone complete: {st['milestone']}")
-            notes += self._checkpoint()
-            self._enter_build()
+            st.update(phase="brainstorm", task="game-brainstorm")
+        elif phase == "brainstorm":
+            st.update(phase="design", task="game-design" + suffix)
+        elif phase == "design":
+            st.update(phase="plan", task="game-plan" + suffix, restart_adr=None)
+        elif phase in ("plan", "build", "polish"):
+            if phase != "plan":
+                notes.append(f"milestone complete: {st['milestone']}")
+            if phase == "build":
+                notes += self._checkpoint()
+            self._route()
         elif phase == "verdict":
             notes += self._apply_verdict(st["verdicts"][-1])
-        elif phase == "release":
-            notes.append(f"milestone complete: {st['milestone']}")
-            self._enter_release()
         elif phase == "awaiting-human":
             self._resume()
         return notes
 
-    def _enter_build(self):
-        st, pool = self.state, self.build_ms()
+    def _route(self):
+        """Send the run to whatever comes next: failing work first, then the verdict it has earned."""
+        st, pool, passed = self.state, self.build_ms(), self.state.get("passed_verdicts", [])
         m = self.earliest_failing_ms(pool)
         if m == pool[0]:
             st.update(phase="build", milestone=m, task=None)
-        elif not st.get("core_verdict_done"):
+        elif "core-loop" not in passed:
             self._enter_verdict("core-loop")  # the core loop is judged before anything is built on it
         elif m:
             st.update(phase="build", milestone=m, task=None)
-        elif not st.get("full_verdict_done"):
+        elif "full" not in passed:
             self._enter_verdict("full")
+        elif not self.has_polish_features():
+            st.update(phase="polish", milestone=POLISH, task="game-polish")
+        elif self.failing([POLISH]):
+            st.update(phase="polish", milestone=POLISH, task=None)
+        elif "final" not in passed:
+            self._enter_verdict("final")
+        elif self.queue(playtests=False):
+            self._stop(None, {"phase": "done"})
         else:
-            self._enter_release()
+            st.update(phase="done", milestone=None, task=None)
 
     def _enter_verdict(self, scope):
         self.state.update(phase="verdict", milestone=None, verdict_scope=scope,
                           verdict_index=len(self.state.get("verdicts", [])), task=f"game-verdict {scope}")
-
-    def _enter_release(self):
-        st = self.state
-        if not self.has_release_features():
-            st.update(phase="release", milestone=RELEASE_MILESTONES[0], task="game-release")
-            return
-        m = self.earliest_failing_ms(RELEASE_MILESTONES)
-        if m:
-            st.update(phase="release", milestone=m, task=None)
-        elif st.get("human_queue"):
-            self._stop(None, {"phase": "done"})
-        else:
-            st.update(phase="done", milestone=None, task=None)
 
     def _reopen(self, entry):
         st = self.state
@@ -482,22 +539,20 @@ class Game:
         st.update(resume=None, stop_reason=None)
         if r.get("restart_adr"):
             self._restart(r["restart_adr"])
-        elif r.get("phase") in ("ideate", "plan"):
+        elif r.get("phase") in ("brainstorm", "design", "plan"):
             st.update(phase=r["phase"], milestone=None, task=r.get("task"))
         else:
-            self._enter_build()  # goes back to whatever still fails, or on to done
+            self._route()  # goes back to whatever still fails, or on to done
 
     def _apply_verdict(self, v):
         st, outcome, scope, adr = self.state, v["outcome"], v["scope"], v["adr"]
+        passed = st.setdefault("passed_verdicts", [])
         if outcome == "ship":
-            st["core_verdict_done"] = True
-            if scope == "full":
-                st["full_verdict_done"] = True
-            self._enter_build()
+            if scope not in passed:
+                passed.append(scope)
+            self._route()
             return [f"verdict {scope}: ship"]
-        st["full_verdict_done"] = False
-        if scope == "core-loop":
-            st["core_verdict_done"] = False
+        st["passed_verdicts"] = [s for s in passed if SCOPES.index(s) < SCOPES.index(scope)]
         key, limit = ("adjusts", "max_adjusts") if outcome == "adjust" else ("restarts", "max_restarts")
         st["counters"][key] += 1
         over = st["counters"][key] > st["limits"][limit]
@@ -522,9 +577,8 @@ class Game:
         self._write(archive / "human-queue.json", st.get("human_queue", []))
         self.features["features"] = []
         self._write(self.features_path, self.features)
-        st.update(phase="ideate", milestone=None, task=f"game-ideate restart {adr}", restart_adr=adr,
-                  core_verdict_done=False, full_verdict_done=False, adapter_verified=False,
-                  checkpoint_due=False, human_queue=[], attempts={})
+        st.update(phase="brainstorm", milestone=None, task=f"game-brainstorm restart {adr}", restart_adr=adr,
+                  passed_verdicts=[], adapter_verified=False, checkpoint_due=False, human_queue=[], attempts={})
         self.commit(f"restart {n}", self.features_path, archive / "features.json", archive / "human-queue.json")
         return [f"restart {n}: definition of done and human queue archived to {archive.relative_to(self.root)}; "
                 "close their open tickets"]
@@ -558,11 +612,12 @@ class Game:
         if self.pending_playtest() and phase in REOPENABLE:
             return "advance"
         if phase == "done":
-            return "stop: done"
+            kits = len(self.queue(playtests=True))
+            return "stop: done" + (f" ({kits} playtest kit(s) await answers; answers reopen the verdict)" if kits else "")
         if phase == "awaiting-human":
             if not self.gate():
                 return "advance"
-            return f"stop: {st.get('stop_reason') or 'waiting on the human queue'} ({len(st.get('human_queue', []))} open)"
+            return f"stop: {st.get('stop_reason') or 'waiting on the human queue'} ({len(self.queue(False))} open)"
         errs = self.check()
         action = "fix: " + "; ".join(errs[:3]) if errs else self._work()
         if action == "advance":
@@ -578,20 +633,20 @@ class Game:
 
     def _work(self):
         st, phase, m = self.state, self.state["phase"], self.state.get("milestone")
-        if phase in ("build", "release") and st.get("checkpoint_due"):
+        if phase in ("build", "polish") and st.get("checkpoint_due"):
             return "game-plan checkpoint"
-        if phase in ("build", "verdict", "release"):
-            pool = self.green_pool() if phase != "release" else self.build_ms()
-            action = self._build_action(pool)  # judge and ship only a green build
+        if phase in ("build", "verdict", "polish"):
+            pool = self.build_ms() if phase == "polish" else self.green_pool()
+            action = self._build_action(pool)  # judge and polish only a green build
             if action:
                 return action
         if st.get("task"):
             return st["task"]
-        if phase == "release":
-            action = self._build_action(self.upto(RELEASE_MILESTONES, m))
+        if phase == "polish":
+            action = self._build_action([POLISH])
             if action:
                 return action
-        if phase in ("build", "release"):
+        if phase in ("build", "polish"):
             action = self._nice_action(m)
             if action:
                 return action
@@ -612,8 +667,7 @@ class Game:
 
     def _nice_action(self, milestone):
         st = self.state
-        budget = st["limits"].get("budget_sessions") or 0
-        left = budget - st["counters"]["sessions"]
+        left = (st["limits"].get("budget_sessions") or 0) - st["counters"]["sessions"]
         remaining_must = len(self.failing(self.milestones()))
         nice = [f for f in self.failing([milestone], tier="nice") if not self.is_blocked(f)]
         if nice and left > 2 * remaining_must + NICE_RESERVE:
@@ -642,14 +696,16 @@ class Game:
                            f"{sum(self.is_done(f) for f in nice)}/{len(nice)} | "
                            f"{sum(f.get('tier') == 'cut' for f in fs)} | "
                            f"{sum(self.is_blocked(f) and not self.is_done(f) for f in fs)}")
-        items = self.fun.get("items", [])
-        if items:
+        items, targets = self.fun.get("items", []), self.richness.get("targets", [])
+        if items or targets:
             proxies = sum(i.get("kind") == "proxy" for i in items)
-            out.append(f"fun checklist: {len(items)} items ({proxies} proxy, {len(items) - proxies} human)")
+            out.append(f"fun checklist: {len(items)} items ({proxies} proxy); richness targets: {len(targets)}")
+        if st.get("passed_verdicts"):
+            out.append(f"verdicts passed: {', '.join(st['passed_verdicts'])}")
         if st.get("verdicts"):
             v = st["verdicts"][-1]
             out.append(f"last verdict: {v.get('scope')} -> {v.get('outcome')} ({v.get('adr')})")
-        for e in st.get("human_queue", [])[:5]:
+        for e in self.queue()[:5]:
             out.append(f"human queue: {e.get('id')} {e.get('what')}")
         why = self.gate()
         out.append(f"gate: {'PASS' if not why else 'FAIL: ' + '; '.join(why[:4]) + (' ...' if len(why) > 4 else '')}")
@@ -672,7 +728,8 @@ def main(argv):
     st = game.state
     if cmd == "init":
         game.dir.mkdir(parents=True, exist_ok=True)
-        for path, data in ((game.state_path, game.state), (game.features_path, game.features), (game.fun_path, game.fun)):
+        for path, data in ((game.state_path, game.state), (game.features_path, game.features),
+                           (game.fun_path, game.fun), (game.richness_path, game.richness)):
             if not path.exists():
                 game._write(path, data)
                 print(f"created {path.relative_to(game.root)}")
@@ -709,10 +766,11 @@ def main(argv):
             return 1
         before = st["phase"]
         notes = game.advance()
-        game.save_state(f"{before} -> {st['phase']}" + (f" ({st['milestone']})" if st.get("milestone") else ""))
+        where = f"{st['phase']}" + (f" ({st['milestone']})" if st.get("milestone") else "")
+        game.save_state(f"{before} -> {where}")
         for note in notes:
             print(note)
-        print(f"{before} -> {st['phase']}" + (f" ({st['milestone']})" if st.get("milestone") else ""))
+        print(f"{before} -> {where}")
         print(f"next: {game.next_action()}")
         return 0
     if cmd == "tick":

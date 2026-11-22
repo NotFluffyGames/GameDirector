@@ -1,0 +1,5 @@
+interface:
+  display_name: "Game Polish"
+  short_description: "Plan feel, art, balance and a playable build"
+policy:
+  allow_implicit_invocation: false

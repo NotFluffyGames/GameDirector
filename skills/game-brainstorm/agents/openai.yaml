@@ -1,0 +1,5 @@
+interface:
+  display_name: "Game Brainstorm"
+  short_description: "Concepts, prototypes, and a choice"
+policy:
+  allow_implicit_invocation: false

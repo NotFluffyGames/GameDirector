@@ -41,7 +41,7 @@ Read what exists before deciding anything:
 1. No git repository: `git init` and an initial commit.
 2. `docs/agents/game.md` from [game.md](game.md), with the autonomy mode filled in.
 3. Copy [scripts/gamestate.py](scripts/gamestate.py) to `docs/game/gamestate.py` and run `python3 docs/game/gamestate.py init` (`python` where `python3` doesn't exist). Apply limit overrides to `docs/game/state.json`. Without any Python 3, tell the user the gates become manual and stop.
-4. `docs/game/seed.md`: the user's prompt, verbatim, with any flags. Every later ideate run reads it.
+4. `docs/game/seed.md`: the user's prompt, verbatim, with any flags. Every later brainstorm and design run reads it.
 5. In `CLAUDE.md` or `AGENTS.md` (whichever exists; if neither, the one your harness reads), add under `## Agent skills`:
 
    ```markdown

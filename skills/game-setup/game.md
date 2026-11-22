@@ -2,12 +2,27 @@
 
 Config for the game-* skills. Every game-* session reads this file first. Edit it freely; it is the project's, not the skills'.
 
+## The goal
+
+A game that is **fun, playable, rich, working, testable and tested**. Publishing it is out of scope. The run is complete when:
+
+| Quality | Checked by |
+| --- | --- |
+| Playable | the packaged build launches without dev tools and plays from title screen to the end of a session, on every target platform this machine can build for |
+| Working | every `must` feature passes; a long crash and softlock fuzz run is clean |
+| Tested | tests, replays and bot runs cover the core rules and every feature, green on the final build |
+| Testable | the simulation core is deterministic and the adapter commands re-run every check |
+| Rich | every richness target passes on the final build |
+| Fun | every fun proxy passes on the final build, and the playtest kit is ready; people's answers can still reopen the verdict |
+
+The phases: setup → brainstorm → design → plan → build → verdict (core-loop) → build → verdict (full) → polish → verdict (final) → done.
+
 ## Autonomy
 
 Mode: {{autonomous | interactive}}
 
 - **autonomous**: ask nothing. At each judgement call, take the recommended answer and record it in an ADR as an assumption a human can overturn. Work only a person can do goes to the **human queue**.
-- **interactive**: the user decides three things: the design tree (game-ideate), the ticket breakdown (game-plan) and each verdict's outcome (game-verdict). Everything else runs as in autonomous mode. Needs a director running in a live conversation; an external loop runs autonomous.
+- **interactive**: the user decides four things: which concept to build (game-brainstorm), the design tree (game-design), the ticket breakdown (game-plan) and each verdict's outcome (game-verdict). Everything else runs as in autonomous mode. Needs a director running in a live conversation; an external loop runs autonomous.
 
 ## Session rules
 
@@ -21,16 +36,18 @@ Every game-* session is a **fresh session** doing **one task**:
 
 **Asking the user.** In interactive mode a session that is a subagent can't reach the user. Write the questions to `docs/game/questions.md` under a heading naming your task (numbered, each with your recommended answer and why), commit, and reply starting `needs-user`. The director asks the user, writes the answers under each question, and dispatches the same task again; on that run, read the answers and continue. A session already talking to the user asks directly.
 
-**The definition of done only grows.** Outside the plan phase an item is never deleted and its `acceptance`, `verify` and `milestone` never change; a `must` item leaves `must` only as `tier: "cut"` with `cut_reason: "replaced by F0xx[, F0yy]"` naming live must features. The fun checklist changes only in ideate. Set `passes: true` only with evidence from a run in this session. `gamestate.py check` enforces all of this against your base commit.
+**The definition of done only grows.** Outside the plan phase an item is never deleted and its `acceptance`, `verify` and `milestone` never change; a `must` item leaves `must` only as `tier: "cut"` with `cut_reason: "replaced by F0xx[, F0yy]"` naming live must features. The fun checklist and richness targets change only in design. Set `passes: true` only with evidence from a run in this session. `gamestate.py check` enforces all of this against your base commit.
 
 ## Files
 
 | Path | What | Written by |
 | --- | --- | --- |
 | `docs/game/seed.md` | the user's original prompt, verbatim | game-setup |
-| `docs/game/design.md` | pitch, pillars, core loop, tone/art/world, pillar test | game-ideate |
-| `docs/game/fun-checklist.json` | fun checklist | game-ideate |
-| `docs/game/features.json` | definition of done | game-plan, game-release add items; game-build sets `passes` |
+| `docs/game/concepts.md` | concepts, scores, prototype results, the choice | game-brainstorm |
+| `docs/game/design.md` | the game definition | game-design |
+| `docs/game/fun-checklist.json` | fun checklist | game-design |
+| `docs/game/richness.json` | richness targets | game-design |
+| `docs/game/features.json` | definition of done | game-plan, game-polish add items; game-build sets `passes` |
 | `docs/game/state.json` | phase, milestone, task, counters, limits, attempts, verdicts, human queue | `gamestate.py`; skills append verdicts and queue entries and set `adapter_verified` |
 | `docs/game/progress.md` | append-only session log | every session |
 | `docs/game/questions.md` | interactive-mode questions and the user's answers | any session, the director |
@@ -44,20 +61,23 @@ Decisions are ADRs and game terms live in `CONTEXT.md`, both where `docs/agents/
 
 ## Vocabulary
 
+- **Concept**: one candidate direction for the game in `concepts.md`: hook, core verb, core loop, target feeling, richness sources, risk. Brainstorm writes 3–5 and prototypes the best.
+- **Game definition**: `design.md`: pitch, pillars, core loop, mechanics and rules, controls, systems, content, modes, screens, feel, art direction. Planning derives features from it and invents no design.
 - **Pillars**: 3–4 statements of the feelings or features the game delivers, written `- **P1**: ...` in design.md. Every feature serves one; a feature with no pillar is not in the game.
 - **Core loop**: the action the player repeats minute to minute, in one sentence.
 - **Fun checklist**: 3–6 statements that are true when the game is fun, each observable in one play session. A **proxy** item has a metric, threshold and method a bot run or replay can measure. A **human** item needs a person.
+- **Richness targets**: `richness.json` targets `{id, aspect, statement, metric, threshold, how}`, at least one per aspect: **depth** (systems that change each other), **breadth** (distinct content), **variety** (playthroughs that differ). Scored at the full and final verdicts.
 - **Scope tiers**: `must`, `nice`, `cut`. Nice features are built after their milestone's must features, while the budget has room.
 - **Tuning knobs**: per-system values and an on/off toggle, loaded from data so they change without code edits.
 - **Simulation core / presentation shell**: game rules live in a deterministic core (fixed tick or turn, seeded RNG, input as data, serializable state) that runs headless. Rendering, audio and input devices live in a thin shell around it. Tests, bots and replays drive the core.
 - **Tick**: one step of the simulation core: a fixed-timestep frame in a real-time game, one turn or action in a turn-based one.
-- **Definition of done**: `features.json`. The game is complete when every `must` item passes or waits in the human queue.
+- **Definition of done**: `features.json`. With the final verdict, it is how the goal above is checked.
 - **Evidence**: the command run, its result (numbers, hash, artifact path) and the commit.
 - **Task**: what the current phase still owes (`state.json` `task`, shown by status). Phase skills clear it with `gamestate.py complete` as their last step.
 - **Gate**: a phase's completion criterion, checked by `gamestate.py gate`.
-- **Verdict**: the scored judgement of a green build against the fun checklist: `ship`, `adjust` or `restart`. Runs once after the core-loop milestone (scope `core-loop`) and once before polish (scope `full`), and again when playtest answers arrive.
-- **Durable assets**: seed.md, design.md, the fun checklist, ADRs, CONTEXT.md and final art. They survive a restart. Code is disposable.
-- **Human queue**: `state.json` `human_queue` entries `{id, what, why, how, unblocks: [feature ids]}` for work only a person can do, each mirrored as a `ready-for-human` ticket. The run moves past queued features and stops at the end for the queue. A person finishing an entry deletes it, and for a `human`-verified feature sets `passes: true` with evidence starting `human:`; the next `/game-director` run goes back to anything still failing. A playtest entry also has `kind: "playtest"`, `scope` and `answers` (a file path): the person writes their answers to that file and leaves the entry, and the next run reopens the verdict with them.
+- **Verdict**: the scored judgement of a green build against the fun checklist and richness targets: `ship`, `adjust` or `restart`. Scopes: `core-loop` (after the core-loop milestone), `full` (before polish), `final` (after polish; shipping it completes the run). It runs again when playtest answers arrive.
+- **Durable assets**: seed.md, concepts.md, design.md, the fun checklist, richness targets, ADRs, CONTEXT.md and final art. They survive a restart. Code is disposable.
+- **Human queue**: `state.json` `human_queue` entries `{id, what, why, how, unblocks: [feature ids]}` for work only a person can do, each mirrored as a `ready-for-human` ticket. The run moves past queued features and stops at the end for the queue; open playtest entries don't stop it. A person finishing an entry deletes it, and for a `human`-verified feature sets `passes: true` with evidence starting `human:`; the next `/game-director` run goes back to anything still failing. A playtest entry also has `kind: "playtest"`, `scope` and `answers` (a file path): the person writes their answers to that file and leaves the entry, and the next run reopens the verdict with them.
 
 ### features.json item
 
@@ -72,7 +92,7 @@ Decisions are ADRs and game terms live in `CONTEXT.md`, both where `docs/agents/
 }
 ```
 
-`milestone` is one of `core-loop`, `systems`, `content`, `verdict-build`, `polish`, `release`. `verify.kind` is one of `test`, `sim`, `replay`, `bot`, `capture`, `check` (any scripted or recorded inspection) or `human`. `measures` lists the fun-checklist proxy ids whose metric this feature produces. Ids are never reused, including ids in `docs/game/archive/`. Build attempts are counted by `gamestate.py` in `state.json` `attempts`.
+`milestone` is one of `core-loop`, `systems`, `content`, `verdict-build`, `polish`. `verify.kind` is one of `test`, `sim`, `replay`, `bot`, `capture`, `check` (any scripted or recorded inspection) or `human`. `measures` lists the fun proxy and richness target ids whose metric this feature produces. Ids are never reused, including ids in `docs/game/archive/`. Build attempts are counted by `gamestate.py` in `state.json` `attempts`.
 
 ## Limits
 
@@ -80,7 +100,7 @@ In `docs/game/state.json` `limits`:
 
 | Limit | Default | When reached |
 | --- | --- | --- |
-| `budget_sessions` | 150, re-estimated by game-plan and game-release | the run stops |
+| `budget_sessions` | 150, re-estimated by game-plan and game-polish | the run stops |
 | `max_adjusts` | 2 | the run stops for a human decision |
 | `max_restarts` | 1 | the run stops for a human decision |
 | `max_attempts` | 3 build dispatches per feature since it last passed | the feature counts as blocked and goes to game-plan's unblock mode |
@@ -116,4 +136,4 @@ The game-* skills lean on these. When one isn't installed, do what its "If missi
 | `code-review` | reviewing each session's diff | review the diff against the ticket and the repo's standards |
 | `diagnosing-bugs` | a red verify or a regression | reproduce, minimise, hypothesise, fix, add the regression test |
 | `research` | engine and platform facts from primary docs | read official docs; save the facts with links to a notes file |
-| `wizard` | scripted walkthroughs for human-only steps | a numbered checklist with exact URLs, clicks and where each value goes |
+| `wizard` | a walkthrough for a multi-step human queue entry | a numbered checklist with exact URLs, clicks and where each value goes |

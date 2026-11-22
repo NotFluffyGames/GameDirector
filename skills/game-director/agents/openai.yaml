@@ -1,5 +1,5 @@
 interface:
   display_name: "Game Director"
-  short_description: "Drive a game from idea to release candidate"
+  short_description: "Drive a game from raw idea to tested game"
 policy:
   allow_implicit_invocation: false

@@ -1,6 +1,6 @@
 ---
 name: game-director
-description: Take a game from an idea to a release candidate in one run by driving the game-* phase skills, one fresh session per task, until the definition of done passes or only human work remains.
+description: Take a raw game idea to a fun, playable, rich, working and tested game in one run, by driving the game-* phase skills one fresh session per task until the final verdict ships or only human work remains.
 disable-model-invocation: true
 argument-hint: "[game idea] [--interactive] [--step]"
 ---
@@ -53,8 +53,9 @@ In `--step` mode, stop after one pass through steps 2–3. If your own context p
 
 Tell the user:
 
-- where the game stands: phase, definition-of-done counts per milestone, last verdict;
-- how to play it: the adapter's `run` command, and `package` artifacts if any;
-- the human queue: each entry, and the wizard, playtest kit or answers file it points to;
+- where the game stands against the goal in `docs/agents/game.md` (fun, playable, rich, working, testable, tested): phase, definition-of-done counts per milestone, the verdicts passed and the last verdict's scores;
+- how to play it: the packaged builds and the adapter's `run` command, and target platforms this machine couldn't build for;
+- the playtest kit: where it is, and that writing its answers file and running `/game-director` re-judges the game with them;
+- the rest of the human queue, with the walkthrough each entry points to;
 - sessions used against the budget, adjusts and restarts used;
-- what to do next: work the queue (or write playtest answers) and run `/game-director` to resume, or raise the limit the stop names.
+- what to do next: play it and answer the kit, work the queue and run `/game-director` to resume, or raise the limit the stop names.

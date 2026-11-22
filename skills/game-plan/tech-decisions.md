@@ -9,7 +9,7 @@ An engine or framework already in the repo wins, unless its ADR records why it c
 3. **Headless and off-screen**: runs logic without a window; renders to an image without a display.
 4. **Fit to the game**: 2D or 3D, physics, networking and UI needs from the design.
 5. **Docs the agent can reach**: official, current and public, so `research` can ground engine-notes.md.
-6. **License and cost** compatible with release on the target stores.
+6. **License and cost** compatible with how the game will be shared.
 
 For small 2D or turn-based games, a code-first framework or plain web stack often beats a full editor-centric engine on criteria 1–3. Record the scores and the runner-up in the ADR.
 
