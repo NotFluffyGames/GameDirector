@@ -10,9 +10,9 @@ Writes the game's **durable assets**: the design every later decision is judged 
 
 ## 1. Gather
 
-- The seed: the idea from the task, an existing `docs/game/design.md`, `CONTEXT.md`.
-- On a restart (`state.json` counters show restarts > 0): the latest verdict ADR's lessons. Keep the durable assets it says still hold; rework what it names as failing.
-- Constraints: platforms, audience, budget from the prompt or `state.json` limits.
+- The seed: `docs/game/seed.md` (the user's original prompt), any existing `docs/game/design.md`, `CONTEXT.md`.
+- A `restart <adr>` task: that verdict ADR's lessons. Keep the durable assets it says still hold; rework what it names as failing. The fun checklist may change in this phase only.
+- Constraints: platforms, audience and budget from the seed and `state.json` limits.
 
 **Done when** you can state the seed and its constraints in two sentences, or "no seed" (you invent within the constraints).
 
@@ -20,7 +20,7 @@ Writes the game's **durable assets**: the design every later decision is judged 
 
 Walk the design tree with the `grilling` skill: audience, platform and input, player count and mode, session length, core verb, goal and fail state, progression, reference games, tone.
 
-- **interactive**: grill the user.
+- **interactive**: the user answers. When you can't reach them, use the questions protocol in `docs/agents/game.md`: batch the open questions, each with your recommended answer, and stop; resume from their answers.
 - **autonomous**: grill yourself. Answer each question with the recommended answer, choosing the smallest game that delivers the seed within the budget. Record every answer in one "design assumptions" ADR so a human can overturn any of them later.
 
 Scope the game so an agent can build and verify it in the session budget: one core loop, few systems, content made from reusable parts.
@@ -49,12 +49,14 @@ Write 3–6 items to `docs/game/fun-checklist.json`:
 - `scope`: `core-loop` for items the core loop alone must satisfy, `full` for the rest. At least one core-loop item.
 - `kind`: make an item a **proxy** whenever a metric can stand for it; [fun-proxies.md](fun-proxies.md) lists proxies for common fun statements. Items no metric captures ("players ask for one more round") are `human`, with `metric`, `threshold` and `how` left out.
 
-**Done when** `python3 docs/game/gamestate.py gate` passes.
+**Done when** `python3 docs/game/gamestate.py gate` lists nothing about design.md or the fun checklist.
 
 ## 5. Name things
 
 With the `domain-modeling` skill, add the game's own nouns (the player's avatar, a match, a run, unit and resource names) to `CONTEXT.md`, so tickets, code and tests share one vocabulary.
 
+**Done when** every noun the pitch and core loop use is in `CONTEXT.md`.
+
 ## 6. Close
 
-`gamestate.py check`, commit, progress entry. Reply with the pitch's first line, the pillars and the core loop.
+`gamestate.py check --since <base>`, commit, progress entry, `gamestate.py complete`. Reply with the pitch's first line, the pillars and the core loop.

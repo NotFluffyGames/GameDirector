@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Run the game-director one step per fresh agent process until it says stop.
 # Usage: AGENT_CMD='<agent non-interactive command>' [IDEA='<game idea>'] loop.sh [max-iterations]
-# Run from the game repo's root. IDEA is passed only while the game has no state yet.
+# Run from the game repo's root. IDEA is passed only to the first, setup run, which saves it
+# to docs/game/seed.md. This mode runs autonomous: no one is there to answer questions.
 set -euo pipefail
 
 if [[ -z "${AGENT_CMD:-}" ]]; then

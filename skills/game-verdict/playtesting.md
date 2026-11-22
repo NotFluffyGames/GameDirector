@@ -45,7 +45,7 @@ The `bot` command writes one line per run plus a summary; verdict evidence is th
 
 ## Fuzzing
 
-Random-policy runs with random knob perturbation within each knob's declared range, for a total of 30 minutes of game time or more. Fail on: crash, exception in logs, NaN or out-of-range state, or a softlock (state hash unchanged for 10 seconds of game time while inputs arrive and the game is not paused or over). Save the replay of every failure.
+Random-policy runs with random knob perturbation within each knob's declared range: 30 minutes of game time for a real-time game, or 2,000 turns for a turn-based one, or more. Fail on: crash, exception in logs, NaN or out-of-range state, or a softlock (state hash unchanged for 10 seconds of game time, or 20 consecutive turns, while legal inputs arrive and the game is not paused or over). Save the replay of every failure.
 
 ## Captures and visual review
 
@@ -57,5 +57,5 @@ Write into the verdict's evidence folder:
 
 1. **How to play**: the adapter's `run` command or a packaged build, controls, and what a session is.
 2. **Script**: play N sessions without help; think aloud or note moments of confusion, tension, boredom and delight.
-3. **Score sheet**: each human fun-checklist item as a yes/no question with a "what happened" field, plus: "Would you play another round right now? Why?" and "What would you change first?"
-4. **Return path**: where the answers go (a file to fill in, or the human queue ticket), so the next `/game-director` run can read them.
+3. **Score sheet** (`score-sheet.md`): each human fun-checklist item as a yes/no question with a "what happened" field, plus: "Would you play another round right now? Why?" and "What would you change first?"
+4. **Return path**: "Copy the score sheet to `answers.md` in this folder, fill it in, commit, and run `/game-director`." The file's existence is the signal: the run reopens the verdict with it.

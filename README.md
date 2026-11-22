@@ -27,7 +27,7 @@ setup ──► ideate ──► plan ──► build: core-loop ──► verdi
 | `game-verdict` | verdict | bot/replay scores, playtest kit, ship/adjust/restart ADR | — |
 | `game-release` | release | polish and release features, release wizard | `wizard` |
 
-**The loop.** `docs/game/gamestate.py status` prints the next action. The director dispatches it to a fresh subagent, checks the result with the tool, and advances. Phase work never happens in the director, so its context grows by one short reply per task.
+**The loop.** `docs/game/gamestate.py status` prints the next action. The director dispatches it to a fresh subagent, checks the result with the tool, and advances. Phase work never happens in the director, so its context grows by one short reply per task. The tool owns every transition: it re-plans after an adjust, re-ideates after a restart, sends regressions in earlier milestones back to build before anything is judged, reopens a verdict when playtest answers arrive, and commits its own bookkeeping so a reset never loses it.
 
 **Context per session.** Each session does one task (one feature, one verdict, one planning step), reads only what that task names, splits work that outgrows it into new tickets, and ends with a commit, a progress entry and a 150-word reply. All state is on disk, so any session, and the director itself, can stop and resume.
 
@@ -35,7 +35,7 @@ setup ──► ideate ──► plan ──► build: core-loop ──► verdi
 
 **Testing a game without a person.** Projects separate a deterministic **simulation core** (fixed tick, seeded RNG, input as data) from a thin **presentation shell**. Tests, headless `sim` runs, input `replay`s and `bot` policies drive the core; `capture` renders screenshots for visual checks. The fun checklist turns "is it fun?" into proxy metrics (lead changes, dominant-strategy win rates, decisions per minute) plus items left for human playtesters.
 
-**People stay in the loop where it counts.** Work only a person can do (playtests, store accounts, signing keys, submissions) goes to a human queue, with a playtest kit or a step-by-step wizard. The run carries on past it and stops at the end. `--interactive` also asks you at the design tree, the ticket breakdown and each verdict. Limits on budget, adjusts, restarts and per-feature attempts stop the run for a human instead of letting it loop.
+**People stay in the loop where it counts.** Work only a person can do (playtests, store accounts, signing keys, submissions) goes to a human queue, with a playtest kit or a step-by-step wizard. The run carries on past it and stops at the end. `--interactive` also asks you at the design tree, the ticket breakdown and each verdict. Limits on budget, adjusts, restarts, per-feature attempts and repeated identical dispatches stop the run for a human instead of letting it loop.
 
 ## Install
 
@@ -84,9 +84,11 @@ The game repo ends up with `docs/agents/game.md` (config: autonomy, session rule
 
 ## Known limits
 
-- Proxy metrics catch a game that clearly isn't fun; they don't prove one is. Human playtest results arrive after an autonomous run has moved on: if they fail an item, run `/game-verdict full` and act on its ADR.
+- Proxy metrics catch a game that clearly isn't fun; they don't prove one is. In an autonomous run, human playtest answers arrive after the run has moved on; they reopen the verdict, which can still send the game back to adjust or restart.
 - Engines whose gameplay can't leave the editor give weaker determinism; the adapter contract's fallbacks trade exact hashes for tolerances.
 - Store submission, certification and anything needing your accounts always ends in the human queue.
+- `--interactive` needs the director running in a live conversation; the external loop runs autonomous.
+- Nothing has been measured yet: these skills have not been run end to end on a real game.
 
 ## Develop
 

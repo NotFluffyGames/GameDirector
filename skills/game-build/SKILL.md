@@ -1,6 +1,6 @@
 ---
 name: game-build
-description: Build and prove one feature of the game's definition of done in one fresh session - claim its ticket, build it test-first, run its verify method, review, commit and record the evidence. Phase 3 of the game-* workflow; also builds polish and release features and fixes regressions.
+description: Build and prove one feature of the game's definition of done in one fresh session - claim its ticket, build it test-first, run its verify method, review, commit and record the evidence. Phase 3 of the game-* workflow; also builds nice, polish and release features and fixes regressions.
 disable-model-invocation: true
 ---
 
@@ -10,10 +10,10 @@ One session, one feature. Read `docs/agents/game.md` first and follow its sessio
 
 ## 1. Pick
 
-- The feature named in the task. A `regression: …` task means: find the feature whose verify now fails, set its `passes` to false, and build it back to green.
-- Otherwise the first id on `gamestate.py status`'s `next:` line whose ticket is unblocked in the tracker.
+- The feature the task names (`game-build F012 …`). If its ticket is blocked in the tracker, take the first alternative the task lists whose ticket isn't.
+- A `regression: …` task: find the feature whose verify now fails, set its `passes` to false, and build it back to green.
 
-Claim its ticket as `docs/agents/issue-tracker.md` describes. Record the base commit. Read the ticket, the feature, `CONTEXT.md`, the ADRs the ticket touches, and the engine-notes.md entries for the commands you will run.
+Claim the ticket as `docs/agents/issue-tracker.md` describes. Read the ticket, the feature, `CONTEXT.md`, the ADRs the ticket touches, and the engine-notes.md entries for the commands you will run. A feature that was tried before has notes on its ticket: start from them.
 
 **Done when** you can state the acceptance criteria and the exact verify command you will run at the end.
 
@@ -33,7 +33,7 @@ Run the feature's verify method through the adapter commands:
 
 - `test`, `sim`, `replay`, `bot`, `check`: run it; the output must meet the acceptance criteria.
 - `capture`: render, open the image and check it shows what the acceptance criteria describe and follows `design.md`'s readability rules. Save it under `docs/game/playtests/evidence/<feature-id>/`.
-- `human`: add a human queue entry that `unblocks` the feature, saying exactly what to check and how; label the ticket `ready-for-human`; skip to step 4 without setting `passes`.
+- `human`: add a human queue entry that `unblocks` the feature, saying exactly what to check and how; label the ticket `ready-for-human`; go to step 4 without setting `passes`.
 
 Red: run the `diagnosing-bugs` loop, fix, verify again.
 
@@ -45,10 +45,10 @@ Red: run the `diagnosing-bugs` loop, fix, verify again.
 2. In `features.json`, set `passes: true` and `evidence`: the command, the result (numbers, hash, artifact path) and the commit.
 3. Close the ticket, commit, append the progress entry.
 
-**Done when** `gamestate.py check` passes on the final commit.
+**Done when** `gamestate.py check --since <base>` passes on the final commit.
 
 ## When the feature doesn't fit the session
 
 - **Too big**: split the remainder into new tickets with blocking edges (the feature stays failing until they land), commit the green part, stop.
-- **Still red at the end**: increment `attempts`, write what you tried on the ticket, and commit only green work. At `limits.max_attempts`, set `blocked` to the reason; the director then sends it to game-plan's unblock mode.
+- **Still red at the end**: write on the ticket what you tried and what you learned, commit only green work, stop. The tool counts the attempt; after `max_attempts` the feature goes to game-plan's unblock mode.
 - **Needs a person** (credentials, hardware, a judgement call): human queue entry that `unblocks` it, ticket `ready-for-human`, stop.

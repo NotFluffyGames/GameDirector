@@ -1,6 +1,6 @@
 {
   "name": "game-director",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Take a game from idea to release candidate in one prompt: a director skill drives phase skills (setup, ideate, plan, build, verdict, release) one fresh session at a time, gated by a machine-checked definition of done. Engine-, genre-, platform- and tracker-agnostic.",
   "author": {
     "name": "NotFluffyGames",
