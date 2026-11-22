@@ -1,0 +1,5 @@
+interface:
+  display_name: "Game Consolidate"
+  short_description: "Complete the wiki and set the bar"
+policy:
+  allow_implicit_invocation: false

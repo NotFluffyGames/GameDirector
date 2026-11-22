@@ -1,12 +1,12 @@
 ---
 name: game-plan
-description: Turn the game definition into tech ADRs, a verified walking skeleton, a definition of done (features.json) and tracer-bullet tickets in the configured tracker. Phase 3 of the game-* workflow; also handles adjust, restart, checkpoint and unblock re-plans.
+description: Turn the game wiki into tech ADRs, a verified walking skeleton, a definition of done (features.json) and tracer-bullet tickets in the configured tracker. Phase 4 of the game-* workflow; also handles adjust, restart, checkpoint and unblock re-plans.
 disable-model-invocation: true
 ---
 
 # Game Plan
 
-Derives everything from the game definition in `docs/game/design.md`. When the definition is silent on something a feature needs, the answer goes in an ADR as an assumption rather than into design.md. Read `docs/agents/game.md` first and follow its session rules. The mode comes from the task:
+Derives everything from the wiki (`docs/game/wiki/`), and invents no design: when the wiki is silent on something a feature needs, open a topic for it with that feature in `unblocks`, and plan around it. Engineering choices the wiki doesn't cover (tech, architecture, tooling) are ADRs, not topics. Read `docs/agents/game.md` first and follow its session rules. The mode comes from the task:
 
 | Task | Mode |
 | --- | --- |
@@ -16,7 +16,7 @@ Derives everything from the game definition in `docs/game/design.md`. When the d
 | `game-plan checkpoint` | Checkpoint mode |
 | `game-plan unblock <ids>` | Unblock mode |
 
-Steps 1–5 rarely fit one session. Do them in order and stop at a session boundary; the same task is dispatched again and resumes at the first step whose completion criterion is unmet.
+Steps 1–5 rarely fit one session. Do them in order and stop at a session boundary; the next session gets the same step and resumes at the first step whose completion criterion is unmet.
 
 ## 1. Tech decisions
 
@@ -45,14 +45,14 @@ Then fill and smoke-test the adapter: read the `game-setup` skill's SKILL.md (be
 
 Write `docs/game/features.json` items (schema in `docs/agents/game.md`; after a restart, number ids after the highest id in `docs/game/archive/`), in dependency order within each milestone:
 
-- **core-loop**: the core loop playable end to end with placeholder art, following Mechanics and rules and Controls.
-- **systems**: every system in the definition's Systems section, with its interactions with the others. Each system's features include its tuning knobs and on/off toggle.
-- **content**: every content type at its target count, functional but ugly: built from the definition's kit pieces with placeholder art. Modes, sessions and the screen flow land here too.
+- **core-loop**: the core loop playable end to end with placeholder art, following the Mechanics and Controls pages.
+- **systems**: every system on the Systems pages, with its interactions with the others. Each system's features include its tuning knobs and on/off toggle.
+- **content**: every content type at its target count, functional but ugly: built from the Content pages' kit pieces with placeholder art. Modes, sessions and the screen flow land here too.
 - **verdict-build**: what the verdicts need: a metrics feature for every fun proxy and richness target (listed in its `measures`), the bot policies those metrics require, and a build that runs on every target platform the agent can build for.
 
-Leave `polish` empty; game-polish fills it. Every item needs a pillar, tier, observable acceptance criteria and a verify method. Choose verify kinds in this order of preference: `test`, `sim`, `replay`, `bot`, `capture`, `check`, `human`. When the adapter marks `sim`, `replay` or `bot` `n/a`, proxy metrics come from instrumented `test` runs or the item becomes `human`.
+Leave `polish` empty; game-polish fills it. Every item needs a pillar, tier, the wiki `pages` it implements, observable acceptance criteria taken from those pages, and a verify method. Choose verify kinds in this order of preference: `test`, `sim`, `replay`, `bot`, `capture`, `check`, `human`. When the adapter marks `sim`, `replay` or `bot` `n/a`, proxy metrics come from instrumented `test` runs or the item becomes `human`.
 
-**Done when** every `must` feature traces to a pillar, the core loop is covered end to end, every system and content type in the definition has features, and `gamestate.py gate` shows no fun proxy or richness target missing from `measures`.
+**Done when** every `must` feature traces to a pillar, the core loop is covered end to end, every system and content type in the wiki has features, and `gamestate.py gate` shows no fun proxy or richness target missing from `measures`.
 
 ## 4. Tickets
 
@@ -63,7 +63,7 @@ Break the features into tickets in the configured tracker:
 - each listing its blocking tickets and the feature ids it serves;
 - labelled with the `ready-for-agent` role from `docs/agents/triage-labels.md`, or `ready-for-human` for work only a person can do.
 
-Write each ticket's references into its features' `tickets` lists. In interactive mode the user approves the numbered breakdown (title, blocked by, what it delivers), through the questions protocol when you can't reach them.
+Write each ticket's references into its features' `tickets` lists. In interactive mode the user approves the numbered breakdown (title, blocked by, what it delivers).
 
 **Done when** every non-cut feature in the build milestones has a ticket and every ticket names a feature.
 
@@ -77,11 +77,12 @@ Set `limits.budget_sessions` to sessions already used, plus 1.5 × the open tick
 
 The task names the verdict ADR. Change only the pillars and systems it names:
 
-1. Apply knob-only fixes first: the verdict's suggested knob values go into the knob files.
-2. Rewrite the affected features' acceptance or verify where the design changed and set their `passes` to false; add new features; cut obsolete ones with a `cut_reason`.
-3. Ticket the new and reset features; re-estimate the budget as in step 5.
+1. Apply knob-only fixes first: the verdict's suggested knob values go into the knob files, and the pages that state them.
+2. Where the ADR changes the design, update the wiki pages first, linking the ADR. A change that needs a design decision the ADR doesn't make becomes a topic, brainstormed with a person before the features it `unblocks`.
+3. Rewrite the affected features' acceptance or verify where the design changed and set their `passes` to false; add new features; cut obsolete ones with a `cut_reason`.
+4. Ticket the new and reset features; re-estimate the budget as in step 5.
 
-**Done when** every change the ADR asks for is a knob change or a feature with a ticket. Close as in step 5, including `complete`.
+**Done when** every change the ADR asks for is a knob change, a page change with its features, or an open topic. Close as in step 5, including `complete`.
 
 ## Checkpoint mode
 

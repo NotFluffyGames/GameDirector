@@ -1,0 +1,5 @@
+interface:
+  display_name: "Game Next"
+  short_description: "Do the next step of making the game"
+policy:
+  allow_implicit_invocation: false

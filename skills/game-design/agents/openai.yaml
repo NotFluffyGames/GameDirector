@@ -1,5 +1,0 @@
-interface:
-  display_name: "Game Design"
-  short_description: "The complete game definition"
-policy:
-  allow_implicit_invocation: false

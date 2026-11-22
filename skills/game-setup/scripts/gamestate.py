@@ -5,7 +5,9 @@ game-setup copies this file to docs/game/gamestate.py in the game's repo.
 
 Commands:
   init               create any missing state files under docs/game/
-  status             one-screen summary, ending with the `next:` action
+  status [--no-user] one-screen summary, ending with the `next:` action.
+                     --no-user: nobody is there to talk to, so skip `with-user:`
+                     work (ideation, brainstorm topics) and do what else can be done
   check [--since C]  invariants; exit 1 on violations. --since: the commit the
                      session started from (default HEAD), for the edit guard
   gate               does the current task or phase gate pass? exit 1 if not
@@ -13,11 +15,12 @@ Commands:
                      the task's gate passes
   advance            move to the next phase or milestone, when allowed
   tick "<next>"      record one dispatch of a `next:` action
+  gdd-synced         game-gdd's last step: the human GDD now matches the wiki
 Option: --root DIR  repo root (default: two levels above this file when it
                     lives in docs/game/, else the current directory)
 
-advance, complete and tick commit docs/game/state.json themselves, so a reset
-to a session's base commit never loses the run's own bookkeeping.
+advance, complete, tick and gdd-synced commit docs/game/state.json themselves,
+so a reset to a session's base commit never loses the run's own bookkeeping.
 """
 import json
 import re
@@ -26,7 +29,12 @@ import subprocess
 import sys
 from pathlib import Path
 
-PHASES = ["setup", "brainstorm", "design", "plan", "build", "verdict", "polish", "awaiting-human", "done"]
+PHASES = ["setup", "ideation", "brainstorm", "consolidate", "plan", "build", "verdict", "polish",
+          "awaiting-human", "done"]
+DESIGN_PHASES = ["setup", "ideation", "brainstorm", "consolidate"]  # the bar (fun checklist, richness) is set here
+PLANNING_PHASES = DESIGN_PHASES + ["plan"]                          # the definition of done is rewritten here
+TOPIC_PHASES = ["consolidate", "plan", "build", "verdict", "polish"]  # topics interrupt these when work needs them
+REOPENABLE = ["build", "polish", "awaiting-human", "done"]
 TIERS = ["must", "nice", "cut"]
 VERIFY_KINDS = ["test", "sim", "replay", "bot", "capture", "check", "human"]
 MILESTONES = ["core-loop", "systems", "content", "verdict-build", "polish"]
@@ -35,19 +43,20 @@ SCOPES = ["core-loop", "full", "final"]
 OUTCOMES = ["ship", "adjust", "restart"]
 SCORE_RESULTS = ["pass", "fail", "pending-human"]
 ASPECTS = ["depth", "breadth", "variety"]
-CONCEPT_HEADINGS = ["## Concepts", "## Scores", "## Prototypes", "## Choice"]
-DESIGN_HEADINGS = ["## Pitch", "## Pillars", "## Core loop", "## Mechanics and rules", "## Controls", "## Systems",
-                   "## Content", "## Modes and sessions", "## Screens and onboarding", "## Feel",
-                   "## Tone, art and world", "## Pillar test"]
+TOPIC_STATUSES = ["open", "resolved", "deferred"]
+PRIORITIES = ["core", "support", "later"]
+VISION_HEADINGS = ["## Pitch", "## Audience and platforms", "## Pillars", "## Core loop", "## Target feeling",
+                   "## Tone, art and world", "## References", "## Scope"]
+CONCEPT_HEADINGS = ["## Concepts", "## Choice"]
+INDEX_SECTIONS = ["## Vision", "## Mechanics", "## Controls", "## Systems", "## Content", "## Modes and sessions",
+                  "## Screens and onboarding", "## Feel", "## Tone, art and world"]
 FUN_FIELDS = ["statement", "scope", "kind", "metric", "threshold", "how"]
 RICH_FIELDS = ["aspect", "statement", "metric", "threshold", "how"]
-DESIGN_PHASES = ["setup", "brainstorm", "design"]  # the bar (fun checklist, richness) is set here
-PLANNING_PHASES = DESIGN_PHASES + ["plan"]        # the definition of done is rewritten here
-REOPENABLE = ["build", "polish", "awaiting-human", "done"]
+MIN_SEED_TOPICS = 5
 NICE_RESERVE = 10  # sessions kept back for verdicts and polish before nice features are built
 
 DEFAULT_STATE = {
-    "version": 3,
+    "version": 4,
     "phase": "setup",
     "milestone": None,
     "task": "game-setup",
@@ -56,11 +65,13 @@ DEFAULT_STATE = {
     "passed_verdicts": [],
     "checkpoint_due": False,
     "adapter_verified": False,
+    "gdd_synced": None,
     "restart_adr": None,
     "resume": None,
     "stop_reason": None,
-    "counters": {"sessions": 0, "adjusts": 0, "restarts": 0},
-    "limits": {"budget_sessions": 150, "max_adjusts": 2, "max_restarts": 1, "max_attempts": 3, "max_repeats": 5},
+    "counters": {"sessions": 0, "brainstorm_sessions": 0, "adjusts": 0, "restarts": 0},
+    "limits": {"budget_sessions": 150, "brainstorm_share": 0.2, "max_adjusts": 2, "max_restarts": 1,
+               "max_attempts": 3, "max_repeats": 5},
     "attempts": {},
     "last_dispatch": {"action": None, "repeats": 0},
     "human_queue": [],
@@ -69,6 +80,7 @@ DEFAULT_STATE = {
 DEFAULT_FEATURES = {"milestones": MILESTONES, "features": []}
 DEFAULT_FUN = {"items": []}
 DEFAULT_RICHNESS = {"targets": []}
+DEFAULT_TOPICS = {"topics": []}
 DEFAULT_TEXT = {
     "progress.md": "# Progress\n\nAppend-only session log. One entry per session, newest last, at most 10 lines each.\n",
     "assets.md": "# Assets\n\nEvery asset in the game, where it came from, and its license.\n\n"
@@ -97,16 +109,17 @@ class Game:
     def __init__(self, root: Path):
         self.root = root
         self.dir = root / "docs" / "game"
+        self.wiki = self.dir / "wiki"
         self.state_path = self.dir / "state.json"
         self.features_path = self.dir / "features.json"
         self.fun_path = self.dir / "fun-checklist.json"
         self.richness_path = self.dir / "richness.json"
-        self.design_path = self.dir / "design.md"
-        self.concepts_path = self.dir / "concepts.md"
+        self.topics_path = self.dir / "topics.json"
         self.state = self._load(self.state_path, DEFAULT_STATE)
         self.features = self._load(self.features_path, DEFAULT_FEATURES)
         self.fun = self._load(self.fun_path, DEFAULT_FUN)
         self.richness = self._load(self.richness_path, DEFAULT_RICHNESS)
+        self.topics_data = self._load(self.topics_path, DEFAULT_TOPICS)
 
     def _load(self, path, default):
         merged = copy(default)
@@ -149,17 +162,22 @@ class Game:
         self.commit(message, self.state_path)
 
     # ---------- derived views ----------
-    def text(self, path):
+    @staticmethod
+    def text(path):
         return path.read_text(encoding="utf-8") if path.exists() else ""
 
     def pillars(self):
-        if not self.design_path.exists():
+        vision = self.wiki / "vision.md"
+        if not vision.exists():
             return None
-        lines = sections(self.text(self.design_path)).get("## Pillars", [])
+        lines = sections(self.text(vision)).get("## Pillars", [])
         return [m.group(1) for m in (re.match(r"\s*[-*]\s*\*\*(P\d+)\*\*", line) for line in lines) if m]
 
     def items(self):
         return self.features.get("features", [])
+
+    def topics(self):
+        return self.topics_data.get("topics", [])
 
     def milestones(self):
         return self.features.get("milestones", [])
@@ -187,6 +205,9 @@ class Game:
     def is_done(self, f):
         """Passing, or handed to a person: the run moves on and comes back once the queue clears."""
         return bool(f.get("passes")) or f.get("id") in self.queued_ids()
+
+    def waits_on_topic(self, f):
+        return any(f.get("id") in t.get("unblocks", []) for t in self.open_topics())
 
     def is_blocked(self, f):
         return bool(f.get("blocked")) or self.state["attempts"].get(f.get("id"), 0) >= self.state["limits"]["max_attempts"]
@@ -227,6 +248,26 @@ class Game:
                 return entry
         return None
 
+    def open_topics(self, priorities=PRIORITIES):
+        rank = {p: i for i, p in enumerate(PRIORITIES)}
+        ts = [t for t in self.topics() if t.get("status") == "open" and t.get("priority") in priorities]
+        return sorted(ts, key=lambda t: (rank.get(t.get("priority"), 9), t.get("id", "")))
+
+    def brainstorm_share_spent(self):
+        st = self.state
+        budget = st["limits"].get("budget_sessions") or 0
+        return bool(budget) and st["counters"]["brainstorm_sessions"] >= st["limits"]["brainstorm_share"] * budget
+
+    def gdd_stale(self):
+        """True when wiki pages changed since the human GDD was last synced from them."""
+        if not self.wiki.exists() or not any(self.wiki.rglob("*.md")):
+            return False
+        synced = self.state.get("gdd_synced")
+        if not synced or not self.in_git():
+            return True
+        r = self._git("diff", "--name-only", synced, "HEAD", "--", self.wiki.relative_to(self.root).as_posix())
+        return r.returncode != 0 or bool(r.stdout.strip())
+
     # ---------- invariants ----------
     def check(self, since="HEAD"):
         errs = []
@@ -242,6 +283,7 @@ class Game:
             errs.append(f"features.milestones must include '{POLISH}'")
         errs += self._check_features()
         errs += self._check_targets()
+        errs += self._check_topics()
         for e in self.queue():
             if not e.get("id") or not e.get("what"):
                 errs.append("human_queue entries need id and what")
@@ -274,7 +316,7 @@ class Game:
             if f.get("milestone") not in milestones:
                 errs.append(f"{fid}: milestone '{f.get('milestone')}' is not in features.milestones")
             if not f.get("pillar") or (pillars is not None and f.get("pillar") not in pillars):
-                errs.append(f"{fid}: pillar '{f.get('pillar')}' is not a pillar in design.md")
+                errs.append(f"{fid}: pillar '{f.get('pillar')}' is not a pillar in wiki/vision.md")
             if not f.get("acceptance") or not isinstance(f.get("acceptance"), list):
                 errs.append(f"{fid}: acceptance must be a non-empty list")
             verify = f.get("verify") or {}
@@ -288,6 +330,7 @@ class Game:
                 errs.append(f"{fid}: a human-verified feature passes only with evidence starting 'human:'")
             if f.get("tier") == "cut" and not f.get("cut_reason"):
                 errs.append(f"{fid}: cut without cut_reason")
+            errs += [f"{fid}: page '{p}' does not exist" for p in f.get("pages", []) if not (self.dir / p).exists()]
         return errs
 
     def _check_targets(self):
@@ -314,6 +357,31 @@ class Game:
                 errs.append(f"richness {tid}: aspect must be one of {ASPECTS}")
             if not all(t.get(k) for k in ("statement", "metric", "threshold", "how")):
                 errs.append(f"richness {tid}: needs statement, metric, threshold and how")
+        return errs
+
+    def _check_topics(self):
+        errs, seen = [], set()
+        ids = {t.get("id") for t in self.topics()}
+        for t in self.topics():
+            tid = t.get("id") or "<no id>"
+            if tid in seen:
+                errs.append(f"topic {tid}: duplicate id")
+            seen.add(tid)
+            if not t.get("title") or not t.get("question"):
+                errs.append(f"topic {tid}: needs a title and a question")
+            if t.get("status") not in TOPIC_STATUSES:
+                errs.append(f"topic {tid}: status must be one of {TOPIC_STATUSES}")
+            if t.get("priority") not in PRIORITIES:
+                errs.append(f"topic {tid}: priority must be one of {PRIORITIES}")
+            if t.get("parent") is not None and t.get("parent") not in ids:
+                errs.append(f"topic {tid}: parent '{t.get('parent')}' is not a topic")
+            if t.get("status") in ("resolved", "deferred") and not t.get("resolution"):
+                errs.append(f"topic {tid}: a {t.get('status')} topic needs a resolution (the answer, or why it waits)")
+            if t.get("status") == "resolved":
+                pages = t.get("pages", [])
+                if not pages:
+                    errs.append(f"topic {tid}: resolved without a wiki page it wrote or updated")
+                errs += [f"topic {tid}: page '{p}' does not exist" for p in pages if not (self.dir / p).exists()]
         return errs
 
     def _archived_ids(self):
@@ -364,7 +432,7 @@ class Game:
         return bool(ids) and all(i in new and i != f.get("id") and new[i].get("tier") == "must" for i in ids)
 
     def _target_guard(self, since, path, key, fields, label, current):
-        """The bar is set in design; later phases may add to it but not lower or remove it."""
+        """The bar is set before planning; later phases may add to it but not lower or remove it."""
         old_data = self._old(since, path)
         if old_data is None:
             return []
@@ -373,9 +441,9 @@ class Game:
         for item in old_data.get(key, []):
             iid = item.get("id")
             if iid not in new:
-                errs.append(f"{label} {iid}: removed outside design")
+                errs.append(f"{label} {iid}: removed after consolidate")
             elif any(item.get(k) != new[iid].get(k) for k in fields):
-                errs.append(f"{label} {iid}: changed outside design")
+                errs.append(f"{label} {iid}: changed after consolidate")
         return errs
 
     # ---------- gates ----------
@@ -385,10 +453,14 @@ class Game:
         if phase == "setup":
             if not (self.root / "docs" / "agents" / "game.md").exists():
                 why.append("docs/agents/game.md is missing")
+        elif phase == "ideation":
+            why += self._ideation_gate()
         elif phase == "brainstorm":
-            why += self._brainstorm_gate()
-        elif phase == "design":
-            why += self._design_gate()
+            why += [f"topic {t['id']}: open ({t.get('priority')})" for t in self.open_topics(["core"])]
+            if not self.brainstorm_share_spent():
+                why += [f"topic {t['id']}: open (support)" for t in self.open_topics(["support"])]
+        elif phase == "consolidate":
+            why += self._consolidate_gate()
         elif phase == "plan":
             why += self._plan_gate()
         elif phase == "awaiting-human":
@@ -405,24 +477,36 @@ class Game:
             why.append("no polish features yet (game-polish)")
         return why
 
-    def _brainstorm_gate(self):
-        sec = sections(self.text(self.concepts_path))
-        why = [f"concepts.md lacks '{h}'" for h in CONCEPT_HEADINGS if h not in sec]
-        concepts = [line for line in sec.get("## Concepts", []) if re.match(r"### C\d+", line)]
-        if not 3 <= len(concepts) <= 5:
-            why.append(f"concepts.md has {len(concepts)} concepts; needs 3-5 headed '### C1: ...'")
-        if not any(line.strip() for line in sec.get("## Prototypes", [])):
-            why.append("concepts.md records no prototype results")
-        if not any(re.search(r"\bC\d+\b", line) for line in sec.get("## Choice", [])):
-            why.append("concepts.md's Choice names no concept")
-        return why
-
-    def _design_gate(self):
-        lines = self.text(self.design_path).splitlines()
-        why = [f"design.md lacks '{h}'" for h in DESIGN_HEADINGS if h not in lines]
+    def _ideation_gate(self):
+        vision = self.text(self.wiki / "vision.md").splitlines()
+        why = [f"wiki/vision.md lacks '{h}'" for h in VISION_HEADINGS if h not in vision]
         n = len(self.pillars() or [])
         if not 3 <= n <= 4:
-            why.append(f"design.md has {n} pillars; needs 3-4 written as '- **P1**: ...'")
+            why.append(f"wiki/vision.md has {n} pillars; needs 3-4 written as '- **P1**: ...'")
+        sec = sections(self.text(self.wiki / "concepts.md"))
+        why += [f"wiki/concepts.md lacks '{h}'" for h in CONCEPT_HEADINGS if h not in sec]
+        concepts = [line for line in sec.get("## Concepts", []) if re.match(r"### C\d+", line)]
+        if not 3 <= len(concepts) <= 5:
+            why.append(f"wiki/concepts.md has {len(concepts)} directions; needs 3-5 headed '### C1: ...'")
+        if not any(re.search(r"\bC\d+\b", line) for line in sec.get("## Choice", [])):
+            why.append("wiki/concepts.md's Choice names no direction")
+        if not (self.wiki / "index.md").exists():
+            why.append("wiki/index.md is missing")
+        seeded = [t for t in self.topics() if t.get("parent") is not None]
+        if len(seeded) < MIN_SEED_TOPICS:
+            why.append(f"topics.json has {len(seeded)} follow-up topics; seed at least {MIN_SEED_TOPICS}")
+        if not any(t.get("priority") == "core" for t in seeded):
+            why.append("no core topic seeded")
+        return why
+
+    def _consolidate_gate(self):
+        sec = sections(self.text(self.wiki / "index.md"))
+        why = []
+        for heading in INDEX_SECTIONS:
+            links = [m for line in sec.get(heading, []) for m in re.findall(r"\]\(([^)#]+)", line)]
+            if not any((self.wiki / link).exists() for link in links):
+                why.append(f"wiki/index.md '{heading}' links no existing page")
+        why += [f"topic {t['id']}: open ({t.get('priority')})" for t in self.open_topics(["core", "support"])]
         items = self.fun.get("items", [])
         if not 3 <= len(items) <= 6:
             why.append(f"fun checklist has {len(items)} items; needs 3-6")
@@ -445,6 +529,7 @@ class Game:
         if not any(f.get("tier") == "must" and f.get("milestone") == first for f in build):
             why.append(f"no must feature in milestone '{first}'")
         why += [f"{f['id']}: no tickets" for f in build if not f.get("tickets")]
+        why += [f"{f['id']}: no wiki pages it implements" for f in build if f.get("tier") == "must" and not f.get("pages")]
         measured = {m for f in build if f.get("tier") == "must" for m in f.get("measures", [])}
         targets = [i["id"] for i in self.fun.get("items", []) if i.get("kind") == "proxy"]
         targets += [t["id"] for t in self.richness.get("targets", [])]
@@ -476,14 +561,15 @@ class Game:
         if entry and phase in REOPENABLE:
             self._reopen(entry)
             return [f"playtest answers for {entry['scope']}: verdict reopened"]
-        adr = st.get("restart_adr")
-        suffix = f" restart {adr}" if adr else ""
         if phase == "setup":
-            st.update(phase="brainstorm", task="game-brainstorm")
+            st.update(phase="ideation", task="game-ideation")
+        elif phase == "ideation":
+            st.update(phase="brainstorm", task=None)
         elif phase == "brainstorm":
-            st.update(phase="design", task="game-design" + suffix)
-        elif phase == "design":
-            st.update(phase="plan", task="game-plan" + suffix, restart_adr=None)
+            st.update(phase="consolidate", task="game-consolidate")
+        elif phase == "consolidate":
+            adr = st.get("restart_adr")
+            st.update(phase="plan", task=f"game-plan restart {adr}" if adr else "game-plan", restart_adr=None)
         elif phase in ("plan", "build", "polish"):
             if phase != "plan":
                 notes.append(f"milestone complete: {st['milestone']}")
@@ -539,7 +625,7 @@ class Game:
         st.update(resume=None, stop_reason=None)
         if r.get("restart_adr"):
             self._restart(r["restart_adr"])
-        elif r.get("phase") in ("brainstorm", "design", "plan"):
+        elif r.get("phase") in ("ideation", "brainstorm", "consolidate", "plan"):
             st.update(phase=r["phase"], milestone=None, task=r.get("task"))
         else:
             self._route()  # goes back to whatever still fails, or on to done
@@ -577,7 +663,7 @@ class Game:
         self._write(archive / "human-queue.json", st.get("human_queue", []))
         self.features["features"] = []
         self._write(self.features_path, self.features)
-        st.update(phase="brainstorm", milestone=None, task=f"game-brainstorm restart {adr}", restart_adr=adr,
+        st.update(phase="ideation", milestone=None, task=f"game-ideation restart {adr}", restart_adr=adr,
                   passed_verdicts=[], adapter_verified=False, checkpoint_due=False, human_queue=[], attempts={})
         self.commit(f"restart {n}", self.features_path, archive / "features.json", archive / "human-queue.json")
         return [f"restart {n}: definition of done and human queue archived to {archive.relative_to(self.root)}; "
@@ -597,6 +683,8 @@ class Game:
     def tick(self, action):
         st = self.state
         st["counters"]["sessions"] += 1
+        if "game-brainstorm" in action:
+            st["counters"]["brainstorm_sessions"] += 1
         last = st["last_dispatch"]
         last["repeats"] = last["repeats"] + 1 if last.get("action") == action else 1
         last["action"] = action
@@ -607,21 +695,25 @@ class Game:
             st["attempts"][m.group(1)] = st["attempts"].get(m.group(1), 0) + 1
 
     # ---------- next action ----------
-    def next_action(self):
+    def next_action(self, no_user=False):
         st, phase = self.state, self.state["phase"]
         if self.pending_playtest() and phase in REOPENABLE:
             return "advance"
-        if phase == "done":
-            kits = len(self.queue(playtests=True))
-            return "stop: done" + (f" ({kits} playtest kit(s) await answers; answers reopen the verdict)" if kits else "")
-        if phase == "awaiting-human":
-            if not self.gate():
+        if phase in ("done", "awaiting-human"):
+            if phase == "awaiting-human" and not self.gate():
                 return "advance"
-            return f"stop: {st.get('stop_reason') or 'waiting on the human queue'} ({len(self.queue(False))} open)"
-        errs = self.check()
-        action = "fix: " + "; ".join(errs[:3]) if errs else self._work()
-        if action == "advance":
-            return action
+            if not self.gdd_stale():
+                if phase == "done":
+                    kits = len(self.queue(playtests=True))
+                    return "stop: done" + (f" ({kits} playtest kit(s) await answers; answers reopen the verdict)"
+                                           if kits else "")
+                return f"stop: {st.get('stop_reason') or 'waiting on the human queue'} ({len(self.queue(False))} open)"
+            action = "game-gdd"  # people read the GDD while the run waits
+        else:
+            errs = self.check()
+            action = "fix: " + "; ".join(errs[:3]) if errs else self._work(no_user)
+            if action == "advance" or action.startswith("stop:"):
+                return action
         budget = st["limits"].get("budget_sessions")
         if budget and st["counters"]["sessions"] >= budget:
             return "stop: budget exhausted (raise limits.budget_sessions in docs/game/state.json to continue)"
@@ -631,17 +723,30 @@ class Game:
                     "then set last_dispatch.repeats to 0 in docs/game/state.json")
         return action
 
-    def _work(self):
+    def _work(self, no_user=False):
+        """The next action. Ideation and brainstorm topics happen with a person (`with-user:`); without one,
+        the run does whatever else it can and stops only when nothing else is left."""
         st, phase, m = self.state, self.state["phase"], self.state.get("milestone")
         if phase in ("build", "polish") and st.get("checkpoint_due"):
             return "game-plan checkpoint"
+        waiting = None
+        topic = self._topic_action()  # design questions the work depends on come first
+        if topic:
+            if not no_user:
+                return f"with-user: {topic}"
+            waiting = topic
         if phase in ("build", "verdict", "polish"):
             pool = self.build_ms() if phase == "polish" else self.green_pool()
             action = self._build_action(pool)  # judge and polish only a green build
             if action:
                 return action
-        if st.get("task"):
-            return st["task"]
+        task = st.get("task")
+        if task and task.startswith("game-ideation"):
+            if not no_user:
+                return f"with-user: {task}"
+            waiting = waiting or task
+        elif task:
+            return task
         if phase == "polish":
             action = self._build_action([POLISH])
             if action:
@@ -650,17 +755,41 @@ class Game:
             action = self._nice_action(m)
             if action:
                 return action
+        if waiting:
+            return f"stop: waiting for a person: start a session with someone present and run /game-next to do '{waiting}' together"
         if self.gate():
-            return f"game-verdict {st.get('verdict_scope')}" if phase == "verdict" else f"game-{phase}"
+            if phase == "verdict":
+                return f"game-verdict {st.get('verdict_scope')}"
+            if phase == "brainstorm":
+                return "with-user: game-brainstorm"
+            return f"game-{phase}"
+        if phase != "setup" and self.gdd_stale():
+            return "game-gdd"  # the human GDD catches up before every phase or milestone change
         return "advance"
+
+    def _topic_action(self):
+        phase = self.state["phase"]
+        if phase == "brainstorm":
+            allowed = ["core"] if self.brainstorm_share_spent() else ["core", "support"]
+            candidates = self.open_topics(allowed)
+        elif phase in TOPIC_PHASES:
+            needed = {f["id"] for f in self.failing(self.green_pool() or self.milestones())}
+            candidates = [t for t in self.open_topics()
+                          if t.get("priority") == "core" or needed & set(t.get("unblocks", []))]
+        else:
+            candidates = []
+        if not candidates:
+            return None
+        return f"game-brainstorm {candidates[0]['id']} \"{candidates[0]['title']}\""
 
     def _build_action(self, pool):
         failing = self.failing(pool)
         if not failing:
             return None
-        ready = [f for f in failing if not self.is_blocked(f)]
+        ready = [f for f in failing if not self.is_blocked(f) and not self.waits_on_topic(f)]
         if not ready:
-            return "game-plan unblock " + " ".join(f["id"] for f in failing)
+            stuck = [f for f in failing if self.is_blocked(f)]
+            return "game-plan unblock " + " ".join(f["id"] for f in stuck) if stuck else None
         alts = ", ".join(f["id"] for f in ready[1:3])
         return f"game-build {ready[0]['id']} \"{ready[0]['title']}\"" + (
             f" (if its tickets are blocked: {alts})" if alts else "")
@@ -669,13 +798,13 @@ class Game:
         st = self.state
         left = (st["limits"].get("budget_sessions") or 0) - st["counters"]["sessions"]
         remaining_must = len(self.failing(self.milestones()))
-        nice = [f for f in self.failing([milestone], tier="nice") if not self.is_blocked(f)]
+        nice = [f for f in self.failing([milestone], tier="nice") if not self.is_blocked(f) and not self.waits_on_topic(f)]
         if nice and left > 2 * remaining_must + NICE_RESERVE:
             return f"game-build {nice[0]['id']} \"{nice[0]['title']}\" (nice)"
         return None
 
     # ---------- report ----------
-    def status(self):
+    def status(self, no_user=False):
         st, c, lim = self.state, self.state["counters"], self.state["limits"]
         out = [f"phase: {st['phase']}"
                + (f"  milestone: {st['milestone']}" if st.get("milestone") else "")
@@ -684,6 +813,12 @@ class Game:
                + f"  adjusts: {c['adjusts']}/{lim['max_adjusts']}  restarts: {c['restarts']}/{lim['max_restarts']}"]
         if st.get("task"):
             out.append(f"task: {st['task']}")
+        if self.topics():
+            by = {s: [t for t in self.topics() if t.get("status") == s] for s in TOPIC_STATUSES}
+            open_by = ", ".join(f"{p} {sum(t.get('priority') == p for t in by['open'])}" for p in PRIORITIES)
+            out.append(f"topics: open ({open_by}) | resolved {len(by['resolved'])} | deferred {len(by['deferred'])}"
+                       f" | brainstorm sessions {c['brainstorm_sessions']}"
+                       f"/{int(lim['brainstorm_share'] * (lim.get('budget_sessions') or 0))}")
         if self.items():
             out.append("definition of done (must done/total | nice done/total | cut | blocked):")
             for m in self.milestones():
@@ -705,11 +840,12 @@ class Game:
         if st.get("verdicts"):
             v = st["verdicts"][-1]
             out.append(f"last verdict: {v.get('scope')} -> {v.get('outcome')} ({v.get('adr')})")
+        out.append(f"human GDD: {'stale' if self.gdd_stale() else 'in sync'}")
         for e in self.queue()[:5]:
             out.append(f"human queue: {e.get('id')} {e.get('what')}")
         why = self.gate()
         out.append(f"gate: {'PASS' if not why else 'FAIL: ' + '; '.join(why[:4]) + (' ...' if len(why) > 4 else '')}")
-        out.append(f"next: {self.next_action()}")
+        out.append(f"next: {self.next_action(no_user)}")
         return "\n".join(out)
 
 
@@ -729,7 +865,8 @@ def main(argv):
     if cmd == "init":
         game.dir.mkdir(parents=True, exist_ok=True)
         for path, data in ((game.state_path, game.state), (game.features_path, game.features),
-                           (game.fun_path, game.fun), (game.richness_path, game.richness)):
+                           (game.fun_path, game.fun), (game.richness_path, game.richness),
+                           (game.topics_path, game.topics_data)):
             if not path.exists():
                 game._write(path, data)
                 print(f"created {path.relative_to(game.root)}")
@@ -739,7 +876,7 @@ def main(argv):
                 print(f"created docs/game/{name}")
         return 0
     if cmd == "status":
-        print(game.status())
+        print(game.status(no_user="--no-user" in argv))
         return 0
     if cmd == "check":
         since = argv[argv.index("--since") + 1] if "--since" in argv else "HEAD"
@@ -759,6 +896,15 @@ def main(argv):
         st["task"] = None
         game.save_state(f"complete {done}")
         print(f"complete: {done}\nnext: {game.next_action()}")
+        return 0
+    if cmd == "gdd-synced":
+        head = game._git("rev-parse", "HEAD").stdout.strip() if game.in_git() else None
+        if not head:
+            print("cannot record the sync: commit the wiki first")
+            return 1
+        st["gdd_synced"] = head
+        game.save_state("human GDD synced")
+        print(f"gdd synced at {head[:8]}\nnext: {game.next_action()}")
         return 0
     if cmd == "advance":
         if game.next_action() != "advance":

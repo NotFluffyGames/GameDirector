@@ -15,7 +15,7 @@ The task gives the scope:
 - `game-verdict final`: the same on the polished game, plus the playable-build checks in step 1. Shipping it ends the run.
 - `game-verdict <scope> answers <file>`: re-judge with a person's playtest answers (see the end).
 
-The status tool only dispatches a verdict once the scope's must features pass.
+The status tool only schedules a verdict once the scope's must features pass.
 
 Work in `docs/game/playtests/<date>-<scope>/`. Keep `notes.md` there with one line per finished step (result and file paths), committed as you go: a verdict often spans sessions, and the next one resumes at the first step `notes.md` doesn't record.
 
@@ -33,9 +33,11 @@ For each proxy item in scope, and for `full` and `final` each richness target, r
 
 **Done when** every proxy item and richness target in scope has a value, pass or fail, and a path to its raw metrics.
 
-## 3. Look at it
+## 3. Look at it, and at the wiki
 
-Capture the key moments: start, the core verb mid-loop, a win, a loss, every main UI screen. Judge them against `design.md`'s tone, art and readability rules. Record findings as notes; they inform the decision but score nothing.
+Capture the key moments: start, the core verb mid-loop, a win, a loss, every main UI screen. Judge them against the art pages' tone and readability rules. Record findings as notes; they inform the decision but score nothing.
+
+Then check the wiki against what was built, for the features in scope: where the game now differs from its pages in a small, settled way, fix the page with a `Last changed` line; where the difference is a design question, open a topic.
 
 ## 4. Human items
 
@@ -53,7 +55,7 @@ For each failing item, find its cause before deciding anything: toggle systems o
 - **adjust**: failures trace to at most two systems or pillars, and the isolation shows what to change. A richness target short of its threshold is an adjust: more content, or a system connected to the others. At `final`, an item polish broke is an adjust naming the polish change.
 - **restart**: the core loop itself fails its items, or adjusts are used up (`state.json` counters against limits) with failures remaining.
 
-In interactive mode the user decides, given the scores, the isolation findings and your recommendation (through the questions protocol when you can't reach them).
+In interactive mode the user decides, given the scores, the isolation findings and your recommendation.
 
 Write the verdict ADR where `docs/agents/domain.md` puts ADRs: scope, build commit, a score table (item or target, value, threshold, result, evidence path), isolation findings and the outcome. For adjust: exactly what to change, including knob values. For restart: lessons (what failed, why, what changes next time, which durable assets still hold).
 

@@ -4,7 +4,7 @@ Each applicable line becomes a feature in the `polish` milestone. The suggested 
 
 ## Feel and look
 
-- **Game feel**: every core action gets the feedback design.md's Feel section names, within its response time (hit-stop, screen shake, particles, sound, as the tone allows). [capture + test]
+- **Game feel**: every core action gets the feedback the Feel pages name, within its response time (hit-stop, screen shake, particles, sound, as the tone allows). [capture + test]
 - **Final art and audio**: placeholders replaced per assets.md, matching the style guide; music and sound for every screen and core action; every asset's source and license recorded. [capture + check]
 - **Readability**: captures at the smallest target screen size pass the style guide's readability rules. [capture]
 
@@ -16,7 +16,7 @@ Each applicable line becomes a feature in the `polish` milestone. The suggested 
 ## Players
 
 - **Onboarding**: a new player reaches the core verb in their first minute without outside help; the scripted new-player bot meets the onboarding threshold. [bot]
-- **Screens**: the full screen flow from design.md works from launch to quit: title, menus, settings, pause, results, quit. [replay or capture]
+- **Screens**: the full screen flow from the Screens pages works from launch to quit: title, menus, settings, pause, results, quit. [replay or capture]
 - **Accessibility baseline**: remappable controls; subtitles or captions for speech and key sounds; no information carried by colour alone; scalable or large-enough UI text; difficulty or assist options where the genre allows; pause anywhere in single-player; no flashing above 3 times per second. [check + capture]
 - **Settings and saves**: settings persist; saves survive quit, crash and a version change. [replay]
 - **Localization**: only when the pitch names more than one language; all strings externalized and the layout survives the longest translation. [capture]

@@ -12,26 +12,41 @@ from pathlib import Path
 
 SCRIPT = Path(__file__).resolve().parents[1] / "skills" / "game-setup" / "scripts" / "gamestate.py"
 
-DESIGN = "# Design\n" + "\n".join(
+VISION = "# Vision\n" + "\n".join(
     f"{h}\n{body}" for h, body in [
-        ("## Pitch", "A pitch."), ("## Pillars", "- **P1**: fast\n- **P2**: tense\n- **P3**: readable"),
-        ("## Core loop", "Dash, hit, score."), ("## Mechanics and rules", "x"), ("## Controls", "x"),
-        ("## Systems", "x"), ("## Content", "x"), ("## Modes and sessions", "x"),
-        ("## Screens and onboarding", "x"), ("## Feel", "x"), ("## Tone, art and world", "Bright."),
-        ("## Pillar test", "Done.")]) + "\n"
+        ("## Pitch", "A pitch."), ("## Audience and platforms", "Couch, desktop."),
+        ("## Pillars", "- **P1**: fast\n- **P2**: tense\n- **P3**: readable"),
+        ("## Core loop", "Dash, hit, score."), ("## Target feeling", "Tension."),
+        ("## Tone, art and world", "Bright."), ("## References", "x"), ("## Scope", "x")]) + "\n"
 
 CONCEPTS = """# Concepts
 ## Concepts
 ### C1: Weapon swap brawler
 ### C2: Tag arena
 ### C3: Ring-out sumo
-## Scores
-| C1 | 4 |
-## Prototypes
-C1: 30 bot matches, 3.1 lead changes median.
 ## Choice
-C1, because the prototype showed the most decisions.
+C1, because it fits the seed best.
 """
+
+INDEX_AREAS = ["Vision", "Mechanics", "Controls", "Systems", "Content", "Modes and sessions",
+               "Screens and onboarding", "Feel", "Tone, art and world"]
+PAGES = {"Vision": "vision.md", "Mechanics": "mechanics.md", "Controls": "controls.md",
+         "Systems": "systems/weapons.md", "Content": "content.md", "Modes and sessions": "modes.md",
+         "Screens and onboarding": "screens.md", "Feel": "feel.md", "Tone, art and world": "art.md"}
+INDEX = "# Wiki\n" + "".join(f"## {a}\n- [{a}]({PAGES[a]})\n" for a in INDEX_AREAS)
+
+
+def topic(tid, parent="T1", priority="support", status="open", pages=(), unblocks=()):
+    t = {"id": tid, "title": f"topic {tid}", "question": "what?", "parent": parent, "priority": priority,
+         "method": "think", "status": status, "pages": list(pages), "unblocks": list(unblocks)}
+    if status != "open":
+        t["resolution"] = "answered"
+    return t
+
+
+SEED_TOPICS = {"topics": [topic("T1", parent=None, priority="core", status="resolved", pages=["wiki/vision.md"]),
+                          topic("T2", priority="core"), topic("T3"), topic("T4"), topic("T5"),
+                          topic("T6", priority="later")]}
 
 RICHNESS = {"targets": [
     {"id": "R1", "aspect": "depth", "statement": "every system matters", "metric": "win-rate shift with a system off",
@@ -54,7 +69,8 @@ FUN = {"items": [
 def feature(fid, milestone, tier="must", kind="test", measures=()):
     return {"id": fid, "title": f"feature {fid}", "pillar": "P1", "tier": tier, "milestone": milestone,
             "acceptance": ["it works"], "verify": {"kind": kind, "how": "run the test"},
-            "measures": list(measures), "tickets": [f"T{fid}"], "passes": False, "evidence": "", "blocked": ""}
+            "measures": list(measures), "tickets": [f"#{fid}"], "pages": ["wiki/mechanics.md"],
+            "passes": False, "evidence": "", "blocked": ""}
 
 
 class GameRun(unittest.TestCase):
@@ -86,8 +102,8 @@ class GameRun(unittest.TestCase):
             self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         return r.stdout
 
-    def next(self):
-        return self.tool("status").split("next: ", 1)[1].strip()
+    def next(self, *flags):
+        return self.tool("status", *flags).split("next: ", 1)[1].strip()
 
     def load(self, name):
         return json.loads((self.game / name).read_text())
@@ -118,24 +134,61 @@ class GameRun(unittest.TestCase):
         self.commit()
         self.tool("complete")
 
-    def to_plan(self):
+    def write_wiki(self, pages):
+        for rel in pages:
+            path = self.game / "wiki" / rel
+            path.parent.mkdir(parents=True, exist_ok=True)
+            if not path.exists():
+                path.write_text(f"# {rel}\n")
+
+    def sync(self):
+        self.assertEqual(self.next(), "game-gdd")
+        self.tool("gdd-synced")
+
+    def resolve(self, *ids):
+        def fn(d):
+            for t in d["topics"]:
+                if t["id"] in ids:
+                    t.update(status="resolved", resolution="answered", pages=["wiki/mechanics.md"])
+        self.edit("topics.json", fn)
+        self.commit()
+
+    def to_ideation(self):
         self.tool("init")
         (self.root / "docs" / "agents" / "game.md").write_text("# Game workflow\n")
         self.commit()
         self.assertEqual(self.next(), "game-setup")
         self.tool("complete")
         self.tool("advance")
-        self.assertEqual(self.next(), "game-brainstorm")
-        (self.game / "concepts.md").write_text(CONCEPTS)
+        self.assertEqual(self.next(), "with-user: game-ideation")
+
+    def ideate(self):
+        (self.game / "wiki").mkdir()
+        (self.game / "wiki" / "vision.md").write_text(VISION)
+        (self.game / "wiki" / "concepts.md").write_text(CONCEPTS)
+        (self.game / "wiki" / "index.md").write_text("# Wiki\n## Vision\n- [Vision](vision.md)\n")
+        (self.game / "topics.json").write_text(json.dumps(SEED_TOPICS))
         self.commit()
         self.tool("complete")
+        self.sync()
         self.tool("advance")
-        self.assertEqual(self.next(), "game-design")
-        (self.game / "design.md").write_text(DESIGN)
+        self.assertEqual(self.phase(), ("brainstorm", None))
+
+    def to_plan(self):
+        self.to_ideation()
+        self.ideate()
+        self.assertTrue(self.next().startswith("with-user: game-brainstorm T2"))  # core before support
+        self.write_wiki(PAGES.values())
+        self.resolve("T2", "T3", "T4", "T5")
+        self.sync()  # pages changed: the GDD catches up before the phase changes
+        self.tool("advance")
+        self.assertEqual(self.next(), "game-consolidate")
+        (self.game / "wiki" / "index.md").write_text(INDEX)
         (self.game / "fun-checklist.json").write_text(json.dumps(FUN))
         (self.game / "richness.json").write_text(json.dumps(RICHNESS))
         self.commit()
         self.tool("complete")
+        self.sync()
         self.tool("advance")
         self.assertEqual(self.phase(), ("plan", None))
 
@@ -227,14 +280,14 @@ class GameRun(unittest.TestCase):
         self.commit()
         self.record_verdict("restart")
         self.tool("advance")
-        self.assertEqual(self.next(), "game-brainstorm restart docs/adr/0001-v.md")
+        self.assertEqual(self.next(), "with-user: game-ideation restart docs/adr/0001-v.md")
         self.assertEqual(self.load("features.json")["features"], [])
         self.assertEqual(self.load("state.json")["human_queue"], [])
         archive = self.game / "archive" / "restart-1"
         self.assertTrue((archive / "features.json").exists() and (archive / "human-queue.json").exists())
         self.tool("complete")
-        self.tool("advance")
-        self.assertEqual(self.next(), "game-design restart docs/adr/0001-v.md")
+        self.tool("advance")  # ideation -> brainstorm: nothing open, the wiki unchanged
+        self.tool("advance")  # brainstorm -> consolidate
         self.tool("complete")
         self.tool("advance")
         self.assertEqual(self.next(), "game-plan restart docs/adr/0001-v.md")
@@ -283,8 +336,8 @@ class GameRun(unittest.TestCase):
         self.edit("richness.json", lambda d: d["targets"].pop())
         out = self.tool("check", ok=False)
         for expected in ("F4: removed", "F2: acceptance changed", "F3: milestone changed",
-                         "F8: a must feature left must", "fun FC1: changed outside design",
-                         "richness R3: removed outside design"):
+                         "F8: a must feature left must", "fun FC1: changed after consolidate",
+                         "richness R3: removed after consolidate"):
             self.assertIn(expected, out)
         self.assertTrue(self.next().startswith("fix: "))
 
@@ -355,32 +408,108 @@ class GameRun(unittest.TestCase):
         self.edit("state.json", lambda s: s["limits"].update(budget_sessions=12))
         self.assertEqual(self.next(), "advance")
 
-    def test_design_needs_every_richness_aspect_and_plan_must_measure_them(self):
-        self.tool("init")
-        (self.root / "docs" / "agents" / "game.md").write_text("# Game workflow\n")
-        (self.game / "concepts.md").write_text(CONCEPTS.replace("### C3: Ring-out sumo\n", ""))
+    def test_ideation_needs_directions_and_seed_topics(self):
+        self.to_ideation()
+        (self.game / "wiki").mkdir()
+        (self.game / "wiki" / "vision.md").write_text(VISION)
+        (self.game / "wiki" / "concepts.md").write_text(CONCEPTS.replace("### C3: Ring-out sumo\n", ""))
         self.commit()
-        self.tool("complete")
+        out = self.tool("gate", ok=False)
+        for expected in ("2 directions", "wiki/index.md is missing", "0 follow-up topics"):
+            self.assertIn(expected, out)
+
+    def test_consolidate_needs_every_area_and_richness_aspect_and_plan_must_measure_them(self):
+        self.to_ideation()
+        self.ideate()
+        self.write_wiki(PAGES.values())
+        self.resolve("T2", "T3", "T4", "T5")
+        self.sync()
         self.tool("advance")
-        self.assertIn("2 concepts", self.tool("gate", ok=False))
-        (self.game / "concepts.md").write_text(CONCEPTS)
-        self.commit()
-        self.tool("complete")
-        self.tool("advance")
-        (self.game / "design.md").write_text(DESIGN)
+        (self.game / "wiki" / "index.md").write_text(INDEX.replace("## Feel\n- [Feel](feel.md)\n", "## Feel\n"))
         (self.game / "fun-checklist.json").write_text(json.dumps(FUN))
         (self.game / "richness.json").write_text(json.dumps({"targets": RICHNESS["targets"][:2]}))
         self.commit()
-        self.assertIn("richness.json has no variety target", self.tool("gate", ok=False))
+        out = self.tool("gate", ok=False)
+        self.assertIn("'## Feel' links no existing page", out)
+        self.assertIn("richness.json has no variety target", out)
+        (self.game / "wiki" / "index.md").write_text(INDEX)
         (self.game / "richness.json").write_text(json.dumps(RICHNESS))
         self.commit()
         self.tool("complete")
+        self.sync()
         self.tool("advance")
         self.edit("features.json", lambda d: d.update(features=[feature("F1", "core-loop", measures=["FC1", "FC3"])]))
         self.edit("state.json", lambda s: s.update(adapter_verified=True))
         self.commit()
-        out = self.tool("gate", ok=False)
-        self.assertIn("R1: no must feature lists it in measures", out)
+        self.assertIn("R1: no must feature lists it in measures", self.tool("gate", ok=False))
+
+    def test_brainstorm_share_lets_support_topics_wait_until_consolidate_defers_them(self):
+        self.to_ideation()
+        self.ideate()
+        self.edit("state.json", lambda s: s["limits"].update(budget_sessions=10))
+        for _ in range(2):
+            self.tool("tick", "game-brainstorm T9 \"x\"")
+        self.assertTrue(self.next().startswith("with-user: game-brainstorm T2"))  # core topics still run
+        self.write_wiki(PAGES.values())
+        self.resolve("T2")
+        self.sync()
+        self.tool("advance")  # support topics T3-T5 wait: the brainstorm share is spent
+        self.assertEqual(self.next(), "game-consolidate")
+        (self.game / "wiki" / "index.md").write_text(INDEX)
+        (self.game / "fun-checklist.json").write_text(json.dumps(FUN))
+        (self.game / "richness.json").write_text(json.dumps(RICHNESS))
+        self.commit()
+        self.assertIn("topic T3: open (support)", self.tool("complete", ok=False))
+
+        def defer(d):
+            for t in d["topics"]:
+                if t["status"] == "open":
+                    t.update(status="deferred", resolution="not needed before the core-loop verdict")
+        self.edit("topics.json", defer)
+        self.commit()
+        self.tool("complete")
+
+    def test_topics_opened_during_build_interrupt_the_work_that_needs_them(self):
+        self.to_plan()
+        self.plan()
+        self.edit("topics.json", lambda d: d["topics"].append(topic("T7", unblocks=["F2"])))
+        self.edit("topics.json", lambda d: d["topics"].append(topic("T8")))
+        self.commit()
+        self.assertTrue(self.next().startswith("with-user: game-brainstorm T7"))  # unblocks F2; T8 waits
+        self.resolve("T7")
+        self.assertTrue(self.next().startswith("game-build F1"))
+        self.edit("topics.json", lambda d: d["topics"].append(topic("T9", priority="core")))
+        self.commit()
+        self.assertTrue(self.next().startswith("with-user: game-brainstorm T9"))
+
+    def test_without_a_person_the_run_builds_around_open_topics_then_waits(self):
+        self.to_plan()
+        self.plan()
+        self.edit("topics.json", lambda d: d["topics"].append(topic("T7", unblocks=["F1"])))
+        self.commit()
+        self.assertTrue(self.next().startswith("with-user: game-brainstorm T7"))
+        self.assertTrue(self.next("--no-user").startswith("game-build F2"))  # F1 waits on T7
+        self.set_passes("F2")
+        self.assertIn("stop: waiting for a person", self.next("--no-user"))
+
+    def test_ideation_waits_for_a_person(self):
+        self.to_ideation()
+        self.assertIn("stop: waiting for a person", self.next("--no-user"))
+
+    def test_changed_pages_resync_the_gdd_before_the_next_milestone_and_before_stopping(self):
+        self.to_plan()
+        self.plan()
+        (self.game / "wiki" / "mechanics.md").write_text("# Mechanics\nDash now has a cooldown.\n")
+        self.set_passes("F1", "F2")
+        self.sync()
+        self.tool("advance")
+        self.assertEqual(self.next(), "game-verdict core-loop")
+
+    def test_resolved_topics_need_a_page(self):
+        self.to_ideation()
+        self.ideate()
+        self.edit("topics.json", lambda d: d["topics"][1].update(status="resolved", resolution="x", pages=[]))
+        self.assertIn("topic T2: resolved without a wiki page", self.tool("check", ok=False))
 
     def test_final_adjust_keeps_earlier_verdicts(self):
         self.to_core_verdict()
@@ -415,8 +544,9 @@ class Templates(unittest.TestCase):
         gamestate = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(gamestate)
         skills = SCRIPT.parents[2]
-        for template, headings in (("game-design/design-template.md", gamestate.DESIGN_HEADINGS),
-                                   ("game-brainstorm/concepts-template.md", gamestate.CONCEPT_HEADINGS)):
+        for template, headings in (("game-ideation/vision-template.md", gamestate.VISION_HEADINGS),
+                                   ("game-ideation/concepts-template.md", gamestate.CONCEPT_HEADINGS),
+                                   ("game-ideation/index-template.md", gamestate.INDEX_SECTIONS)):
             lines = (skills / template).read_text().splitlines()
             self.assertEqual([h for h in headings if h not in lines], [], template)
 

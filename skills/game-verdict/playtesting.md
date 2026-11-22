@@ -49,7 +49,7 @@ Random-policy runs with random knob perturbation within each knob's declared ran
 
 ## Captures and visual review
 
-Capture through the adapter's `capture` command at fixed seeds and ticks so captures are comparable across builds. Review each against `design.md`: palette, silhouettes readable at the smallest target screen size, UI text legible, the player's focus obvious. A vision-capable model can do this review; record it as notes, never as a score for a human item.
+Capture through the adapter's `capture` command at fixed seeds and ticks so captures are comparable across builds. Review each against the art pages in the wiki: palette, silhouettes readable at the smallest target screen size, UI text legible, the player's focus obvious. A vision-capable model can do this review; record it as notes, never as a score for a human item.
 
 ## Human playtest kit
 
@@ -58,4 +58,4 @@ Write into the verdict's evidence folder:
 1. **How to play**: the adapter's `run` command or a packaged build, controls, and what a session is.
 2. **Script**: play N sessions without help; think aloud or note moments of confusion, tension, boredom and delight.
 3. **Score sheet** (`score-sheet.md`): each human fun-checklist item as a yes/no question with a "what happened" field, plus: "Would you play another round right now? Why?" and "What would you change first?"
-4. **Return path**: "Copy the score sheet to `answers.md` in this folder, fill it in, commit, and run `/game-director`." The file's existence is the signal: the run reopens the verdict with it.
+4. **Return path**: "Copy the score sheet to `answers.md` in this folder, fill it in, commit, and run `/game-next`." The file's existence is the signal: the run reopens the verdict with it.

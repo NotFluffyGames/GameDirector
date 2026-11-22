@@ -1,7 +1,7 @@
 {
   "name": "game-director",
-  "version": "0.3.0",
-  "description": "Take a raw game idea to a fun, playable, rich, working and tested game in one prompt: a director skill drives phase skills (setup, brainstorm, design, plan, build, verdict, polish) one fresh session at a time, gated by a machine-checked definition of done. Engine-, genre-, platform- and tracker-agnostic.",
+  "version": "0.4.0",
+  "description": "Make a fun, playable, rich, working and tested game over many sessions, one step per session with /game-next: ideation and topic-by-topic brainstorming with you, a living agent-facing wiki and a human GDD next to your tasks, then plan, build, verdicts and polish gated by a machine-checked definition of done. Engine-, genre-, platform- and tracker-agnostic.",
   "author": {
     "name": "NotFluffyGames",
     "url": "https://github.com/NotFluffyGames"
@@ -17,10 +17,12 @@
     "playtesting"
   ],
   "skills": [
-    "./skills/game-director",
+    "./skills/game-next",
     "./skills/game-setup",
+    "./skills/game-ideation",
     "./skills/game-brainstorm",
-    "./skills/game-design",
+    "./skills/game-consolidate",
+    "./skills/game-gdd",
     "./skills/game-plan",
     "./skills/game-build",
     "./skills/game-verdict",

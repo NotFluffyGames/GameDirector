@@ -1,0 +1,5 @@
+interface:
+  display_name: "Game Ideation"
+  short_description: "Vision, directions and the first topics, with you"
+policy:
+  allow_implicit_invocation: false

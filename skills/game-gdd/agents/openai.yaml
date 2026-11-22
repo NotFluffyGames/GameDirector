@@ -1,0 +1,5 @@
+interface:
+  display_name: "Game GDD"
+  short_description: "Sync the human GDD from the wiki"
+policy:
+  allow_implicit_invocation: false

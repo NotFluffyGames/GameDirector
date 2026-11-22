@@ -1,65 +1,54 @@
 ---
 name: game-brainstorm
-description: Turn a raw game idea into 3-5 distinct concepts, prototype the most promising core loops with bots to find the fun, and choose one on evidence. Phase 1 of the game-* workflow; also re-runs after a restart verdict.
+description: With the user, take one open design topic from the game's topic tree, grill them on it, ruthlessly challenge the idea against the vision, then write or update its wiki page and open the follow-up topics it raises. Phase 2 of the game-* workflow, one topic per session; any later phase reopens it when it meets an unanswered design question.
 disable-model-invocation: true
 ---
 
 # Game Brainstorm
 
-**Diverge, test, converge.** The raw idea becomes several real options; the strongest core loops get played by bots in throwaway prototypes; one concept is chosen on evidence. Read `docs/agents/game.md` first and follow its session rules.
+One topic, one conversation. The topic tree in `docs/game/topics.json` breaks the game down one question at a time; each session takes a topic, works it through with the user, and leaves the wiki truer and the tree one step deeper. This is a conversation, whatever the autonomy mode: it runs in the session the user started, never in a subagent or an unattended loop. Read `docs/agents/game.md` first and follow its session rules.
 
-Everything this phase decides goes in `docs/game/concepts.md`, laid out as [concepts-template.md](concepts-template.md). When the phase spans sessions, resume at the first step whose result concepts.md doesn't hold yet.
+## 1. Prepare
 
-## 1. Read the seed
+Take the topic the task names (`game-brainstorm T014 …`), or with none, the first open topic `gamestate.py status` would pick. Read:
 
-Read `docs/game/seed.md`. On a `restart <adr>` task, also read that ADR's lessons and the old concepts.md: runner-up concepts are candidates again; the failed concept is one only if the lessons name a fix.
+- the topic, and its parent chain up to `T1`;
+- `wiki/vision.md`: the pillars, core loop and target feeling everything is judged against;
+- the pages the topic writes, and the pages the index links them to;
+- `CONTEXT.md`, and the ADRs those pages link.
 
-**Done when** you can say what the seed fixes (what must stay true of the game) and what it leaves open.
+Then prepare your challenges before asking anything: where could this idea contradict the vision or another page, what could make it dominant, boring, confusing or too big, and how do two or three reference games handle the same question (the `research` skill, if you need facts).
 
-## 2. Diverge
+**Done when** you can state the topic's question, what the wiki already says about it, and your three strongest challenges.
 
-Write 3–5 concepts that differ in their core loop, not only in theme. Ways to get real distance from the seed:
+## 2. Grill and challenge
 
-- change the core verb, or the player count and mode;
-- change time: real-time against turn-based, short sessions against long runs;
-- cross the seed with a reference game from a different genre;
-- invert one of the seed's assumptions.
+With the `grilling` skill, interview the user one question at a time down the topic's design tree, giving your recommended answer with each. Be **ruthless** with every answer:
 
-Each concept gets a hook, core verb, core loop, target feeling, reference games, its richness sources and its biggest risk (the template's fields). In interactive mode, the user may add or veto concepts, through the questions protocol when you can't reach them.
+- **Against the vision**: which pillar does it serve? Does it strengthen the core loop or compete with it? Does it deliver the target feeling?
+- **Against the wiki**: does it contradict another page? Does it duplicate something that already exists?
+- **Against play**: what is the dominant strategy, the degenerate case, the boring case, the confusing first minute?
+- **Against scope**: what does it cost, and what would the game lose without it?
 
-**Done when** 3–5 concepts are written and no two share a core loop.
+Push vague answers until they are concrete enough to test. When an answer fails a challenge, say so plainly and help the user find a better one; when the user overrules you, record their reason.
 
-## 3. Score
+**Done when** every branch of the topic is answered concretely enough to plan features and write tests from (design-ready), and every challenge you raised is resolved or recorded as an accepted risk.
 
-Score each concept 1–5, with a one-line reason per score:
+## 3. Write it down
 
-- **Fun potential**: does the loop pose a real decision or skill test every few seconds or turns?
-- **Richness potential**: depth from systems that change each other, breadth from content built from reusable parts, variety between runs.
-- **Fit to the seed**.
-- **Agent-buildable**: can its rules run headless and deterministically, so bots and tests can judge it?
-- **Risk** (5 = least risky).
+- Write or update the wiki pages the topic covers, in the page format from `docs/agents/game.md`: current truth only, precise rules and numbers, links instead of repetition. List each new page under the right heading of `wiki/index.md`.
+- A decision the user made against a challenge, or that reverses an earlier page, gets an ADR (with `domain-modeling`) linked from the page.
+- Update every other page the answers change, in the same commit.
+- Add new terms to `CONTEXT.md`.
 
-**Done when** every concept has every score.
+**Done when** someone who never saw this conversation could design features from the pages alone.
 
-## 4. Prototype the top loops
+## 4. Open the follow-ups
 
-Prototype the top two concepts (three when scores are close). For each, with the `prototype` skill, build a throwaway **rules simulation** of the core loop: rules only, no art, in whatever language is quickest on this machine, outside the game's source tree (for example `.scratch/prototypes/<concept>/`). Give it at least two bot policies (random and greedy) and run at least 30 seeded games. Measure:
+For each question the conversation raised but didn't settle, open a child topic: `parent` this topic, a question, a priority (`core`, `support`, `later`) and the page it will write. Open only questions that planning can't do without, or that you mark `later`; merge with an existing open topic instead of duplicating it. Publish each as a `ready-for-human` ticket.
 
-- decision density: decisions per minute or turn with more than one viable option;
-- skill: greedy's win or score rate against random;
-- dominance: how often the single most-used action is the best one;
-- endings: how sessions end and how long they last.
+**Done when** every unsettled question is a topic or a recorded accepted risk.
 
-Rules simulations can't show real-time feel; record that as an open risk for the core-loop verdict. Record the numbers under `## Prototypes`, then delete the prototype code: the numbers are what lasts.
+## 5. Close
 
-**Done when** each prototyped concept has a number for every measure.
-
-## 5. Choose
-
-Pick the concept with the best evidence: prototype numbers first, scores second. In interactive mode the user chooses, given your recommendation. Under `## Choice`, write the concept id, why it won, what the prototype showed, what is still unproven, and any ideas worth borrowing from the others.
-
-**Done when** Choice names one concept and its evidence.
-
-## 6. Close
-
-`gamestate.py check --since <base>`, commit, progress entry, `gamestate.py complete`. Reply with the chosen concept's hook and core loop, its prototype headline numbers, and the runner-up.
+Set the topic's `status` to `resolved`, its `pages`, and a one-line `resolution`; close its ticket. `gamestate.py check --since <base>`, commit, progress entry.

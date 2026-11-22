@@ -9,7 +9,7 @@
     {
       "name": "game-director",
       "source": "./",
-      "description": "Director plus phase skills that take a raw game idea to a fun, playable, rich, working and tested game, engine- and genre-agnostic.",
+      "description": "Skills that take a raw game idea to a fun, playable, rich, working and tested game over many sessions, with a living wiki and GDD. Engine- and genre-agnostic.",
       "category": "development",
       "keywords": [
         "gamedev",

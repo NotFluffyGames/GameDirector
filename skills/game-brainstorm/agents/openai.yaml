@@ -1,5 +1,5 @@
 interface:
   display_name: "Game Brainstorm"
-  short_description: "Concepts, prototypes, and a choice"
+  short_description: "Grill one design topic, with you"
 policy:
   allow_implicit_invocation: false
