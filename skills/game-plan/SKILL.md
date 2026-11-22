@@ -1,6 +1,6 @@
 ---
 name: game-plan
-description: Turn the game wiki into tech ADRs, a verified walking skeleton, a definition of done (features.json) and tracer-bullet tickets in the configured tracker. Phase 4 of the game-* workflow; also handles adjust, restart, checkpoint and unblock re-plans.
+description: Turn the game wiki into tech ADRs, a verified walking skeleton, a definition of done (features.json) and tracer-bullet tickets in the configured tracker - first for the vertical slice, then for production. Phase 4 of the game-* workflow; also handles adjust, restart, checkpoint and unblock re-plans.
 disable-model-invocation: true
 ---
 
@@ -10,7 +10,8 @@ Derives everything from the wiki (`docs/game/wiki/`), and invents no design: whe
 
 | Task | Mode |
 | --- | --- |
-| `game-plan` | steps 1–5 |
+| `game-plan` | the vertical slice: steps 1–5 |
+| `game-plan production` | the rest of the game: steps 3–5 (1–2 only for tech the slice didn't settle) |
 | `game-plan restart <adr>` | tag HEAD `game-restart-<n>`, then steps 1–5; keep code only where the ADR says a system survives |
 | `game-plan adjust <adr>` | Adjust mode |
 | `game-plan checkpoint` | Checkpoint mode |
@@ -45,14 +46,20 @@ Then fill and smoke-test the adapter: read the `game-setup` skill's SKILL.md (be
 
 Write `docs/game/features.json` items (schema in `docs/agents/game.md`; after a restart, number ids after the highest id in `docs/game/archive/`), in dependency order within each milestone:
 
-- **core-loop**: the core loop playable end to end with placeholder art, following the Mechanics and Controls pages.
-- **systems**: every system on the Systems pages, with its interactions with the others. Each system's features include its tuning knobs and on/off toggle.
-- **content**: every content type at its target count, functional but ugly: built from the Content pages' kit pieces with placeholder art. Modes, sessions and the screen flow land here too.
-- **verdict-build**: what the verdicts need: a metrics feature for every fun proxy and richness target (listed in its `measures`), the bot policies those metrics require, and a build that runs on every target platform the agent can build for.
+For the **vertical slice** (`game-plan`), only what `wiki/slice.md`'s In list needs:
+
+- **core-loop**: the core loop playable end to end with placeholder art, following the Mechanics and Controls pages, plus metrics for every `core-loop` proxy. The core-loop verdict judges it on bots before anything else is built.
+- **slice**: everything else the slice contains (its systems, content, screens and onboarding), each aspect brought to the quality bar slice.md sets (a `final` art bar means final art features here), metrics for every `slice` proxy and target, and a build a person can play for the slice playtest.
+
+For **production** (`game-plan production`), the rest of the game from the full wiki:
+
+- **systems**: every system on the Systems pages not finished in the slice, with its interactions with the others. Each system's features include its tuning knobs and on/off toggle.
+- **content**: every content type at its target count, built from the Content pages' kit pieces at the slice's quality bar. Modes, sessions and the full screen flow land here too.
+- **verdict-build**: what the full verdict needs: a metrics feature for every `full` proxy and richness target (listed in its `measures`), the bot policies those metrics require, and a build that runs on every target platform the agent can build for.
 
 Leave `polish` empty; game-polish fills it. Every item needs a pillar, tier, the wiki `pages` it implements, observable acceptance criteria taken from those pages, and a verify method. Choose verify kinds in this order of preference: `test`, `sim`, `replay`, `bot`, `capture`, `check`, `human`. When the adapter marks `sim`, `replay` or `bot` `n/a`, proxy metrics come from instrumented `test` runs or the item becomes `human`.
 
-**Done when** every `must` feature traces to a pillar, the core loop is covered end to end, every system and content type in the wiki has features, and `gamestate.py gate` shows no fun proxy or richness target missing from `measures`.
+**Done when** every `must` feature traces to a pillar, everything this stage covers (the slice's In list, or the full wiki) has features, and `gamestate.py gate` shows no proxy or richness target of this stage missing from `measures`.
 
 ## 4. Tickets
 
@@ -69,9 +76,9 @@ Write each ticket's references into its features' `tickets` lists. In interactiv
 
 ## 5. Budget
 
-Set `limits.budget_sessions` to sessions already used, plus 1.5 × the open tickets, plus 25 for verdicts and polish. In interactive mode, the user confirms it.
+Set `limits.budget_sessions` to sessions already used plus the sessions the open tickets need: 1.5 per ticket for the slice; for production, the slice's real rate (status shows the sessions the slice took; divide by the slice's tickets) per ticket. Add 25 for verdicts and polish. In interactive mode, the user confirms it.
 
-**Done when** the budget is set. Close: `gamestate.py check --since <base>`, commit, progress entry, `gamestate.py complete`.
+**Done when** the budget is set, `gamestate.py check --since <base>` passes, and `gamestate.py complete` succeeds after the commit and progress entry.
 
 ## Adjust mode
 

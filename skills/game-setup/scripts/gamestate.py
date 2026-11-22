@@ -37,32 +37,40 @@ TOPIC_PHASES = ["consolidate", "plan", "build", "verdict", "polish"]  # topics i
 REOPENABLE = ["build", "polish", "awaiting-human", "done"]
 TIERS = ["must", "nice", "cut"]
 VERIFY_KINDS = ["test", "sim", "replay", "bot", "capture", "check", "human"]
-MILESTONES = ["core-loop", "systems", "content", "verdict-build", "polish"]
+MILESTONES = ["core-loop", "slice", "systems", "content", "verdict-build", "polish"]
+SLICE_MS = ["core-loop", "slice"]
 POLISH = "polish"
-SCOPES = ["core-loop", "full", "final"]
-OUTCOMES = ["ship", "adjust", "restart"]
-SCORE_RESULTS = ["pass", "fail", "pending-human"]
+STAGES = ["slice", "production"]
+SCOPES = ["core-loop", "slice", "full", "final"]
+FUN_SCOPES = ["core-loop", "slice", "full"]
+RICH_SCOPES = ["slice", "full"]
+OUTCOMES = ["ship", "adjust", "restart", "kill"]
+SCORE_RESULTS = ["pass", "fail", "not-assessed", "pending-human"]
 ASPECTS = ["depth", "breadth", "variety"]
 TOPIC_STATUSES = ["open", "resolved", "deferred"]
 PRIORITIES = ["core", "support", "later"]
-VISION_HEADINGS = ["## Pitch", "## Audience and platforms", "## Pillars", "## Core loop", "## Target feeling",
-                   "## Tone, art and world", "## References", "## Scope"]
+VISION_HEADINGS = ["## Pitch", "## Audience and platforms", "## Pillars", "## Anti-pillars", "## Core loop",
+                   "## Target feeling", "## Tone, art and world", "## References", "## Scope", "## Kill condition"]
+SLICE_HEADINGS = ["## What it proves", "## In the slice", "## Out of the slice", "## Quality bar", "## Playtest"]
 CONCEPT_HEADINGS = ["## Concepts", "## Choice"]
 INDEX_SECTIONS = ["## Vision", "## Mechanics", "## Controls", "## Systems", "## Content", "## Modes and sessions",
                   "## Screens and onboarding", "## Feel", "## Tone, art and world"]
+SLICE_INDEX_SECTIONS = [h for h in INDEX_SECTIONS if h != "## Modes and sessions"]
 FUN_FIELDS = ["statement", "scope", "kind", "metric", "threshold", "how"]
-RICH_FIELDS = ["aspect", "statement", "metric", "threshold", "how"]
+RICH_FIELDS = ["aspect", "scope", "statement", "metric", "threshold", "how"]
 MIN_SEED_TOPICS = 5
 NICE_RESERVE = 10  # sessions kept back for verdicts and polish before nice features are built
 
 DEFAULT_STATE = {
-    "version": 4,
+    "version": 5,
     "phase": "setup",
+    "stage": "slice",
     "milestone": None,
     "task": "game-setup",
     "verdict_scope": None,
     "verdict_index": 0,
     "passed_verdicts": [],
+    "slice_sessions": None,
     "checkpoint_due": False,
     "adapter_verified": False,
     "gdd_synced": None,
@@ -81,8 +89,13 @@ DEFAULT_FEATURES = {"milestones": MILESTONES, "features": []}
 DEFAULT_FUN = {"items": []}
 DEFAULT_RICHNESS = {"targets": []}
 DEFAULT_TOPICS = {"topics": []}
+DEFAULT_KEEP = {"keep": []}
+MISSING = object()
 DEFAULT_TEXT = {
     "progress.md": "# Progress\n\nAppend-only session log. One entry per session, newest last, at most 10 lines each.\n",
+    "own-calls.md": "# The AI's own calls\n\nPlayer-visible choices an agent made that no wiki page specified. "
+    "Append-only; game-gdd shows the new ones to people, who keep or change each.\n\n"
+    "| Date | Feature | Call | Page |\n| --- | --- | --- | --- |\n",
     "assets.md": "# Assets\n\nEvery asset in the game, where it came from, and its license.\n\n"
     "| Asset | Source (placeholder / generated / sourced / human) | License | Final? | Notes |\n"
     "| --- | --- | --- | --- | --- |\n",
@@ -115,11 +128,13 @@ class Game:
         self.fun_path = self.dir / "fun-checklist.json"
         self.richness_path = self.dir / "richness.json"
         self.topics_path = self.dir / "topics.json"
+        self.keep_path = self.dir / "keep.json"
         self.state = self._load(self.state_path, DEFAULT_STATE)
         self.features = self._load(self.features_path, DEFAULT_FEATURES)
         self.fun = self._load(self.fun_path, DEFAULT_FUN)
         self.richness = self._load(self.richness_path, DEFAULT_RICHNESS)
         self.topics_data = self._load(self.topics_path, DEFAULT_TOPICS)
+        self.keep = self._load(self.keep_path, DEFAULT_KEEP)
 
     def _load(self, path, default):
         merged = copy(default)
@@ -185,6 +200,15 @@ class Game:
     def build_ms(self):
         return [m for m in self.milestones() if m != POLISH]
 
+    def production_ms(self):
+        return [m for m in self.build_ms() if m not in SLICE_MS]
+
+    def stage(self):
+        return self.state.get("stage", "slice")
+
+    def in_stage(self, topic):
+        return self.stage() == "production" or topic.get("stage") == "slice"
+
     @staticmethod
     def upto(pool, m):
         return pool[: pool.index(m) + 1] if m in pool else list(pool)
@@ -231,15 +255,23 @@ class Game:
         if phase == "build":
             return self.upto(self.build_ms(), st.get("milestone"))
         if phase == "verdict":
-            return {"core-loop": self.build_ms()[:1], "full": self.build_ms()}.get(scope, self.milestones())
+            return {"core-loop": SLICE_MS[:1], "slice": SLICE_MS, "full": self.build_ms()}.get(scope, self.milestones())
         if phase in ("polish", "done"):
             return self.milestones()
         return []
 
     def scored_ids(self, scope):
-        fun = [i["id"] for i in self.fun.get("items", []) if scope != "core-loop" or i.get("scope") == "core-loop"]
-        rich = [t["id"] for t in self.richness.get("targets", [])] if scope != "core-loop" else []
+        fun_scopes = {"core-loop": ["core-loop"], "slice": ["core-loop", "slice"]}.get(scope, FUN_SCOPES)
+        rich_scopes = {"core-loop": [], "slice": ["slice"]}.get(scope, RICH_SCOPES)
+        fun = [i["id"] for i in self.fun.get("items", []) if i.get("scope") in fun_scopes]
+        rich = [t["id"] for t in self.richness.get("targets", []) if t.get("scope", "full") in rich_scopes]
         return fun + rich
+
+    def kinds(self):
+        return {i.get("id"): i.get("kind") for i in self.fun.get("items", [])}
+
+    def playtest_entry(self, scope):
+        return next((e for e in self.queue(playtests=True) if e.get("scope") == scope), None)
 
     def pending_playtest(self):
         for entry in self.queue(playtests=True):
@@ -259,14 +291,36 @@ class Game:
         return bool(budget) and st["counters"]["brainstorm_sessions"] >= st["limits"]["brainstorm_share"] * budget
 
     def gdd_stale(self):
-        """True when wiki pages changed since the human GDD was last synced from them."""
+        """True when wiki pages or the AI's own calls changed since the human GDD was last synced from them."""
         if not self.wiki.exists() or not any(self.wiki.rglob("*.md")):
             return False
         synced = self.state.get("gdd_synced")
         if not synced or not self.in_git():
             return True
-        r = self._git("diff", "--name-only", synced, "HEAD", "--", self.wiki.relative_to(self.root).as_posix())
+        sources = [p.relative_to(self.root).as_posix() for p in (self.wiki, self.dir / "own-calls.md")]
+        r = self._git("diff", "--name-only", synced, "HEAD", "--", *sources)
         return r.returncode != 0 or bool(r.stdout.strip())
+
+    def read_pin(self, file, key):
+        """The current value of a pinned tuning knob: a dotted path in JSON, or a `key = value` / `key: value` line."""
+        path = self.root / file
+        if not path.exists():
+            return MISSING
+        text = path.read_text(encoding="utf-8")
+        if path.suffix == ".json":
+            try:
+                value = json.loads(text)
+                for part in key.split("."):
+                    value = value[int(part)] if isinstance(value, list) else value[part]
+                return value
+            except (json.JSONDecodeError, KeyError, IndexError, ValueError, TypeError):
+                return MISSING
+        m = re.search(rf"^\s*{re.escape(key)}\s*[:=]\s*(.+?)\s*[,;]?\s*$", text, re.M)
+        return m.group(1).strip("'\"") if m else MISSING
+
+    @staticmethod
+    def same(current, pinned):
+        return current == pinned or str(current).strip("'\"") == str(pinned)
 
     # ---------- invariants ----------
     def check(self, since="HEAD"):
@@ -284,6 +338,9 @@ class Game:
         errs += self._check_features()
         errs += self._check_targets()
         errs += self._check_topics()
+        errs += self._check_keep()
+        if self.stage() not in STAGES:
+            errs.append(f"state.stage must be one of {STAGES}")
         for e in self.queue():
             if not e.get("id") or not e.get("what"):
                 errs.append("human_queue entries need id and what")
@@ -294,9 +351,10 @@ class Game:
                 errs.append(f"verdict {v.get('scope')}: needs scope in {SCOPES}, outcome in {OUTCOMES} and an adr path")
         if st.get("phase") not in PLANNING_PHASES:
             errs += self._feature_guard(since)
-        if st.get("phase") not in DESIGN_PHASES:
+        if not (self.stage() == "slice" and st.get("phase") in DESIGN_PHASES):
             errs += self._target_guard(since, self.fun_path, "items", FUN_FIELDS, "fun", self.fun)
             errs += self._target_guard(since, self.richness_path, "targets", RICH_FIELDS, "richness", self.richness)
+        errs += self._keep_guard(since)
         return errs
 
     def _check_features(self):
@@ -342,8 +400,8 @@ class Game:
             seen.add(iid)
             if not i.get("statement"):
                 errs.append(f"fun {iid}: missing statement")
-            if i.get("scope") not in ("core-loop", "full"):
-                errs.append(f"fun {iid}: scope must be core-loop or full")
+            if i.get("scope") not in FUN_SCOPES:
+                errs.append(f"fun {iid}: scope must be one of {FUN_SCOPES}")
             if i.get("kind") not in ("proxy", "human"):
                 errs.append(f"fun {iid}: kind must be proxy or human")
             if i.get("kind") == "proxy" and not all(i.get(k) for k in ("metric", "threshold", "how")):
@@ -355,6 +413,8 @@ class Game:
             seen.add(tid)
             if t.get("aspect") not in ASPECTS:
                 errs.append(f"richness {tid}: aspect must be one of {ASPECTS}")
+            if t.get("scope", "full") not in RICH_SCOPES:
+                errs.append(f"richness {tid}: scope must be one of {RICH_SCOPES}")
             if not all(t.get(k) for k in ("statement", "metric", "threshold", "how")):
                 errs.append(f"richness {tid}: needs statement, metric, threshold and how")
         return errs
@@ -373,6 +433,8 @@ class Game:
                 errs.append(f"topic {tid}: status must be one of {TOPIC_STATUSES}")
             if t.get("priority") not in PRIORITIES:
                 errs.append(f"topic {tid}: priority must be one of {PRIORITIES}")
+            if t.get("stage") not in STAGES:
+                errs.append(f"topic {tid}: stage must be one of {STAGES} (does the vertical slice need it?)")
             if t.get("parent") is not None and t.get("parent") not in ids:
                 errs.append(f"topic {tid}: parent '{t.get('parent')}' is not a topic")
             if t.get("status") in ("resolved", "deferred") and not t.get("resolution"):
@@ -382,6 +444,38 @@ class Game:
                 if not pages:
                     errs.append(f"topic {tid}: resolved without a wiki page it wrote or updated")
                 errs += [f"topic {tid}: page '{p}' does not exist" for p in pages if not (self.dir / p).exists()]
+        return errs
+
+    def _check_keep(self):
+        errs = []
+        for k in self.keep.get("keep", []):
+            kid = k.get("id") or "<no id>"
+            if not k.get("what") or not k.get("source"):
+                errs.append(f"keep {kid}: needs what was kept and its source (playtest answers or GDD comment)")
+            for pin in k.get("pins", []):
+                current = self.read_pin(pin.get("file", ""), pin.get("key", ""))
+                if current is MISSING:
+                    errs.append(f"keep {kid}: can't read pinned '{pin.get('key')}' in {pin.get('file')}")
+                elif not self.same(current, pin.get("value")):
+                    errs.append(f"keep {kid}: {pin.get('file')} {pin.get('key')} is {current}, kept at "
+                                f"{pin.get('value')} ({k.get('what')}); restore it, or change the pin with an ADR")
+        return errs
+
+    def _keep_guard(self, since):
+        """What people said to keep stays kept: a pin changes or goes only with a new ADR on its entry."""
+        old_data = self._old(since, self.keep_path)
+        if old_data is None:
+            return []
+        new = {k.get("id"): k for k in self.keep.get("keep", [])}
+        errs = []
+        for k in old_data.get("keep", []):
+            kid, cur = k.get("id"), new.get(k.get("id"))
+            if cur is None:
+                errs.append(f"keep {kid}: removed; keep entries are changed with an ADR, not deleted")
+            elif cur.get("pins") != k.get("pins"):
+                adr = cur.get("adr")
+                if not adr or adr == k.get("adr") or not (self.root / adr).exists():
+                    errs.append(f"keep {kid}: pins changed without a new ADR in its adr field")
         return errs
 
     def _archived_ids(self):
@@ -456,9 +550,8 @@ class Game:
         elif phase == "ideation":
             why += self._ideation_gate()
         elif phase == "brainstorm":
-            why += [f"topic {t['id']}: open ({t.get('priority')})" for t in self.open_topics(["core"])]
-            if not self.brainstorm_share_spent():
-                why += [f"topic {t['id']}: open (support)" for t in self.open_topics(["support"])]
+            open_now = ["core"] if self.brainstorm_share_spent() else ["core", "support"]
+            why += [f"topic {t['id']}: open ({t.get('priority')})" for t in self.open_topics(open_now) if self.in_stage(t)]
         elif phase == "consolidate":
             why += self._consolidate_gate()
         elif phase == "plan":
@@ -492,7 +585,11 @@ class Game:
             why.append("wiki/concepts.md's Choice names no direction")
         if not (self.wiki / "index.md").exists():
             why.append("wiki/index.md is missing")
+        slice_page = self.text(self.wiki / "slice.md").splitlines()
+        why += [f"wiki/slice.md lacks '{h}'" for h in SLICE_HEADINGS if h not in slice_page]
         seeded = [t for t in self.topics() if t.get("parent") is not None]
+        if not any(t.get("stage") == "slice" for t in seeded):
+            why.append("no topic marked for the vertical slice (stage: slice)")
         if len(seeded) < MIN_SEED_TOPICS:
             why.append(f"topics.json has {len(seeded)} follow-up topics; seed at least {MIN_SEED_TOPICS}")
         if not any(t.get("priority") == "core" for t in seeded):
@@ -500,49 +597,82 @@ class Game:
         return why
 
     def _consolidate_gate(self):
+        slice_stage = self.stage() == "slice"
         sec = sections(self.text(self.wiki / "index.md"))
         why = []
-        for heading in INDEX_SECTIONS:
+        for heading in SLICE_INDEX_SECTIONS if slice_stage else INDEX_SECTIONS:
             links = [m for line in sec.get(heading, []) for m in re.findall(r"\]\(([^)#]+)", line)]
             if not any((self.wiki / link).exists() for link in links):
                 why.append(f"wiki/index.md '{heading}' links no existing page")
-        why += [f"topic {t['id']}: open ({t.get('priority')})" for t in self.open_topics(["core", "support"])]
+        why += [f"topic {t['id']}: open ({t.get('priority')})"
+                for t in self.open_topics(["core", "support"]) if self.in_stage(t)]
         items = self.fun.get("items", [])
-        if not 3 <= len(items) <= 6:
-            why.append(f"fun checklist has {len(items)} items; needs 3-6")
-        if not any(i.get("scope") == "core-loop" for i in items):
-            why.append("fun checklist has no core-loop item")
-        if not any(i.get("kind") == "proxy" for i in items):
-            why.append("fun checklist has no proxy item")
-        aspects = {t.get("aspect") for t in self.richness.get("targets", [])}
-        why += [f"richness.json has no {a} target" for a in ASPECTS if a not in aspects]
+        if slice_stage:
+            early = [i for i in items if i.get("scope") in ("core-loop", "slice")]
+            if not 3 <= len(early) <= 6:
+                why.append(f"fun checklist has {len(early)} core-loop and slice items; needs 3-6")
+            if not any(i.get("scope") == "core-loop" and i.get("kind") == "proxy" for i in items):
+                why.append("fun checklist has no core-loop proxy item")
+            if not any(i.get("kind") == "human" and i.get("scope") in ("core-loop", "slice") for i in items):
+                why.append("fun checklist has no human item for the slice playtest")
+        else:
+            if not any(i.get("scope") == "full" for i in items):
+                why.append("fun checklist has no item for the full game (scope full)")
+            if len(items) > 10:
+                why.append(f"fun checklist has {len(items)} items; keep it to 10 or fewer")
+            aspects = {t.get("aspect") for t in self.richness.get("targets", []) if t.get("scope", "full") == "full"}
+            why += [f"richness.json has no full-game {a} target" for a in ASPECTS if a not in aspects]
         return why
 
     def _plan_gate(self):
         st, why = self.state, []
+        slice_stage = self.stage() == "slice"
         if not st.get("adapter_verified"):
             why.append("adapter commands not verified (game-setup adapter mode)")
         if not st["limits"].get("budget_sessions"):
             why.append("limits.budget_sessions is not set")
-        build = [f for f in self.items() if f.get("tier") != "cut" and f.get("milestone") in self.build_ms()]
-        first = self.build_ms()[0]
-        if not any(f.get("tier") == "must" and f.get("milestone") == first for f in build):
-            why.append(f"no must feature in milestone '{first}'")
+        pool = SLICE_MS if slice_stage else self.production_ms()
+        build = [f for f in self.items() if f.get("tier") != "cut" and f.get("milestone") in pool]
+        if slice_stage and not any(f.get("tier") == "must" and f.get("milestone") == SLICE_MS[0] for f in build):
+            why.append(f"no must feature in milestone '{SLICE_MS[0]}'")
+        if not slice_stage and not any(f.get("tier") == "must" for f in build):
+            why.append("no must feature in the production milestones")
         why += [f"{f['id']}: no tickets" for f in build if not f.get("tickets")]
         why += [f"{f['id']}: no wiki pages it implements" for f in build if f.get("tier") == "must" and not f.get("pages")]
-        measured = {m for f in build if f.get("tier") == "must" for m in f.get("measures", [])}
-        targets = [i["id"] for i in self.fun.get("items", []) if i.get("kind") == "proxy"]
-        targets += [t["id"] for t in self.richness.get("targets", [])]
+        measuring = SLICE_MS if slice_stage else self.build_ms()
+        measured = {m for f in self.items() if f.get("tier") == "must" and f.get("milestone") in measuring
+                    for m in f.get("measures", [])}
+        scope = "slice" if slice_stage else "full"
+        kinds = self.kinds()
+        targets = [i for i in self.scored_ids(scope) if kinds.get(i) != "human"]
         why += [f"{t}: no must feature lists it in measures" for t in targets if t not in measured]
         return why
 
     def _verdict_gate(self):
+        """A verdict counts only when every item in scope is scored with evidence; a ship only when all of it holds."""
         st = self.state
         verdicts, scope = st.get("verdicts", []), st.get("verdict_scope")
         if len(verdicts) <= st.get("verdict_index", 0) or verdicts[-1].get("scope") != scope:
             return [f"no {scope} verdict recorded since this phase began"]
-        scores = verdicts[-1].get("scores", {})
-        return [f"{i}: not scored" for i in self.scored_ids(scope) if scores.get(i, {}).get("result") not in SCORE_RESULTS]
+        v, kinds, why = verdicts[-1], self.kinds(), []
+        for iid in self.scored_ids(scope):
+            score = v.get("scores", {}).get(iid, {})
+            result, evidence = score.get("result"), str(score.get("evidence") or "")
+            if result not in SCORE_RESULTS:
+                why.append(f"{iid}: not scored")
+                continue
+            if result in ("pass", "fail") and not (evidence and (self.root / evidence).is_file()):
+                why.append(f"{iid}: {result} needs an evidence file; '{evidence}' does not exist")
+            if result == "not-assessed" and not evidence:
+                why.append(f"{iid}: not-assessed needs the reason it could not be measured")
+            if result == "pending-human" and kinds.get(iid) != "human":
+                why.append(f"{iid}: only human items can wait for a person")
+            if v.get("outcome") == "ship":
+                if result in ("fail", "not-assessed"):
+                    why.append(f"{iid}: {result}; a ship needs every item to pass")
+                if result == "pending-human" and scope == "slice":
+                    why.append(f"{iid}: the slice ships only after a person has played it")
+        return why
 
     def task_gate(self):
         """What the current task still owes before `complete` may clear it."""
@@ -561,15 +691,17 @@ class Game:
         if entry and phase in REOPENABLE:
             self._reopen(entry)
             return [f"playtest answers for {entry['scope']}: verdict reopened"]
+        production = " production" if self.stage() == "production" else ""
         if phase == "setup":
             st.update(phase="ideation", task="game-ideation")
         elif phase == "ideation":
             st.update(phase="brainstorm", task=None)
         elif phase == "brainstorm":
-            st.update(phase="consolidate", task="game-consolidate")
+            st.update(phase="consolidate", task="game-consolidate" + production)
         elif phase == "consolidate":
             adr = st.get("restart_adr")
-            st.update(phase="plan", task=f"game-plan restart {adr}" if adr else "game-plan", restart_adr=None)
+            task = f"game-plan restart {adr}" if adr else "game-plan" + production
+            st.update(phase="plan", task=task, restart_adr=None)
         elif phase in ("plan", "build", "polish"):
             if phase != "plan":
                 notes.append(f"milestone complete: {st['milestone']}")
@@ -584,13 +716,20 @@ class Game:
 
     def _route(self):
         """Send the run to whatever comes next: failing work first, then the verdict it has earned."""
-        st, pool, passed = self.state, self.build_ms(), self.state.get("passed_verdicts", [])
-        m = self.earliest_failing_ms(pool)
-        if m == pool[0]:
-            st.update(phase="build", milestone=m, task=None)
-        elif "core-loop" not in passed:
-            self._enter_verdict("core-loop")  # the core loop is judged before anything is built on it
-        elif m:
+        st, passed = self.state, self.state.get("passed_verdicts", [])
+        if self.stage() == "slice":
+            m = self.earliest_failing_ms(SLICE_MS)
+            if m == SLICE_MS[0]:
+                st.update(phase="build", milestone=m, task=None)
+            elif "core-loop" not in passed:
+                self._enter_verdict("core-loop")  # the core loop is judged on bots before the slice is polished
+            elif m:
+                st.update(phase="build", milestone=m, task=None)
+            else:
+                self._enter_verdict("slice")
+            return
+        m = self.earliest_failing_ms(self.build_ms())
+        if m:
             st.update(phase="build", milestone=m, task=None)
         elif "full" not in passed:
             self._enter_verdict("full")
@@ -636,8 +775,16 @@ class Game:
         if outcome == "ship":
             if scope not in passed:
                 passed.append(scope)
+            if scope == "slice":
+                st.update(stage="production", slice_sessions=st["counters"]["sessions"],
+                          phase="brainstorm", milestone=None, task=None)
+                return [f"verdict slice: ship; production begins ({st['slice_sessions']} sessions for the slice)"]
             self._route()
             return [f"verdict {scope}: ship"]
+        if outcome == "kill":
+            self._stop(f"kill condition met ({adr}): keep going, restart from ideation, or stop the game",
+                       {"restart_adr": adr})
+            return [f"verdict {scope}: kill condition met; a human decides"]
         st["passed_verdicts"] = [s for s in passed if SCOPES.index(s) < SCOPES.index(scope)]
         key, limit = ("adjusts", "max_adjusts") if outcome == "adjust" else ("restarts", "max_restarts")
         st["counters"][key] += 1
@@ -663,8 +810,9 @@ class Game:
         self._write(archive / "human-queue.json", st.get("human_queue", []))
         self.features["features"] = []
         self._write(self.features_path, self.features)
-        st.update(phase="ideation", milestone=None, task=f"game-ideation restart {adr}", restart_adr=adr,
-                  passed_verdicts=[], adapter_verified=False, checkpoint_due=False, human_queue=[], attempts={})
+        st.update(phase="ideation", stage="slice", milestone=None, task=f"game-ideation restart {adr}",
+                  restart_adr=adr, passed_verdicts=[], slice_sessions=None, adapter_verified=False,
+                  checkpoint_due=False, human_queue=[], attempts={})
         self.commit(f"restart {n}", self.features_path, archive / "features.json", archive / "human-queue.json")
         return [f"restart {n}: definition of done and human queue archived to {archive.relative_to(self.root)}; "
                 "close their open tickets"]
@@ -740,6 +888,13 @@ class Game:
             action = self._build_action(pool)  # judge and polish only a green build
             if action:
                 return action
+        if phase == "verdict":
+            entry = self.playtest_entry(st.get("verdict_scope"))
+            if entry and (self.root / entry["answers"]).exists():
+                return f"game-verdict {st['verdict_scope']} answers {entry['answers']}"
+            if entry and st.get("verdict_scope") == "slice":
+                return (f"stop: waiting for the slice playtest: a person plays the build with the kit "
+                        f"({entry.get('how', 'see the human queue')}) and writes {entry['answers']}; then run /game-next")
         task = st.get("task")
         if task and task.startswith("game-ideation"):
             if not no_user:
@@ -771,11 +926,11 @@ class Game:
         phase = self.state["phase"]
         if phase == "brainstorm":
             allowed = ["core"] if self.brainstorm_share_spent() else ["core", "support"]
-            candidates = self.open_topics(allowed)
+            candidates = [t for t in self.open_topics(allowed) if self.in_stage(t)]
         elif phase in TOPIC_PHASES:
             needed = {f["id"] for f in self.failing(self.green_pool() or self.milestones())}
             candidates = [t for t in self.open_topics()
-                          if t.get("priority") == "core" or needed & set(t.get("unblocks", []))]
+                          if (t.get("priority") == "core" and self.in_stage(t)) or needed & set(t.get("unblocks", []))]
         else:
             candidates = []
         if not candidates:
@@ -806,7 +961,9 @@ class Game:
     # ---------- report ----------
     def status(self, no_user=False):
         st, c, lim = self.state, self.state["counters"], self.state["limits"]
-        out = [f"phase: {st['phase']}"
+        out = [f"stage: {self.stage()}"
+               + (f" (the slice took {st['slice_sessions']} sessions)" if st.get("slice_sessions") else "")
+               + f"  phase: {st['phase']}"
                + (f"  milestone: {st['milestone']}" if st.get("milestone") else "")
                + (f"  scope: {st['verdict_scope']}" if st["phase"] == "verdict" else "")
                + f"  sessions: {c['sessions']}/{lim.get('budget_sessions') or '-'}"
@@ -866,7 +1023,7 @@ def main(argv):
         game.dir.mkdir(parents=True, exist_ok=True)
         for path, data in ((game.state_path, game.state), (game.features_path, game.features),
                            (game.fun_path, game.fun), (game.richness_path, game.richness),
-                           (game.topics_path, game.topics_data)):
+                           (game.topics_path, game.topics_data), (game.keep_path, game.keep)):
             if not path.exists():
                 game._write(path, data)
                 print(f"created {path.relative_to(game.root)}")
@@ -894,6 +1051,10 @@ def main(argv):
             return 1
         done = st.get("task")
         st["task"] = None
+        if st["phase"] == "verdict":  # answers read by this verdict are consumed with it
+            st["human_queue"] = [e for e in st["human_queue"] if not (
+                e.get("kind") == "playtest" and e.get("scope") == st.get("verdict_scope")
+                and (game.root / e.get("answers", "")).is_file())]
         game.save_state(f"complete {done}")
         print(f"complete: {done}\nnext: {game.next_action()}")
         return 0

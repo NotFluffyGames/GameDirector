@@ -73,3 +73,5 @@ For each row: write the command (or wrapper script) into the Commands table of `
 ### 3. Close
 
 Set `adapter_verified: true` in `docs/game/state.json`, commit, append a progress entry.
+
+**Done when** the commit holds the verified Commands table and `adapter_verified: true`.

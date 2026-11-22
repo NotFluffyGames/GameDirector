@@ -1,12 +1,12 @@
 ---
 name: game-ideation
-description: With the user, turn a raw, high-level game idea into a vision - pitch, audience, pillars, core loop, target feeling, tone and scope - by grilling them, comparing distinct directions and letting them choose, then seed the wiki and the brainstorm topic tree. Phase 1 of the game-* workflow; also re-runs after a restart verdict.
+description: With the user, turn a raw, high-level game idea into a vision (pitch, pillars, anti-pillars, core loop, target feeling, scope, kill condition) and a vertical slice definition, by grilling them, comparing distinct directions and letting them choose; then seed the wiki and the brainstorm topic tree. Phase 1 of the game-* workflow; also re-runs after a restart.
 disable-model-invocation: true
 ---
 
 # Game Ideation
 
-Formulates the **vision** with the user: what the game is, who it is for and why it will be fun, before any detail is designed. This is a conversation, whatever the autonomy mode: it runs in the session the user started, never in a subagent or an unattended loop. It writes the first wiki pages and topics; game-gdd then turns them into the human GDD. Read `docs/agents/game.md` first and follow its session rules.
+Formulates the **vision** with the user (what the game is, who it is for, why it will be fun, what it will never be) and defines the **vertical slice**: the small part of the game built first, to the quality bar the user sets, to prove the game before production. Nothing is designed in detail yet. This is a conversation, whatever the autonomy mode: it runs in the session the user started, never in a subagent or an unattended loop. It writes the first wiki pages and topics; game-gdd then turns them into the human GDD. Read `docs/agents/game.md` first and follow its session rules.
 
 ## 1. Read the seed
 
@@ -35,22 +35,37 @@ Score each on fun potential, richness potential, fit to the user's answers, how 
 
 ## 4. Write the vision
 
-Write `docs/game/wiki/vision.md` from [vision-template.md](vision-template.md), and `docs/game/wiki/index.md` from [index-template.md](index-template.md) with the Vision section filled in. Read the pitch, pillars and core loop back to the user and fix what they correct.
+Write `docs/game/wiki/vision.md` from [vision-template.md](vision-template.md). Grill the user for the **anti-pillars** (what the game will never do, and which pillar each protects) and the **kill condition** (the playtest result that would stop the game as conceived). Read the pitch, pillars, anti-pillars and core loop back to the user and fix what they correct.
 
-**Done when** the user accepts the vision: a one-page pitch, a one-sentence core loop, and 3–4 pillars, each able to reject a feature.
+**Done when** the user accepts the vision: a one-page pitch, a one-sentence core loop, 3–4 pillars each able to reject a feature, at least one anti-pillar, and a kill condition a playtest can meet or not.
 
-## 5. Seed the topic tree
+## 5. Define the vertical slice
 
-In `docs/game/topics.json`, record the root topic `T1` ("the game", resolved by the vision, pages `["wiki/vision.md"]`), then break it into first-level topics with [topic-map.md](topic-map.md): one per area this game needs, each with a question, priority and the page it will write. Publish each as a ticket in the tracker (`docs/agents/issue-tracker.md`, `ready-for-human`: a person brainstorms it), and record the ticket on the topic. Show the user the list; add, drop or reprioritise as they say.
+With the user, write `docs/game/wiki/slice.md` from [slice-template.md](slice-template.md):
+
+- **What it proves**: a test question the slice can fail, and the risks it retires.
+- **In and out**: the part of the game it covers, the systems and content it needs, and what it leaves out. Keep it the smallest slice that delivers one complete start → challenge → resolution and the target feeling.
+- **Quality bar**: for each aspect (code, feel, art, audio, UI, onboarding), ask the user for `placeholder`, `representative` or `final`, recommending representative unless that aspect is a risk the slice must retire.
+- **Playtest**: who plays it and what counts as a pass. The slice verdict waits for this playtest.
+
+**Done when** the user accepts slice.md, and every system and content type it names is in the slice's In list or its Out list.
+
+## 6. Seed the topic tree
+
+Write `docs/game/wiki/index.md` from [index-template.md](index-template.md) with the Vision section filled in. In `docs/game/topics.json`, record the root topic `T1` ("the game", resolved by the vision, pages `["wiki/vision.md", "wiki/slice.md"]`), then break it into first-level topics with [topic-map.md](topic-map.md): one per area this game needs, each with a question, priority, the page it will write, and its **stage**: `slice` when the vertical slice needs it answered, otherwise `production`. Brainstorm takes slice topics first; production topics wait until the slice ships. Publish each as a ticket in the tracker (`docs/agents/issue-tracker.md`, `ready-for-human`: a person brainstorms it), and record the ticket on the topic. Show the user the list; add, drop or reprioritise as they say.
 
 On a restart, reopen the topics whose pages the restart ADR invalidates, and open new ones where the vision changed.
 
 **Done when** `python3 docs/game/gamestate.py gate` passes.
 
-## 6. Name things
+## 7. Name things
 
-With the `domain-modeling` skill, add the game's own nouns from the vision to `CONTEXT.md`.
+With the `domain-modeling` skill, add the game's own nouns from the vision and the slice to `CONTEXT.md`.
 
-## 7. Close
+**Done when** every noun the vision and slice use is in `CONTEXT.md`.
+
+## 8. Close
 
 `gamestate.py check --since <base>`, commit, progress entry, `gamestate.py complete`.
+
+**Done when** `complete` succeeds.

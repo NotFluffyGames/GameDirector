@@ -22,27 +22,32 @@ Every session does **one step** and stops: run `/game-next` in a fresh session a
 ## How it works
 
 ```
-setup → ideation → brainstorm (one topic per session) → consolidate → plan → build: core-loop
-      → verdict: core-loop → build: systems, content, verdict-build → verdict: full → polish → verdict: final → done
+slice:       setup → ideation (vision + vertical slice) → brainstorm (the slice's topics, one per session) → consolidate
+             → plan → build the core loop → verdict: core-loop (bots) → build the slice to its quality bar
+             → verdict: slice (after your playtest; the gate into production)
+production:  brainstorm (the remaining topics) → consolidate → plan → build systems and content → verdict: full
+             → polish → verdict: final → done
 
-any verdict: adjust → plan     restart → ideation
+any verdict: adjust → plan     restart → ideation     kill (slice) → you decide
 any phase:   an unanswered design question → a brainstorm topic, with you
 ```
+
+The **vertical slice** comes first: a small part of the game, one complete start → challenge → resolution that delivers the target feeling, at the quality bar you choose per aspect (code, feel, art, audio, UI, onboarding). Brainstorming designs only what the slice needs, so something playable and representative arrives early; the slice verdict waits for a person's playtest and checks the vision's kill condition; and the sessions the slice took set the production budget.
 
 | Skill | Step | Produces | With you? | Leans on |
 | --- | --- | --- | --- | --- |
 | `game-next` | every session | runs the next step, checks it, reports what's next | — | — |
 | `game-setup` | first session | `docs/agents/game.md` and `human-docs.md` config, state files, verified engine commands | decisions | `research` |
-| `game-ideation` | vision | vision and directions considered in the wiki, the first topics | always | `grilling`, `domain-modeling` |
+| `game-ideation` | vision | vision (with anti-pillars and a kill condition), the vertical slice definition, directions considered, the first topics | always | `grilling`, `domain-modeling` |
 | `game-brainstorm` | one topic | the topic's wiki pages, follow-up topics | always | `grilling`, `research` |
-| `game-consolidate` | after brainstorm | a complete, consistent wiki; the fun checklist and richness targets | interactive mode | — |
-| `game-gdd` | whenever the wiki changed | the human GDD, next to your tasks, in sync with the wiki | — | — |
+| `game-consolidate` | after each brainstorm pass | a complete, consistent wiki (with a whole-design review); the fun checklist and richness targets | interactive mode | — |
+| `game-gdd` | whenever the wiki changed | the human GDD, next to your tasks, in sync with the wiki, including the AI's own calls for you to keep or change | — | — |
 | `game-plan` | plan | tech ADRs, walking skeleton, `features.json`, tickets | interactive mode | `codebase-design`, `domain-modeling`, `research` |
 | `game-build` | one feature | built, verified, reviewed and committed | — | `tdd`, `diagnosing-bugs`, `code-review` |
-| `game-verdict` | three gates | fun and richness scores from bots and replays, playtest kit, ship/adjust/restart ADR | interactive mode | — |
+| `game-verdict` | core loop, slice, full, final | fun and richness scores with evidence, playtest kits, kept values, a ship/adjust/restart/kill ADR | the slice playtest; interactive mode | — |
 | `game-polish` | polish | feel, final art and audio, balance, performance, accessibility and packaged-build features | — | — |
 
-**Ideation and brainstorming, with you.** Ideation grills you on the raw idea, compares 3–5 directions that play differently, lets you choose, and writes the vision. It then breaks "the game" into first-level topics. Each brainstorm session takes one topic, grills you on it, and challenges every answer hard against the vision, the rest of the wiki, how it plays and what it costs. It then writes or updates the topic's pages and opens the follow-up topics the conversation raised. The tree grows until every topic is answered precisely enough to plan features and write tests from.
+**Ideation and brainstorming, with you.** Ideation grills you on the raw idea, compares 3–5 directions that play differently, lets you choose, writes the vision (with anti-pillars and a kill condition), and defines the vertical slice with you. It then breaks "the game" into first-level topics. Each brainstorm session takes one topic, grills you on it, and challenges every answer hard against the vision, the rest of the wiki, how it plays and what it costs. It then writes or updates the topic's pages and opens the follow-up topics the conversation raised. The tree grows until every topic is answered precisely enough to plan features and write tests from.
 
 **Living documents.** The **wiki** (`docs/game/wiki/`) is for agents: the current truth about the game, precise enough to build and test from, with ADRs for why things changed. Every session that changes what the game is updates its page in the same commit, and any design question a later phase hits becomes a topic. The **GDD** is for people and lives next to your tasks (for example a ClickUp Doc beside the task list). `game-gdd` rewrites it from the wiki before each phase or milestone moves on. Your comments and edits there come back as topics.
 
@@ -52,6 +57,8 @@ any phase:   an unanswered design question → a brainstorm topic, with you
 - It syncs the GDD when the wiki changed, reopens a verdict when playtest answers arrive, and commits its own bookkeeping.
 
 **Context per session.** Each session does one step, reads only what that step names, splits work that outgrows it, and ends with a commit and a short report. All state is on disk, so nothing depends on an earlier conversation.
+
+**Honest evidence.** Every verdict score is pass or fail with an evidence file, "not assessed" with the reason it couldn't be measured, or waiting for a person; the state tool refuses a ship otherwise. What a playtest or a comment says to keep is pinned in `keep.json`, and the check holds those tuning values unless an ADR changes them. Every player-visible choice an agent makes that no page specified goes on the AI's own-calls list in the GDD.
 
 **The definition of done.** `docs/game/features.json` lists every feature with its pillar, tier, milestone, the wiki pages it implements, acceptance criteria and a verify method. A feature passes only with evidence from a run. Once planning is over, features can be cut but not deleted, and acceptance can't be edited. After consolidate, the fun checklist and richness targets can rise but not drop. `gamestate.py check` enforces all of this.
 
@@ -123,4 +130,4 @@ Edit any of them; the skills read them fresh every session.
 python3 -m unittest discover tests
 ```
 
-Edit skills following the `writing-for-agents` skill. The state schemas (`features.json`, `fun-checklist.json`, `richness.json`, `topics.json`, the vision, directions and index headings) live in two places that must agree: `skills/game-setup/game.md` plus the templates, and `skills/game-setup/scripts/gamestate.py`.
+`tests/test_skills.py` checks the skills themselves: packaging, links, a completion criterion on every step, real tool commands, and a skill for every step and mode the state tool can schedule. Edit skills following the `writing-for-agents` skill. The state schemas (`features.json`, `fun-checklist.json`, `richness.json`, `topics.json`, `keep.json`, the vision, slice, directions and index headings) live in two places that must agree: `skills/game-setup/game.md` plus the templates, and `skills/game-setup/scripts/gamestate.py`.

@@ -28,4 +28,6 @@ Lines that don't apply get one sentence each in the progress entry saying why.
 
 ## 3. Re-estimate and close
 
-Raise `limits.budget_sessions` to at least sessions used plus 1.5 × the new tickets plus 5 for the final verdict. Commit, progress entry, `gamestate.py complete`.
+Raise `limits.budget_sessions` to at least sessions used plus the slice's rate per ticket (status shows the sessions the slice took) times the new tickets, plus 5 for the final verdict. Commit, progress entry, `gamestate.py complete`.
+
+**Done when** `complete` succeeds.

@@ -13,7 +13,8 @@ One topic, one conversation. The topic tree in `docs/game/topics.json` breaks th
 Take the topic the task names (`game-brainstorm T014 …`), or with none, the first open topic `gamestate.py status` would pick. Read:
 
 - the topic, and its parent chain up to `T1`;
-- `wiki/vision.md`: the pillars, core loop and target feeling everything is judged against;
+- `wiki/vision.md`: the pillars, anti-pillars, core loop and target feeling everything is judged against;
+- `wiki/slice.md`: while the stage is `slice` (status shows it), design only what the slice's In list needs;
 - the pages the topic writes, and the pages the index links them to;
 - `CONTEXT.md`, and the ADRs those pages link.
 
@@ -25,10 +26,10 @@ Then prepare your challenges before asking anything: where could this idea contr
 
 With the `grilling` skill, interview the user one question at a time down the topic's design tree, giving your recommended answer with each. Be **ruthless** with every answer:
 
-- **Against the vision**: which pillar does it serve? Does it strengthen the core loop or compete with it? Does it deliver the target feeling?
+- **Against the vision**: which pillar does it serve, and does it break an anti-pillar? Does it strengthen the core loop or compete with it? Does it deliver the target feeling?
 - **Against the wiki**: does it contradict another page? Does it duplicate something that already exists?
 - **Against play**: what is the dominant strategy, the degenerate case, the boring case, the confusing first minute?
-- **Against scope**: what does it cost, and what would the game lose without it?
+- **Against scope**: what does it cost, and what would the game lose without it? In the slice stage: does the slice need it, or can it wait for production?
 
 Push vague answers until they are concrete enough to test. When an answer fails a challenge, say so plainly and help the user find a better one; when the user overrules you, record their reason.
 
@@ -45,10 +46,12 @@ Push vague answers until they are concrete enough to test. When an answer fails 
 
 ## 4. Open the follow-ups
 
-For each question the conversation raised but didn't settle, open a child topic: `parent` this topic, a question, a priority (`core`, `support`, `later`) and the page it will write. Open only questions that planning can't do without, or that you mark `later`; merge with an existing open topic instead of duplicating it. Publish each as a `ready-for-human` ticket.
+For each question the conversation raised but didn't settle, open a child topic: `parent` this topic, a question, a priority (`core`, `support`, `later`), a `stage` (`slice` only when the slice needs it answered, otherwise `production`) and the page it will write. Open only questions that planning can't do without, or that you mark `later`; merge with an existing open topic instead of duplicating it. Publish each as a `ready-for-human` ticket.
 
 **Done when** every unsettled question is a topic or a recorded accepted risk.
 
 ## 5. Close
 
 Set the topic's `status` to `resolved`, its `pages`, and a one-line `resolution`; close its ticket. `gamestate.py check --since <base>`, commit, progress entry.
+
+**Done when** the topic is resolved and check passes.

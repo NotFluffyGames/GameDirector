@@ -15,6 +15,7 @@ Where documents for people live, so they sit next to the tasks. The game-* skill
 | GDD page | Id or link |
 | --- | --- |
 | Overview | |
+| Vertical slice | |
 | Gameplay | |
 | Systems | |
 | Content | |
@@ -23,6 +24,8 @@ Where documents for people live, so they sit next to the tasks. The game-* skill
 | Look, sound and feel | |
 | The bar | |
 | Status | |
+| Own calls | |
+| Kept | |
 | Changes | |
 
 game-gdd fills in the ids and links when it creates the pages.

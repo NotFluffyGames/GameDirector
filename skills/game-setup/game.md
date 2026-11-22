@@ -15,7 +15,12 @@ A game that is **fun, playable, rich, working, testable and tested**, described 
 | Rich | every richness target passes on the final build |
 | Fun | every fun proxy passes on the final build, and the playtest kit is ready; people's answers can still reopen the verdict |
 
-The phases: setup → ideation → brainstorm → consolidate → plan → build → verdict (core-loop) → build → verdict (full) → polish → verdict (final) → done. Brainstorming doesn't end with its phase: any later phase opens a topic when it meets a question the wiki doesn't answer.
+The game is made in two **stages**:
+
+- **slice** (pre-production): setup → ideation (vision and vertical slice) → brainstorm (only the slice's topics) → consolidate → plan → build the core loop → verdict (core-loop, on bots) → build the rest of the slice to its quality bar → verdict (slice: the gate into production, after a person's playtest).
+- **production**: brainstorm (the remaining topics) → consolidate → plan → build systems and content → verdict (full) → polish → verdict (final) → done.
+
+Brainstorming doesn't end with its phase: any later phase opens a topic when it meets a question the wiki doesn't answer.
 
 The game is made over **many sessions, one step per session**. A person starts a session and runs `/game-next`; `gamestate.py status` names the step, the session does it, checks it and stops. Steps that need no person can also run back to back unattended (the game-next skill's `unattended.md`).
 
@@ -23,10 +28,10 @@ The game is made over **many sessions, one step per session**. A person starts a
 
 Mode: {{autonomous | interactive}}
 
-Ideation and brainstorm topics are always conversations with a person (`with-user:` steps), whatever the mode. The mode decides the rest:
+Ideation and brainstorm topics are always conversations with a person (`with-user:` steps), and the slice verdict always waits for a person's playtest, whatever the mode. The mode decides the rest:
 
 - **autonomous**: other steps decide on their own. At each judgement call, take the recommended answer and record it in an ADR as an assumption a human can overturn. Work only a person can do goes to the **human queue**.
-- **interactive**: the user also approves the ticket breakdown (game-plan) and decides each verdict's outcome (game-verdict), when they are in the session.
+- **interactive**: the user also approves the fun checklist and richness targets (game-consolidate), the ticket breakdown (game-plan) and each verdict's outcome (game-verdict), when they are in the session.
 
 ## Session rules
 
@@ -48,7 +53,7 @@ Every game-* session is a **fresh session** doing **one task**:
 `docs/game/wiki/` is the living description of the game, written for agents: precise enough to plan, build and test from. It holds the **current truth** only; why something changed lives in an ADR the page links to.
 
 - `index.md`: the map. One `##` section per area (Vision, Mechanics, Controls, Systems, Content, Modes and sessions, Screens and onboarding, Feel, Tone, art and world), each listing its pages as relative links with one line each. Every page is reachable from it.
-- `vision.md` (pitch, audience and platforms, pillars, core loop, target feeling, tone, references, scope) and `concepts.md` (the directions compared and the choice), both from ideation.
+- `vision.md` (pitch, audience and platforms, pillars, anti-pillars, core loop, target feeling, tone, references, scope, kill condition), `slice.md` (the vertical slice: what it proves, what's in and out, its quality bar, its playtest) and `concepts.md` (the directions compared and the choice), all from ideation.
 - Every other page: one subject (a system, a content type, a mode, a screen flow), written by brainstorm topics and kept true by every phase. A page starts with:
 
   ```markdown
@@ -66,12 +71,13 @@ Every game-* session is a **fresh session** doing **one task**:
 ```json
 {"id": "T014", "title": "Weapon stealing", "parent": "T003",
  "question": "How does a player take an opponent's weapon, and what stops it from dominating?",
- "priority": "core", "status": "open",
+ "priority": "core", "stage": "slice", "status": "open",
  "pages": ["wiki/systems/weapons.md"], "unblocks": ["F021"], "ticket": "#88",
  "resolution": ""}
 ```
 
 - `priority`: `core` (the core loop depends on it), `support` (needed before planning is complete), `later` (depth that can wait).
+- `stage`: `slice` when the vertical slice needs it answered, otherwise `production`. Production topics wait until the slice ships.
 - `status`: `open`, `resolved` (its `pages` were written or updated and `resolution` gives the answer in a line) or `deferred` (`resolution` says why it waits). Any session may reopen a topic when the game changes under it.
 - `unblocks`: features that can't be built until it is answered; the status tool brainstorms those topics before building them.
 
@@ -87,6 +93,8 @@ A game design document for people, kept next to the tasks, where `docs/agents/hu
 | `docs/game/wiki/` | the living, agent-facing description of the game | ideation, brainstorm, consolidate; every phase keeps it true |
 | `docs/game/topics.json` | the brainstorm tree | ideation, brainstorm; any phase opens topics |
 | `docs/game/fun-checklist.json` | fun checklist | game-consolidate |
+| `docs/game/keep.json` | what playtests and people said to keep, with pinned tuning values | game-verdict, game-gdd |
+| `docs/game/own-calls.md` | player-visible choices agents made that no page specified | game-build, any session |
 | `docs/game/richness.json` | richness targets | game-consolidate |
 | `docs/game/features.json` | definition of done | game-plan, game-polish add items; game-build sets `passes` |
 | `docs/game/state.json` | phase, milestone, task, counters, limits, attempts, verdicts, human queue, GDD sync point | `gamestate.py`; skills append verdicts and queue entries and set `adapter_verified` |
@@ -101,11 +109,13 @@ Decisions are ADRs and game terms live in `CONTEXT.md`, both where `docs/agents/
 
 ## Vocabulary
 
-- **Pillars**: 3–4 statements of the feelings or features the game delivers, written `- **P1**: ...` in `wiki/vision.md`. Every feature serves one; a feature with no pillar is not in the game.
+- **Pillars**: 3–4 statements of the feelings or features the game delivers, written `- **P1**: ...` in `wiki/vision.md`. Every feature serves one; a feature with no pillar is not in the game. **Anti-pillars** say what the game will never do and which pillar each protects.
+- **Kill condition**: the playtest result, stated in the vision, that would stop the game as conceived. The slice verdict checks it.
+- **Vertical slice**: the small part of the game built first (`wiki/slice.md`): one complete start → challenge → resolution delivering the target feeling, at the quality bar the user chose per aspect (`placeholder`, `representative` or `final`). Its verdict, after a person's playtest, is the gate into production, and the sessions it took set the production budget.
 - **Core loop**: the action the player repeats minute to minute, in one sentence.
 - **Design-ready**: a topic's question is answered on a page precisely enough to plan features and write tests from. Brainstorming aims here, not at exhaustiveness.
-- **Fun checklist**: 3–6 statements that are true when the game is fun, each observable in one play session. A **proxy** item has a metric, threshold and method a bot run or replay can measure. A **human** item needs a person.
-- **Richness targets**: `richness.json` targets `{id, aspect, statement, metric, threshold, how}`, at least one per aspect: **depth** (systems that change each other), **breadth** (distinct content), **variety** (playthroughs that differ). Scored at the full and final verdicts.
+- **Fun checklist**: statements that are true when the game is fun, each observable in one play session, with a `scope`: `core-loop`, `slice` or `full`. A **proxy** item has a metric, threshold and method a bot run or replay can measure. A **human** item needs a person.
+- **Richness targets**: `richness.json` targets `{id, aspect, scope, statement, metric, threshold, how}` with `scope` `slice` or `full`; the full game needs at least one per aspect: **depth** (systems that change each other), **breadth** (distinct content), **variety** (playthroughs that differ).
 - **Scope tiers**: `must`, `nice`, `cut`. Nice features are built after their milestone's must features, while the budget has room.
 - **Tuning knobs**: per-system values and an on/off toggle, loaded from data so they change without code edits.
 - **Simulation core / presentation shell**: game rules live in a deterministic core (fixed tick or turn, seeded RNG, input as data, serializable state) that runs headless. Rendering, audio and input devices live in a thin shell around it. Tests, bots and replays drive the core.
@@ -114,8 +124,10 @@ Decisions are ADRs and game terms live in `CONTEXT.md`, both where `docs/agents/
 - **Evidence**: the command run, its result (numbers, hash, artifact path) and the commit.
 - **Task**: what the current phase still owes (`state.json` `task`, shown by status). Phase skills clear it with `gamestate.py complete` as their last step.
 - **Gate**: a phase's completion criterion, checked by `gamestate.py gate`.
-- **Verdict**: the scored judgement of a green build against the fun checklist and richness targets: `ship`, `adjust` or `restart`. Scopes: `core-loop` (after the core-loop milestone), `full` (before polish), `final` (after polish; shipping it completes the run). It runs again when playtest answers arrive.
-- **Durable assets**: seed.md, the wiki, the fun checklist, richness targets, ADRs, CONTEXT.md and final art. They survive a restart. Code is disposable.
+- **Verdict**: the scored judgement of a green build against the fun checklist and richness targets: `ship`, `adjust`, `restart` or `kill`. Scopes: `core-loop` (on bots, before the slice is polished), `slice` (the gate into production; waits for a person's playtest), `full` (before polish), `final` (after polish; shipping it completes the run). It runs again when playtest answers arrive. Each score is `pass` or `fail` with an evidence file, `not-assessed` with the reason it couldn't be measured, or `pending-human`; a ship needs every item to pass.
+- **Kept values**: `keep.json` entries `{id, what, source, pins: [{file, key, value}], adr}` for what a playtest or a person said to keep. `gamestate.py check` holds each pinned tuning value (a dotted key in JSON, or a `key = value` / `key: value` line); changing or dropping one needs a new ADR in the entry's `adr`.
+- **Own calls**: player-visible choices an agent made that no page specified, logged in `own-calls.md` and shown in the GDD for people to keep or change.
+- **Durable assets**: seed.md, the wiki, the fun checklist, richness targets, kept values, ADRs, CONTEXT.md and final art. They survive a restart. Code is disposable.
 - **Human queue**: `state.json` `human_queue` entries `{id, what, why, how, unblocks: [feature ids]}` for work only a person can do, each mirrored as a `ready-for-human` ticket. The run moves past queued features and stops at the end for the queue; open playtest entries don't stop it. A person finishing an entry deletes it, and for a `human`-verified feature sets `passes: true` with evidence starting `human:`; the next `/game-next` session goes back to anything still failing. A playtest entry also has `kind: "playtest"`, `scope` and `answers` (a file path): the person writes their answers to that file and leaves the entry, and the next session reopens the verdict with them.
 
 ### features.json item
@@ -131,7 +143,7 @@ Decisions are ADRs and game terms live in `CONTEXT.md`, both where `docs/agents/
 }
 ```
 
-`milestone` is one of `core-loop`, `systems`, `content`, `verdict-build`, `polish`. `verify.kind` is one of `test`, `sim`, `replay`, `bot`, `capture`, `check` (any scripted or recorded inspection) or `human`. `pages` lists the wiki pages the feature implements. `measures` lists the fun proxy and richness target ids whose metric this feature produces. Ids are never reused, including ids in `docs/game/archive/`. Build attempts are counted by `gamestate.py` in `state.json` `attempts`.
+`milestone` is one of `core-loop`, `slice` (the vertical slice), `systems`, `content`, `verdict-build` (production), `polish`. `verify.kind` is one of `test`, `sim`, `replay`, `bot`, `capture`, `check` (any scripted or recorded inspection) or `human`. `pages` lists the wiki pages the feature implements. `measures` lists the fun proxy and richness target ids whose metric this feature produces. Ids are never reused, including ids in `docs/game/archive/`. Build attempts are counted by `gamestate.py` in `state.json` `attempts`.
 
 ## Limits
 

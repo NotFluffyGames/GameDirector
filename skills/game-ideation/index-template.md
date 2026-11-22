@@ -10,6 +10,7 @@ The agent-facing description of the game: current truth only. Why things changed
 ## Vision
 
 - [Vision](vision.md): pitch, audience, pillars, core loop, target feeling, scope
+- [Vertical slice](slice.md): what the slice contains, what it must prove, its quality bar
 - [Directions considered](concepts.md): the directions compared and why this one
 
 ## Mechanics

@@ -21,6 +21,11 @@ Who it is for, what they already play, where and how long they play. Target plat
 - **P2**: ...
 - **P3**: ...
 
+## Anti-pillars
+
+- **We will not** <do X>, because it would compromise <P1>.
+- ...
+
 ## Core loop
 
 <One sentence: the action the player repeats minute to minute, and what it feeds.>
@@ -40,4 +45,8 @@ Two or three games, and exactly what this one takes from each, and what it does 
 ## Scope
 
 What is in (modes, rough content size, session length) and what is explicitly out.
+
+## Kill condition
+
+The evidence that would mean this game should not be made as conceived, judged at the slice verdict: "If people who play the slice <observable result>, we stop or go back to ideation." Concrete enough that a playtest can meet it or not.
 ```

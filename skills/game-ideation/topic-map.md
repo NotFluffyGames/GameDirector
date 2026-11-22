@@ -1,6 +1,6 @@
 # Topic map
 
-The first-level topics ideation seeds under `T1`. Seed one per row this game needs, worded for this game (not the generic question below), with the page it will write. Skip rows the vision rules out, and add rows for anything the vision raises that the map lacks.
+The first-level topics ideation seeds under `T1`. Seed one per row this game needs, worded for this game (not the generic question below), with the page it will write. Skip rows the vision rules out, and add rows for anything the vision raises that the map lacks. Mark each topic's `stage`: `slice` when `slice.md`'s In list needs it answered, otherwise `production`; a topic the slice needs only part of becomes two topics, one per stage.
 
 | Area | Typical question | Priority | Page |
 | --- | --- | --- | --- |

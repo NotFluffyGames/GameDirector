@@ -44,8 +44,10 @@ Run `gamestate.py check --since <base>`. Fix what it reports in this session. If
 While `next:` is `advance`, run `gamestate.py advance`. Then tell the user, briefly:
 
 - what this session did, with its evidence;
-- where the game stands: phase, open topics, definition-of-done counts, the last verdict;
+- where the game stands: stage (slice or production) and phase, open topics, definition-of-done counts, the last verdict;
 - the next step from `next:`, and whether it needs them (`with-user:`) or could run unattended ([unattended.md](unattended.md));
-- for a stop: what it needs from them (playtest answers, the human queue, a raised limit, a person for a conversation step).
+- for a stop: what it needs from them (playing the slice and writing its answers, other playtest answers, the human queue, a raised limit, a person for a conversation step, a decision after a kill).
 
 End with: **start a new session and run `/game-next`**. Do not start the next step here: each step gets a fresh session.
+
+**Done when** the user has the report and the next step.
