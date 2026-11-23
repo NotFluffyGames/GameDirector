@@ -72,6 +72,7 @@ DEFAULT_STATE = {
     "slice_sessions": None,
     "checkpoint_due": False,
     "adapter_verified": False,
+    "docs_verified": None,
     "gdd_synced": None,
     "restart_adr": None,
     "resume": None,
@@ -592,6 +593,11 @@ class Game:
         if phase == "setup":
             if not (self.root / "docs" / "agents" / "game.md").exists():
                 why.append("docs/agents/game.md is missing")
+            if not (self.root / "docs" / "agents" / "docs.md").exists():
+                why.append("docs/agents/docs.md is missing")
+            dv = st.get("docs_verified")
+            if not (isinstance(dv, dict) and dv.get("place") and dv.get("date")):
+                why.append("docs not verified: run the docs smoke test (game-setup)")
         elif phase == "ideation":
             why += self._ideation_gate()
         elif phase == "brainstorm":
@@ -948,7 +954,7 @@ class Game:
                 return (f"stop: waiting for the slice playtest: a person plays the build with the kit "
                         f"({entry.get('how', 'see the human queue')}) and writes {entry['answers']}; then run /game-next")
         task = st.get("task")
-        if task and task.startswith("game-ideation"):
+        if task and task.startswith(("game-ideation", "game-setup")):
             if not no_user:
                 return f"with-user: {task}"
             waiting = waiting or task

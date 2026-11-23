@@ -174,11 +174,25 @@ class GameRun(unittest.TestCase):
     def to_ideation(self):
         self.tool("init")
         (self.root / "docs" / "agents" / "game.md").write_text("# Game workflow\n")
+        (self.root / "docs" / "agents" / "docs.md").write_text("# Docs\n")
+        self.edit("state.json", lambda s: s.update(docs_verified={"place": "ClickUp doc", "date": "2026-11-22"}))
         self.commit()
-        self.assertEqual(self.next(), "game-setup")
+        self.assertEqual(self.next(), "with-user: game-setup")
         self.tool("complete")
         self.tool("advance")
         self.assertEqual(self.next(), "with-user: game-ideation")
+
+    def test_setup_waits_for_a_verified_docs_place(self):
+        self.tool("init")
+        (self.root / "docs" / "agents" / "game.md").write_text("# Game workflow\n")
+        (self.root / "docs" / "agents" / "docs.md").write_text("# Docs\n")
+        self.commit()
+        self.assertEqual(self.next(), "with-user: game-setup")
+        self.assertIn("docs not verified", self.tool("complete", ok=False))
+        self.assertIn("stop: waiting for a person", self.next("--no-user"))
+        self.edit("state.json", lambda s: s.update(docs_verified={"place": "ClickUp doc", "date": "2026-11-22"}))
+        self.commit()
+        self.tool("complete")
 
     def ideate(self):
         (self.game / "vision.json").write_text(json.dumps(VISION_JSON))
