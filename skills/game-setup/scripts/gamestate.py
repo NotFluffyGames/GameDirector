@@ -67,7 +67,8 @@ NICE_RESERVE = 10  # sessions kept back for verdicts and polish before nice feat
 
 CURRENT_VERSION = 6
 # from_version -> migrate(game) -> notes; brings game.state to from_version + 1. Write files with
-# game._write, so `upgrade` commits them. Empty so far: a game past setup can't be upgraded until a release adds entries.
+# game._write, so `upgrade` commits them.
+# Empty so far: a game past setup can't be upgraded until a release adds entries.
 MIGRATIONS = {}
 
 DEFAULT_STATE = {
@@ -253,7 +254,7 @@ class Game:
         if missing:
             raise UpgradeError(f"upgrade from version {old} in phase {self.state.get('phase')} isn't supported "
                                f"(no migration from version {missing[0]}): nothing changed; finish this game with "
-                               f"the plugin release it was made with")
+                               "the plugin release it was made with")
         notes = []
         for v in range(old, CURRENT_VERSION):
             notes += MIGRATIONS[v](self)
