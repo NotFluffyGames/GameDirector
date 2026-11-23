@@ -910,6 +910,50 @@ class GameRun(unittest.TestCase):
         self.assertEqual(self.phase(), ("polish", "polish"))  # not into the final verdict while picks are queued
         self.assertEqual(self.next(), PICKS_WAIT)
 
+    def test_picks_written_during_a_limit_stop_lead_to_the_picks_session(self):
+        self.to_polish()
+        self.queue_picks()
+        answers = "docs/game/playtests/full/answers.md"
+        self.edit("state.json", lambda s: s["human_queue"].append(
+            {"id": "H3", "what": "playtest", "kind": "playtest", "scope": "full", "answers": answers}))
+        self.edit("state.json", lambda s: s["limits"].update(max_adjusts=0))
+        self.write(answers, "FC2: no")
+        self.commit()
+        self.tool("advance")  # the answers reopen the full verdict
+        self.record_verdict("adjust")
+        self.tool("advance")
+        self.assertIn("stop: adjust limit reached", self.next())
+        self.edit("state.json", lambda s: s.update(stop_reason=None))  # the person decides to go on
+        self.write(PICKS, "pair 1: after")  # and makes the picks, leaving the entry
+        self.commit()
+        self.assertEqual(self.next(), "advance")  # answered picks don't hold a stopped run
+        self.tool("advance")
+        self.assertEqual(self.next(), "game-plan adjust docs/adr/0001-v.md")
+        self.tool("complete")
+        self.tool("advance")
+        self.assertEqual(self.next(), "game-verdict full")
+        self.record_verdict("ship")
+        self.tool("advance")
+        self.assertEqual(self.next(), f'game-build F8 "feature F8" picks {PICKS}')
+
+    def test_answered_picks_after_the_final_verdict_route_to_the_picks_session(self):
+        self.to_polish()
+        self.set_passes("F8", "F9", evidence="human: picked")
+        self.tool("advance")
+        self.edit("state.json", lambda s: s["human_queue"].append({"id": "H2", "what": "sign the store page"}))
+        self.commit()
+        self.record_verdict("ship")
+        self.tool("advance")
+        self.assertEqual(self.phase()[0], "awaiting-human")  # stopped for the queue, resuming to done
+        self.set_passes("F8", value=False)
+        self.edit("state.json", lambda s: s.update(human_queue=[COMPARE]))  # F8 went back for picks meanwhile
+        self.write(PICKS, "pair 1: before")
+        self.commit()
+        self.assertEqual(self.next(), "advance")
+        self.tool("advance")
+        self.assertEqual(self.phase(), ("polish", "polish"))  # not stopped again: no loop on advance
+        self.assertEqual(self.next(), f'game-build F8 "feature F8" picks {PICKS}')
+
     def test_the_picks_stop_names_every_kit(self):
         self.to_polish()
         kit, picks = "docs/game/playtests/evidence/F9/compare/index.md", "docs/game/playtests/evidence/F9/compare/picks.md"

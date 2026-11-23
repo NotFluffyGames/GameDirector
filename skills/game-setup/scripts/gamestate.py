@@ -495,6 +495,10 @@ class Game:
             return q
         return [e for e in q if (e.get("kind") == "playtest") == playtests]
 
+    def labelled(self):
+        """The person's calibration labels exist."""
+        return (self.root / LABELS).is_file()
+
     def answered(self, entry):
         return bool(entry.get("answers")) and (self.root / str(entry["answers"])).is_file()
 
@@ -696,7 +700,7 @@ class Game:
                 if verify.get("kind") == "capture" or (not bad and taste & set(pages)):
                     errs.append(f"{fid}: visible work needs roles (pages in {TASTE_AREAS} or verify kind capture)")
         if (any(f.get("passes") and f.get("target") == "visual" for f in self.items())
-                and not (self.root / LABELS).exists()
+                and not self.labelled()
                 and not any(e.get("kind") == "calibrate" for e in self.queue())):
             errs.append("the visual target passes: queue a calibrate entry for a person (kind calibrate)")
         return errs
@@ -1108,8 +1112,9 @@ class Game:
         elif phase == "plan":
             why += self._plan_gate()
         elif phase == "awaiting-human":
-            if self.queue(playtests=False):
-                why.append(f"{len(self.queue(playtests=False))} human queue entries open")
+            waiting = [e for e in self.queue(playtests=False) if not (e.get("kind") == "compare" and self.answered(e))]
+            if waiting:  # answered picks are the next build session's to apply, whatever stopped the run
+                why.append(f"{len(waiting)} human queue entries open")
             if st.get("stop_reason"):
                 why.append(f"stopped: {st['stop_reason']} (a human decides, then sets stop_reason to null)")
         if phase in ("build", "verdict", "polish", "done"):
@@ -1378,7 +1383,7 @@ class Game:
                         and a.get("kind") in ANCHOR_KINDS and a.get("ref")):
                     return "fail"
         roles = item.get("roles") if isinstance(item.get("roles"), list) else []
-        if item.get("taste") and any(r in CALIBRATED_ROLES for r in roles) and not (self.root / LABELS).exists():
+        if item.get("taste") and any(r in CALIBRATED_ROLES for r in roles) and not self.labelled():
             return "not-assessed"
         if any(r.get("result") == "not-assessed" or r.get("independent") is not True for r in reviews):
             return "not-assessed"
@@ -1467,8 +1472,8 @@ class Game:
             self._enter_verdict("full")
         elif not st.get("polish_planned"):  # features review decisions put in polish don't plan it
             st.update(phase="polish", milestone=POLISH, task="game-polish")
-        elif self.failing([POLISH]) or ("final" not in passed and (answered or waiting)):
-            st.update(phase="polish", milestone=POLISH, task=None)  # picks are applied before the final verdict
+        elif self.failing([POLISH]) or answered or ("final" not in passed and waiting):
+            st.update(phase="polish", milestone=POLISH, task=None)  # answered picks are always applied next
         elif "final" not in passed:
             self._enter_verdict("final")
         elif self.queue(playtests=False):
@@ -1648,7 +1653,7 @@ class Game:
                     return action
             entry = self.playtest_entry(scope)
             calibrate = next((e for e in self.queue() if e.get("kind") == "calibrate"), None)
-            if calibrate and scope != "core-loop" and not (self.root / LABELS).exists():  # core-loop: on bots
+            if calibrate and scope != "core-loop" and not self.labelled():  # core-loop: on bots
                 return (f"stop: waiting for calibration: a person labels the kit ({calibrate['how']}) "
                         f"into {LABELS}; then run /game-next")
             if entry and self.answered(entry):
@@ -1850,7 +1855,7 @@ def main(argv, history=None):
         if st["phase"] == "verdict":  # answers read by this verdict are consumed with it
             st["human_queue"] = [e for e in st["human_queue"] if not (
                 (e.get("kind") == "playtest" and e.get("scope") == st.get("verdict_scope") and game.answered(e))
-                or (e.get("kind") == "calibrate" and (game.root / LABELS).is_file()))]
+                or (e.get("kind") == "calibrate" and game.labelled()))]
         game.save_state(f"complete {done}")
         print(f"complete: {done}\nnext: {game.next_action()}")
         return 0
