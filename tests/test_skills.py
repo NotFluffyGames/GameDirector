@@ -32,7 +32,7 @@ def outside_code(text):
 
 
 def skill_dirs():
-    return sorted(p for p in SKILLS.iterdir() if p.is_dir())
+    return sorted(p for p in SKILLS.iterdir() if (p / "SKILL.md").is_file())
 
 
 def markdown_files():
