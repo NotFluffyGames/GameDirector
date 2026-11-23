@@ -117,7 +117,7 @@ Copy the folders under `skills/` into your agent's skills directory, keeping the
 | the next step | `/game-next`, in a fresh session |
 | steps that need no person to run back to back | `AGENT_CMD='claude -p' <plugin folder>/skills/game-next/scripts/loop.sh`, from the game repo (see `skills/game-next/unattended.md`) |
 | to bring a game set up with an older version up to date | `/game-next` notices and runs `game-setup upgrade` with you while the game is still at setup (updates `gamestate.py` and state to schema version 7, and sets up the docs place if the game has none); a game mid-run on an older version stops instead, since mid-run upgrades aren't supported. An upgraded game keeps its old Commands table until `game-setup` adapter mode runs at plan's walking skeleton, so it has no `dump` or `loudness` rows until then |
-| a specific phase by hand | `/game-research`, `/game-ideation`, `/game-brainstorm T014`, `/game-consolidate`, `/game-gdd`, `/game-plan`, `/game-build F012`, `/game-review F012`, `/game-verdict full`, `/game-polish` |
+| a specific phase by hand | `/game-research ref R1`, `/game-ideation`, `/game-brainstorm T014`, `/game-consolidate`, `/game-gdd`, `/game-plan`, `/game-build F012`, `/game-review feature F012`, `/game-verdict full`, `/game-polish` |
 
 The game repo ends up with:
 - `docs/agents/game.md`: config, session rules, vocabulary, adapter commands, companion-skill fallbacks.
@@ -155,4 +155,6 @@ python3 tests/run.py
 
 That runs all tests in parallel (`-j N` sets the bucket count, extra arguments filter test ids by substring); `python3 -m unittest discover tests` runs them serially.
 
-(Both must pass.) `tests/test_skills.py` checks the skills themselves: packaging, links, a completion criterion on every step, real tool commands, and a skill for every step and mode the state tool can schedule. Edit skills following the `writing-for-agents` skill. The state schemas (`state.json`, `features.json`, `fun-checklist.json`, `richness.json`, `topics.json`, `keep.json`, `wiki.json`, `vision.json`) live in two places that must agree: `skills/game-setup/game.md` plus the templates, and `skills/game-setup/scripts/gamestate.py`.
+Both must pass.
+
+`tests/test_skills.py` checks the skills themselves: packaging, links, a completion criterion on every step, real tool commands, and a skill for every step and mode the state tool can schedule. Edit skills following the `writing-for-agents` skill. The state schemas (`state.json`, `features.json`, `fun-checklist.json`, `richness.json`, `topics.json`, `keep.json`, `wiki.json`, `vision.json`) live in two places that must agree: `skills/game-setup/game.md` plus the templates, and `skills/game-setup/scripts/gamestate.py`.
