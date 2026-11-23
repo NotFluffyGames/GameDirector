@@ -66,7 +66,20 @@ FUN = {"items": [
      "metric": "hazard kills share", "threshold": ">= 20%", "how": "bot x50"},
     {"id": "FC3", "statement": "no dominant pick", "scope": "full", "kind": "proxy",
      "metric": "top pick rate", "threshold": "< 40%", "how": "bot x200"},
+    {"id": "FC5", "statement": "the art reads as ours", "scope": "slice", "kind": "review",
+     "roles": ["art"], "taste": True},
+    {"id": "FC6", "statement": "hits feel good", "scope": "slice", "kind": "review",
+     "roles": ["feel"], "taste": True},
+    {"id": "FC7", "statement": "it is the game we meant", "scope": "slice", "kind": "review",
+     "roles": ["creative"], "taste": True},
+    {"id": "FC8", "statement": "the audio carries the match", "scope": "full", "kind": "review",
+     "roles": ["audio"], "taste": False},
 ]}
+
+FULL_REVIEWS = [  # with FC8 (audio), a full review item for every role
+    {"id": f"FC1{n}", "statement": f"{role} holds up", "scope": "full", "kind": "review",
+     "roles": [role], "taste": role in ("creative", "feel", "art", "ux")}
+    for n, role in enumerate(["creative", "design", "feel", "art", "narrative", "ux"])]
 
 RICHNESS = {"targets": [
     {"id": "R1", "aspect": "depth", "scope": "full", "statement": "every system matters",
@@ -230,13 +243,27 @@ class GameRun(unittest.TestCase):
             self.edit("features.json", fn)
         self.commit()
 
-    def record_verdict(self, outcome, results=None, complete=True):
+    def calibrate(self):
+        self.write("docs/game/calibration/labels.json",
+                   json.dumps({"labels": [{"capture": "x.png", "ours": True, "why": "palette"}]}))
+        self.commit()
+
+    def record_verdict(self, outcome, results=None, complete=True, reviews=None):
+        """Scores every item; review items FC5-FC8 get one review file per role under reviews/verdict-<scope>/."""
         self.write(EVIDENCE, "metrics")
-        results = results or {}
+        results, reviews = results or {}, reviews or {}
+        scope = self.load("state.json")["verdict_scope"]
+        review_items = {i["id"]: i["roles"][0] for i in self.load("fun-checklist.json")["items"]
+                        if i["kind"] == "review"}
+        for role in dict.fromkeys(review_items.values()):
+            self.write_review(f"verdict-{scope}", role, "HEAD", reviews.get(role, ()))
 
         def fn(s):
             scores = {i: {"result": results.get(i, "pass"), "evidence": EVIDENCE}
                       for i in ("FC1", "FC2", "FC3", "FC4", "R1", "R2", "R3")}
+            for iid, role in review_items.items():
+                path = f"docs/game/reviews/verdict-{scope}/{role}.json"
+                scores[iid] = {"result": results.get(iid, "pass"), "evidence": path, "reviews": [path]}
             s["verdicts"].append({"scope": s["verdict_scope"], "outcome": outcome, "adr": "docs/adr/0001-v.md",
                                   "scores": scores})
         self.edit("state.json", fn)
@@ -422,6 +449,7 @@ class GameRun(unittest.TestCase):
         self.assertEqual(self.next(), "game-verdict slice")
 
     def ship_slice(self):
+        self.calibrate()
         self.edit("state.json", lambda s: s["human_queue"].append(
             {"id": "H1", "what": "play the slice", "kind": "playtest", "scope": "slice", "answers": ANSWERS,
              "how": "docs/game/playtests/slice/kit.md"}))
@@ -434,7 +462,7 @@ class GameRun(unittest.TestCase):
         self.assertEqual(self.load("state.json")["human_queue"], [])  # the answers were consumed
         self.tool("advance")
 
-    def to_production_plan(self):
+    def to_production_consolidate(self):
         self.to_slice_verdict()
         self.ship_slice()
         self.assertEqual((self.stage(), self.phase()), ("production", ("brainstorm", None)))
@@ -444,7 +472,11 @@ class GameRun(unittest.TestCase):
         self.sync()
         self.tool("advance")
         self.assertEqual(self.next(), "game-consolidate production")
+
+    def to_production_plan(self):
+        self.to_production_consolidate()
         self.edit("wiki.json", lambda d: d["pages"][0].update(version="3"))  # consolidate touches the wiki
+        self.edit("fun-checklist.json", lambda d: d["items"].extend(FULL_REVIEWS))  # a full review item per role
         self.commit()
         self.tool("complete")
         self.sync()
@@ -524,6 +556,7 @@ class GameRun(unittest.TestCase):
 
     def test_kill_condition_stops_for_a_human(self):
         self.to_slice_verdict()
+        self.calibrate()  # taste items wait for the person's labels
         self.record_verdict("kill", {"FC2": "pending-human"})
         self.tool("advance")
         self.assertEqual(self.phase()[0], "awaiting-human")
@@ -622,6 +655,103 @@ class GameRun(unittest.TestCase):
             {"items": [i for i in FUN["items"] if i["id"] != "FC2"]}))
         self.commit()
         self.assertIn("no human item for the slice playtest", self.tool("gate", ok=False))
+
+    # ---------- tests: review items ----------
+    def test_slice_consolidate_needs_review_items_for_creative_art_and_feel(self):
+        self.to_ideation()
+        self.ideate()
+        self.write_wiki(SLICE_AREAS)
+        self.resolve("T2", "T3")
+        self.sync()
+        self.tool("advance")
+        (self.game / "fun-checklist.json").write_text(json.dumps(
+            {"items": [i for i in FUN["items"] if i["id"] != "FC6"]}))
+        self.commit()
+        self.assertIn("fun checklist has no slice review item for feel", self.tool("gate", ok=False))
+
+    def test_review_items_need_roles_and_a_bool_taste(self):
+        self.to_ideation()
+        bad = {"id": "FC9", "statement": "x", "scope": "full", "kind": "review", "roles": "art", "taste": "yes"}
+        self.edit("fun-checklist.json", lambda d: d["items"].append(bad))
+        out = self.tool("check", ok=False)
+        self.assertIn("fun FC9: roles must be a list", out)
+        self.assertIn("fun FC9: taste must be true or false", out)
+        self.edit("fun-checklist.json", lambda d: d["items"][-1].update(roles=[], taste=True))
+        self.assertIn("fun FC9: a review item needs roles", self.tool("check", ok=False))
+        self.edit("fun-checklist.json", lambda d: d["items"][-1].update(kind="vibes"))
+        self.assertIn("fun FC9: kind must be one of", self.tool("check", ok=False))
+
+    def test_review_items_fail_only_on_anchored_notes(self):
+        self.to_slice_verdict()
+        self.calibrate()
+        unanchored = self.note(anchor=None, item="FC5", decision="feature F3")
+        self.record_verdict("adjust", reviews={"art": [unanchored]}, complete=False)
+        self.tool("complete")  # FC5 scored pass: an unanchored note doesn't change the score
+        anchored = self.note(item="FC5", decision="feature F3")  # the example note carries a rule anchor
+        self.record_verdict("adjust", reviews={"art": [anchored]}, complete=False)
+        self.assertIn("FC5: scored pass but its reviews say fail", self.tool("complete", ok=False))
+
+    def test_taste_items_are_not_assessed_until_calibration(self):
+        self.to_slice_verdict()  # no labels.json
+        self.record_verdict("ship", complete=False)
+        self.assertIn("FC5: scored pass but its reviews say not-assessed", self.tool("complete", ok=False))
+
+    def test_a_review_that_is_not_independent_scores_not_assessed(self):
+        self.to_slice_verdict()
+        self.calibrate()
+        self.record_verdict("adjust", complete=False)
+        art = self.root / "docs/game/reviews/verdict-slice/art.json"
+        data = json.loads(art.read_text())
+        data["independent"] = False
+        art.write_text(json.dumps(data))
+        self.commit()
+        self.assertIn("FC5: scored pass but its reviews say not-assessed", self.tool("complete", ok=False))
+
+    def test_a_review_item_needs_a_valid_review_by_each_of_its_roles(self):
+        self.to_slice_verdict()
+        self.calibrate()
+        self.record_verdict("adjust", complete=False)
+        self.edit("state.json", lambda s: s["verdicts"][-1]["scores"]["FC6"].update(reviews=[]))
+        self.commit()
+        self.assertIn("FC6: needs a review by feel", self.tool("complete", ok=False))
+
+    def test_review_items_do_not_count_toward_the_ten_item_cap(self):
+        self.to_production_consolidate()
+        proxies = [{"id": f"X{n}", "statement": "x", "scope": "full", "kind": "proxy",
+                    "metric": "m", "threshold": "t", "how": "h"} for n in range(6)]
+        self.edit("fun-checklist.json", lambda d: d["items"].extend(FULL_REVIEWS + proxies))  # 10 + 10 review
+        self.edit("wiki.json", lambda d: d["pages"][0].update(version="3"))
+        self.commit()
+        self.assertIn("gate consolidate: PASS", self.tool("gate"))
+        self.edit("fun-checklist.json", lambda d: d["items"].append(dict(proxies[0], id="X9")))
+        self.assertIn("fun checklist has 11 items; keep it to 10 or fewer", self.tool("gate", ok=False))
+
+    def test_production_consolidate_needs_a_full_review_item_per_active_role(self):
+        self.to_production_consolidate()
+        self.edit("fun-checklist.json", lambda d: d["items"].extend(FULL_REVIEWS))
+        self.edit("fun-checklist.json", lambda d: d.update(items=[i for i in d["items"] if i["id"] != "FC8"]))
+        self.assertIn("fun checklist has no full review item for audio", self.tool("gate", ok=False))
+
+    def test_plan_gate_does_not_ask_for_a_measuring_feature_for_review_items(self):
+        self.to_plan()
+        self.plan()  # F1, F3 measure FC1 and FC4 only; FC5-FC7 are review items
+        self.assertEqual(self.phase(), ("build", "core-loop"))
+
+    def test_review_lint_looks_one_level_down_only(self):
+        self.to_plan()
+        self.write("docs/game/reviews/F1/inputs/measure.json", "[1, 2]")
+        self.commit()
+        self.assertNotIn("measure.json", self.tool("check"))
+
+    def test_a_non_string_role_on_a_feature_is_a_reason_not_a_traceback(self):
+        self.to_plan()
+        self.plan()
+        self.set_passes("F1", "F2")
+        self.edit("features.json", lambda d: d["features"][0].update(roles=[["art"]]))
+        self.commit()
+        out = self.tool("check", ok=False)
+        self.assertIn("F1: role '['art']' is not one of", out)
+        self.assertNotIn("Traceback", out)
 
     # ---------- tests: verdict outcomes ----------
     def test_adjust_dispatches_a_replan_then_rejudges_the_core_loop(self):

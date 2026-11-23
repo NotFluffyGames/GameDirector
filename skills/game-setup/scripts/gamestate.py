@@ -68,6 +68,9 @@ RICH_FIELDS = ["aspect", "scope", "statement", "metric", "threshold", "how"]
 REVIEW_RESULTS = ["ok", "notes", "not-assessed"]
 SEVERITIES = ["blocking", "advisory"]
 ANCHOR_KINDS = ["label", "reference", "rule"]
+FUN_KINDS = ["proxy", "human", "review"]
+CALIBRATED_ROLES = ["creative", "feel", "art", "ux"]  # roles whose taste judgments need the person's labels first
+LABELS = "docs/game/calibration/labels.json"
 DECISION_RE = r"^(fixed [0-9a-f]{7,40}|feature F\d+|topic T\d+|wontfix: \S.*)$"
 MIN_SEED_TOPICS = 5
 NICE_RESERVE = 10  # sessions kept back for verdicts and polish before nice features are built
@@ -590,10 +593,17 @@ class Game:
                 errs.append(f"fun {iid}: missing statement")
             if i.get("scope") not in FUN_SCOPES:
                 errs.append(f"fun {iid}: scope must be one of {FUN_SCOPES}")
-            if i.get("kind") not in ("proxy", "human"):
-                errs.append(f"fun {iid}: kind must be proxy or human")
+            if i.get("kind") not in FUN_KINDS:
+                errs.append(f"fun {iid}: kind must be one of {FUN_KINDS}")
             if i.get("kind") == "proxy" and not all(i.get(k) for k in ("metric", "threshold", "how")):
                 errs.append(f"fun {iid}: a proxy item needs metric, threshold and how")
+            if i.get("kind") == "review":
+                if not i.get("roles"):
+                    errs.append(f"fun {iid}: a review item needs roles")
+                if "roles" in i:
+                    errs += self._check_roles(f"fun {iid}", i["roles"])
+                if not isinstance(i.get("taste"), bool):
+                    errs.append(f"fun {iid}: taste must be true or false")
         for t in self.richness.get("targets", []):
             tid = t.get("id") or "<no id>"
             if tid in seen:
@@ -758,7 +768,7 @@ class Game:
 
     def _check_reviews(self):
         errs = []
-        for p in sorted((self.dir / "reviews").glob("**/*.json")):
+        for p in sorted((self.dir / "reviews").glob("*/*.json")):
             errs += self._review_shape(p.relative_to(self.root).as_posix())
         for f in self.items():
             fid, roles = f.get("id") or "<no id>", f.get("roles")
@@ -766,6 +776,8 @@ class Game:
                 continue
             reviews = f.get("reviews") if isinstance(f.get("reviews"), dict) else {}
             for role in roles:
+                if not isinstance(role, str):
+                    continue  # _check_roles reports it
                 r = self.review(reviews[role]) if isinstance(reviews.get(role), str) else None
                 if r is None:
                     errs.append(f"{fid}: passes without a review by {role}")
@@ -793,6 +805,8 @@ class Game:
                 continue
             reviews = f.get("reviews") if isinstance(f.get("reviews"), dict) else {}
             for role in f.get("roles") if isinstance(f.get("roles"), list) else []:
+                if not isinstance(role, str):
+                    continue  # _check_roles reports it
                 r = self.review(reviews[role]) if isinstance(reviews.get(role), str) else None
                 if r is None:
                     continue  # _check_reviews reports the missing review
@@ -935,8 +949,12 @@ class Game:
         why += [f"topic {t['id']}: open ({t.get('priority')})"
                 for t in self.open_topics(["core", "support"]) if self.in_stage(t)]
         items = self.fun.get("items", [])
+        counted = [i for i in items if i.get("kind") != "review"]
         if slice_stage:
-            early = [i for i in items if i.get("scope") in ("core-loop", "slice")]
+            early = [i for i in counted if i.get("scope") in ("core-loop", "slice")]
+            why += [f"fun checklist has no slice review item for {r}" for r in ("creative", "art", "feel")
+                    if r in active and not any(i.get("kind") == "review" and i.get("scope") == "slice"
+                                               and r in (i.get("roles") or []) for i in items)]
             if not 3 <= len(early) <= 6:
                 why.append(f"fun checklist has {len(early)} core-loop and slice items; needs 3-6")
             if not any(i.get("scope") == "core-loop" and i.get("kind") == "proxy" for i in items):
@@ -946,8 +964,11 @@ class Game:
         else:
             if not any(i.get("scope") == "full" for i in items):
                 why.append("fun checklist has no item for the full game (scope full)")
-            if len(items) > 10:
-                why.append(f"fun checklist has {len(items)} items; keep it to 10 or fewer")
+            why += [f"fun checklist has no full review item for {r}" for r in active
+                    if not any(i.get("kind") == "review" and i.get("scope") == "full"
+                               and r in (i.get("roles") or []) for i in items)]
+            if len(counted) > 10:
+                why.append(f"fun checklist has {len(counted)} items; keep it to 10 or fewer")
             aspects = {t.get("aspect") for t in self.richness.get("targets", []) if t.get("scope", "full") == "full"}
             why += [f"richness.json has no full-game {a} target" for a in ASPECTS if a not in aspects]
         return why
@@ -972,7 +993,7 @@ class Game:
                     for m in f.get("measures", [])}
         scope = "slice" if slice_stage else "full"
         kinds = self.kinds()
-        targets = [i for i in self.scored_ids(scope) if kinds.get(i) != "human"]
+        targets = [i for i in self.scored_ids(scope) if kinds.get(i) not in ("human", "review")]
         why += [f"{t}: no must feature lists it in measures" for t in targets if t not in measured]
         return why
 
@@ -995,11 +1016,45 @@ class Game:
                 why.append(f"{iid}: not-assessed needs the reason it could not be measured")
             if result == "pending-human" and kinds.get(iid) != "human":
                 why.append(f"{iid}: only human items can wait for a person")
+            if kinds.get(iid) == "review":
+                why += self._review_item_gate(iid, score)
             if v.get("outcome") == "ship":
                 if result in ("fail", "not-assessed"):
                     why.append(f"{iid}: {result}; a ship needs every item to pass")
                 if result == "pending-human" and scope == "slice":
                     why.append(f"{iid}: the slice ships only after a person has played it")
+        return why
+
+    def review_result(self, item, paths):
+        """pass, fail or not-assessed for a review item, from its reviews: only anchored notes fail it."""
+        reviews = [r for r in (self.review(p) for p in paths) if r is not None]
+        for r in reviews:
+            for n in r.get("notes", []) if isinstance(r.get("notes"), list) else []:
+                a = n.get("anchor") if isinstance(n, dict) else None
+                if (isinstance(n, dict) and n.get("item") == item.get("id") and isinstance(a, dict)
+                        and a.get("kind") in ANCHOR_KINDS and a.get("ref")):
+                    return "fail"
+        roles = item.get("roles") if isinstance(item.get("roles"), list) else []
+        if item.get("taste") and any(r in CALIBRATED_ROLES for r in roles) and not (self.root / LABELS).exists():
+            return "not-assessed"
+        if any(r.get("result") == "not-assessed" or r.get("independent") is not True for r in reviews):
+            return "not-assessed"
+        return "pass"
+
+    def _review_item_gate(self, iid, score):
+        item = next(i for i in self.fun.get("items", []) if i.get("id") == iid)
+        paths = score.get("reviews") if isinstance(score.get("reviews"), list) else []
+        by_role = {}
+        for p in paths:
+            r = self.review(p) if isinstance(p, str) else None
+            if r is not None and not self._review_shape(p):
+                by_role[r.get("role")] = p
+        roles = item.get("roles") if isinstance(item.get("roles"), list) else []
+        why = [f"{iid}: needs a review by {role}" for role in roles if role not in by_role]
+        if not why and score.get("result") in ("pass", "fail", "not-assessed"):
+            said = self.review_result(item, [by_role[r] for r in roles])
+            if score["result"] != said:
+                why.append(f"{iid}: scored {score['result']} but its reviews say {said}")
         return why
 
     def task_gate(self):
