@@ -1047,9 +1047,9 @@ class Game:
         by_role = {}
         for p in paths:
             r = self.review(p) if isinstance(p, str) else None
-            if r is not None and not self._review_shape(p):
-                by_role[r.get("role")] = p
-        roles = item.get("roles") if isinstance(item.get("roles"), list) else []
+            if r is not None and isinstance(r.get("role"), str) and not self._review_shape(p):
+                by_role[r["role"]] = p
+        roles = [r for r in item.get("roles", []) if isinstance(r, str)] if isinstance(item.get("roles"), list) else []
         why = [f"{iid}: needs a review by {role}" for role in roles if role not in by_role]
         if not why and score.get("result") in ("pass", "fail", "not-assessed"):
             said = self.review_result(item, [by_role[r] for r in roles])

@@ -715,6 +715,25 @@ class GameRun(unittest.TestCase):
         self.commit()
         self.assertIn("FC6: needs a review by feel", self.tool("complete", ok=False))
 
+    def test_non_string_roles_in_review_items_and_files_are_reasons_not_tracebacks(self):
+        self.to_slice_verdict()
+        self.calibrate()
+        self.record_verdict("adjust", complete=False)
+        self.edit("fun-checklist.json", lambda d: next(i for i in d["items"] if i["id"] == "FC5").update(roles=[["art"]]))
+        self.commit()
+        out = self.tool("complete", ok=False)
+        self.assertNotIn("Traceback", out)
+        self.assertIn("fun FC5: role '['art']' is not one of", out)
+        self.edit("fun-checklist.json", lambda d: next(i for i in d["items"] if i["id"] == "FC5").update(roles=["art"]))
+        art = self.root / "docs/game/reviews/verdict-slice/art.json"
+        data = json.loads(art.read_text())
+        data["role"] = ["art"]
+        art.write_text(json.dumps(data))
+        self.commit()
+        out = self.tool("complete", ok=False)
+        self.assertNotIn("Traceback", out)
+        self.assertIn("FC5: needs a review by art", out)
+
     def test_review_items_do_not_count_toward_the_ten_item_cap(self):
         self.to_production_consolidate()
         proxies = [{"id": f"X{n}", "statement": "x", "scope": "full", "kind": "proxy",
