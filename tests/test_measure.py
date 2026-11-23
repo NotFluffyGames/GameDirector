@@ -128,5 +128,108 @@ class BadInput(MeasureCase):
         self.assertEqual(code, 2)
 
 
+def chunk(kind, data):
+    return struct.pack(">I", len(data)) + kind + data + struct.pack(">I", zlib.crc32(kind + data))
+
+
+def paeth(a, b, c):
+    p = a + b - c
+    pa, pb, pc = abs(p - a), abs(p - b), abs(p - c)
+    return a if pa <= pb and pa <= pc else (b if pb <= pc else c)
+
+
+def filter_line(ftype, line, prev, bpp):
+    """Independent tiny PNG encoder for one scanline."""
+    out = bytearray()
+    for i, x in enumerate(line):
+        a = line[i - bpp] if i >= bpp else 0
+        b = prev[i]
+        c = prev[i - bpp] if i >= bpp else 0
+        pred = [0, a, b, (a + b) // 2, paeth(a, b, c)][ftype]
+        out.append((x - pred) & 255)
+    return bytes([ftype]) + bytes(out)
+
+
+def encode(width, height, ctype, raster, ftypes, extra=()):
+    """raster: list of byte rows; ftypes: filter type per row. extra: (kind, data) chunks before IDAT."""
+    bpp = CHANNELS[ctype]
+    data, prev = b"", bytes(width * bpp)
+    for line, ft in zip(raster, ftypes):
+        data += filter_line(ft, line, prev, bpp)
+        prev = line
+    ihdr = struct.pack(">IIBBBBB", width, height, 8, ctype, 0, 0, 0)
+    return (b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", ihdr) + b"".join(chunk(k, d) for k, d in extra)
+            + chunk(b"IDAT", zlib.compress(data)) + chunk(b"IEND", b""))
+
+
+CHANNELS = {0: 1, 2: 3, 4: 2, 6: 4, 3: 1}
+
+
+class Decoder(MeasureCase):
+    def test_every_filter_type_decodes_bit_exact_for_every_colour_type(self):
+        w, h = 5, 5
+        for ctype, n in ((0, 1), (2, 3), (4, 2), (6, 4)):
+            raster = [bytes((x * 37 + y * 91 + k * 53) % 256 for x in range(w) for k in range(n)) for y in range(h)]
+            for ft in range(5):
+                with self.subTest(colour_type=ctype, filter=ft):
+                    path = self.dir / "f.png"
+                    path.write_bytes(encode(w, h, ctype, raster, [ft] * h))
+                    rw, rh, rows = measure.read_png(str(path))
+                    self.assertEqual((rw, rh), (w, h))
+                    for y in range(h):
+                        for x in range(w):
+                            v = raster[y][x * n:(x + 1) * n]
+                            want = {0: lambda: (v[0], v[0], v[0], 255), 2: lambda: (*v, 255),
+                                    4: lambda: (v[0], v[0], v[0], v[1]), 6: lambda: tuple(v)}[ctype]()
+                            self.assertEqual(rows[y][x], want)
+
+    def test_mixed_filters_per_row(self):
+        raster = [bytes((x * 29 + y * 7) % 256 for x in range(12)) for y in range(5)]
+        path = self.dir / "m.png"
+        path.write_bytes(encode(4, 5, 2, raster, [4, 3, 2, 1, 0]))
+        _, _, rows = measure.read_png(str(path))
+        self.assertEqual(rows[3][2], (*raster[3][6:9], 255))
+
+    def test_palette_with_transparency(self):
+        plte = bytes([10, 20, 30, 200, 100, 50, 0, 255, 0])
+        raster = [bytes([0, 1, 2]), bytes([2, 1, 0])]
+        path = self.dir / "p.png"
+        path.write_bytes(encode(3, 2, 3, raster, [4, 1], extra=[(b"PLTE", plte), (b"tRNS", bytes([128, 7]))]))
+        _, _, rows = measure.read_png(str(path))
+        self.assertEqual(rows[0], [(10, 20, 30, 128), (200, 100, 50, 7), (0, 255, 0, 255)])
+        self.assertEqual(rows[1][0], (0, 255, 0, 255))
+
+
+class Corrupt(MeasureCase):
+    def assert_exits_2(self, *argv):
+        code, _, err = self.run_cli(*argv)
+        self.assertEqual(code, 2, err)
+        self.assertTrue(err.startswith("measure:"), err)
+
+    def good_bytes(self):
+        return Path(self.png("ok.png", [[px("#102030")] * 4] * 4)).read_bytes()
+
+    def test_truncated_files_exit_2(self):
+        good = self.good_bytes()
+        for cut in (12, 20, 30, 40, len(good) - 20):
+            with self.subTest(cut=cut):
+                path = self.dir / "cut.png"
+                path.write_bytes(good[:cut])
+                self.assert_exits_2("values", path)
+
+    def test_empty_image_data_exits_2(self):
+        ihdr = struct.pack(">IIBBBBB", 2, 2, 8, 2, 0, 0, 0)
+        path = self.dir / "empty.png"
+        path.write_bytes(b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", ihdr) + chunk(b"IDAT", zlib.compress(b"")) + chunk(b"IEND", b""))
+        self.assert_exits_2("values", path)
+
+    def test_unwritable_output_exits_2(self):
+        src = self.png("a.png", [[px("#102030")] * 2] * 2)
+        blocker = self.dir / "file"
+        blocker.write_text("x")
+        self.assert_exits_2("derive", src, "--out", blocker / "sub")
+        self.assert_exits_2("sheet", src, "--out", self.dir / "nodir" / "s.png")
+
+
 if __name__ == "__main__":
     unittest.main()

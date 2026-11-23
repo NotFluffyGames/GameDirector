@@ -16,6 +16,8 @@ import math
 import struct
 import sys
 import zlib
+from collections import Counter
+from itertools import chain, repeat
 from pathlib import Path
 
 SIGNATURE = b"\x89PNG\r\n\x1a\n"
@@ -43,26 +45,41 @@ def _paeth(a, b, c):
     return a if pa <= pb and pa <= pc else (b if pb <= pc else c)
 
 
+def _unfilter_line(ftype, line, prev, bpp):
+    """Undo one scanline's filter in place (line is a bytearray); the filter type is dispatched once per row."""
+    n = len(line)
+    if ftype == 0:
+        pass
+    elif ftype == 1:
+        for i in range(bpp, n):
+            line[i] = (line[i] + line[i - bpp]) & 255
+    elif ftype == 2:
+        line[:] = bytes((x + b) & 255 for x, b in zip(line, prev))
+    elif ftype == 3:
+        for i in range(min(bpp, n)):
+            line[i] = (line[i] + (prev[i] >> 1)) & 255
+        for i in range(bpp, n):
+            line[i] = (line[i] + ((line[i - bpp] + prev[i]) >> 1)) & 255
+    elif ftype == 4:
+        for i in range(min(bpp, n)):
+            line[i] = (line[i] + prev[i]) & 255
+        for i in range(bpp, n):
+            a, b, c = line[i - bpp], prev[i], prev[i - bpp]
+            p = a + b - c
+            pa, pb, pc = abs(p - a), abs(p - b), abs(p - c)
+            line[i] = (line[i] + (a if pa <= pb and pa <= pc else (b if pb <= pc else c))) & 255
+    else:
+        raise Bad(f"unsupported PNG (filter type {ftype})")
+
+
 def _unfilter(data, height, stride, bpp):
+    if len(data) < height * (stride + 1):
+        raise Bad("unsupported PNG (truncated data)")
     out, prev, pos = [], bytearray(stride), 0
     for _ in range(height):
-        ftype, line = data[pos], bytearray(data[pos + 1:pos + 1 + stride])
+        line = bytearray(data[pos + 1:pos + 1 + stride])
+        _unfilter_line(data[pos], line, prev, bpp)
         pos += 1 + stride
-        if len(line) != stride:
-            raise Bad("unsupported PNG (truncated data)")
-        for i in range(stride):
-            a = line[i - bpp] if i >= bpp else 0
-            b, c = prev[i], (prev[i - bpp] if i >= bpp else 0)
-            if ftype == 1:
-                line[i] = (line[i] + a) & 255
-            elif ftype == 2:
-                line[i] = (line[i] + b) & 255
-            elif ftype == 3:
-                line[i] = (line[i] + (a + b) // 2) & 255
-            elif ftype == 4:
-                line[i] = (line[i] + _paeth(a, b, c)) & 255
-            elif ftype != 0:
-                raise Bad(f"unsupported PNG (filter type {ftype})")
         out.append(line)
         prev = line
     return out
@@ -82,6 +99,8 @@ def read_png(path):
         body = raw[pos + 8:pos + 8 + length]
         pos += 12 + length
         if kind == b"IHDR":
+            if len(body) != 13:
+                raise Bad("unsupported PNG (truncated IHDR)")
             ihdr = struct.unpack(">IIBBBBB", body)
         elif kind == b"PLTE":
             plte = body
@@ -105,39 +124,49 @@ def read_png(path):
     rows = []
     for line in lines:
         if ctype == 6:
-            row = [tuple(line[i:i + 4]) for i in range(0, len(line), 4)]
+            row = list(zip(line[0::4], line[1::4], line[2::4], line[3::4]))
         elif ctype == 2:
-            row = [(line[i], line[i + 1], line[i + 2], 255) for i in range(0, len(line), 3)]
+            row = list(zip(line[0::3], line[1::3], line[2::3], repeat(255)))
         elif ctype == 0:
-            row = [(v, v, v, 255) for v in line]
+            row = list(zip(line, line, line, repeat(255)))
         elif ctype == 4:
-            row = [(line[i], line[i], line[i], line[i + 1]) for i in range(0, len(line), 2)]
+            row = list(zip(line[0::2], line[0::2], line[0::2], line[1::2]))
         else:
-            row = []
-            for idx in line:
-                if idx * 3 + 3 > len(plte):
-                    raise Bad("unsupported PNG (palette index out of range)")
-                r, g, b = plte[idx * 3:idx * 3 + 3]
-                row.append((r, g, b, trns[idx] if idx < len(trns) else 255))
+            if line and max(line) * 3 + 3 > len(plte):
+                raise Bad("unsupported PNG (palette index out of range)")
+            lut = [(plte[i * 3], plte[i * 3 + 1], plte[i * 3 + 2], trns[i] if i < len(trns) else 255)
+                   for i in range(len(plte) // 3)]
+            row = [lut[i] for i in line]
         rows.append(row)
     return width, height, rows
 
 
 def write_png(path, width, height, rows):
     """Write 8-bit RGBA, or RGB when every pixel is opaque."""
-    opaque = all(p[3] == 255 for row in rows for p in row)
-    n = 3 if opaque else 4
+    flats = [bytes(chain.from_iterable(row)) for row in rows]
+    opaque = all(f[3::4].count(255) == width for f in flats)
     body = bytearray()
-    for row in rows:
+    for f in flats:
         body.append(0)
-        for p in row:
-            body.extend(p[:n])
+        if opaque:
+            rgb = bytearray(3 * width)
+            rgb[0::3], rgb[1::3], rgb[2::3] = f[0::4], f[1::4], f[2::4]
+            body.extend(rgb)
+        else:
+            body.extend(f)
 
     def chunk(kind, data):
         return struct.pack(">I", len(data)) + kind + data + struct.pack(">I", zlib.crc32(kind + data))
 
     ihdr = struct.pack(">IIBBBBB", width, height, 8, 2 if opaque else 6, 0, 0, 0)
-    Path(path).write_bytes(SIGNATURE + chunk(b"IHDR", ihdr) + chunk(b"IDAT", zlib.compress(bytes(body))) + chunk(b"IEND", b""))
+    _write(path, SIGNATURE + chunk(b"IHDR", ihdr) + chunk(b"IDAT", zlib.compress(bytes(body))) + chunk(b"IEND", b""))
+
+
+def _write(path, data):
+    try:
+        Path(path).write_bytes(data)
+    except OSError as e:
+        raise Bad(f"cannot write {path}: {e.strerror}")
 
 
 # --- colour maths ------------------------------------------------------------------------------------
@@ -180,8 +209,10 @@ def parse_region(text, width, height):
     return x, y, w, h
 
 
-def opaque_pixels(rows):
-    return [p for row in rows for p in row if p[3] >= 128]
+def opaque_counts(rows):
+    """Counter of opaque (alpha >= 128) pixels by colour, so per-colour work runs once per unique colour."""
+    counts = Counter(chain.from_iterable(rows))
+    return Counter({p: n for p, n in counts.items() if p[3] >= 128})
 
 
 # --- commands ----------------------------------------------------------------------------------------
@@ -192,28 +223,28 @@ def cmd_palette(args):
     if not colours:
         raise Bad("palette needs at least one colour in --hex")
     targets = [(f"#{c.strip().lstrip('#').lower()}", parse_hex(c)) for c in colours]
-    pixels = opaque_pixels(rows)
-    total = len(pixels) or 1
+    colour_counts = opaque_counts(rows)
+    total = sum(colour_counts.values()) or 1
     counts = {name: 0 for name, _ in targets}
     matched = 0
-    for p in pixels:
+    for p, n in colour_counts.items():
         hit = False
         for name, t in targets:
             if math.dist(p[:3], t) <= args.tolerance:
-                counts[name] += 1
+                counts[name] += n
                 hit = True
-        matched += hit
+        if hit:
+            matched += n
     return {"match_share": matched / total, "per_colour": {k: v / total for k, v in counts.items()},
-            "off_palette_share": (len(pixels) - matched) / total if pixels else 0.0}
+            "off_palette_share": (sum(colour_counts.values()) - matched) / total if colour_counts else 0.0}
 
 
 def cmd_values(args):
     _, _, rows = read_png(args.png)
-    pixels = opaque_pixels(rows)
     bins = [0] * 10
-    for p in pixels:
-        bins[min(9, int(luma(p) * 10))] += 1
-    total = len(pixels) or 1
+    for p, n in opaque_counts(rows).items():
+        bins[min(9, int(luma(p) * 10))] += n
+    total = sum(bins) or 1
     shares = [b / total for b in bins]
     return {"bins": shares, "midtone_share": sum(shares[3:7])}
 
@@ -223,8 +254,8 @@ def cmd_contrast(args):
 
     def mean_lum(text):
         x, y, w, h = parse_region(text, width, height)
-        vals = [luminance(p) for row in rows[y:y + h] for p in row[x:x + w]]
-        return sum(vals) / len(vals)
+        counts = Counter(chain.from_iterable(row[x:x + w] for row in rows[y:y + h]))
+        return sum(luminance(p) * n for p, n in counts.items()) / (w * h)
 
     a, b = mean_lum(args.a), mean_lum(args.b)
     hi, lo = max(a, b), min(a, b)
@@ -248,24 +279,27 @@ def thumbnail(width, height, rows, longest=160):
     return nw, nh, out
 
 
+def map_colours(rows, fn):
+    """Apply fn to every pixel, computing it once per unique colour."""
+    cache = {p: fn(p) for p in set(chain.from_iterable(rows))}
+    return [[cache[p] for p in row] for row in rows]
+
+
 def simulate(rows, matrix):
-    cache, out = {}, []
-    for row in rows:
-        new = []
-        for p in row:
-            if p not in cache:
-                lin = [to_linear(c) for c in p[:3]]
-                cache[p] = tuple(to_srgb(sum(m * v for m, v in zip(mrow, lin))) for mrow in matrix) + (p[3],)
-            new.append(cache[p])
-        out.append(new)
-    return out
+    def convert(p):
+        lin = [to_linear(c) for c in p[:3]]
+        return tuple(to_srgb(sum(m * v for m, v in zip(mrow, lin))) for mrow in matrix) + (p[3],)
+    return map_colours(rows, convert)
 
 
 def cmd_derive(args):
     width, height, rows = read_png(args.png)
     out = Path(args.out)
-    out.mkdir(parents=True, exist_ok=True)
-    gray = [[(v, v, v, p[3]) for p in row for v in [round(luma(p) * 255)]] for row in rows]
+    try:
+        out.mkdir(parents=True, exist_ok=True)
+    except OSError as e:
+        raise Bad(f"cannot create {out}: {e.strerror}")
+    gray = map_colours(rows, lambda p: (round(luma(p) * 255),) * 3 + (p[3],))
     tw, th, trows = thumbnail(width, height, rows)
     images = {"grayscale.png": (width, height, gray), "thumb.png": (tw, th, trows)}
     for kind, matrix in CVD_MATRICES.items():
