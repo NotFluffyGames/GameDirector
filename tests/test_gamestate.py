@@ -151,6 +151,12 @@ EVIDENCE = "docs/game/playtests/evidence.md"
 ANSWERS = "docs/game/playtests/slice/answers.md"
 CALIBRATE = {"id": "H0", "what": "label the calibration kit", "kind": "calibrate",
              "how": "docs/game/calibration/kit.md", "answers": "docs/game/calibration/labels.json"}
+PICKS = "docs/game/playtests/evidence/F8/compare/picks.md"
+COMPARE = {"id": "H5", "what": "pick F8's grade", "kind": "compare",
+           "how": "docs/game/playtests/evidence/F8/compare/index.md", "answers": PICKS, "unblocks": ["F8"]}
+PICKS_WAIT = ("stop: waiting for A/B picks: a person picks from the kit "
+              "(docs/game/playtests/evidence/F8/compare/index.md) into " + PICKS
+              + ", leaving the queue entry; then run /game-next")
 
 # EveLikeBrawl's real files: a game set up with release 0.3.0 (state version 3), still at setup, no task.
 EVE_STATE = """{
@@ -776,6 +782,104 @@ class GameRun(unittest.TestCase):
             return real_run(args, *rest, **kwargs)
         with mock.patch("subprocess.run", run):
             self.test_full_run_through_the_slice_production_and_polish()
+
+    # ---------- tests: polish ----------
+    def to_full_verdict(self, polish=()):
+        """The full verdict shipped; polish holds the polish-milestone features review decisions added before it."""
+        self.to_production_plan()
+        self.edit("features.json", lambda d: d["features"].extend(polish))
+        self.set_passes("F4")
+        self.set_passes("F7", evidence="human: checked by hand")
+        self.tool("advance")
+        self.assertEqual(self.next(), "game-verdict full")
+        self.record_verdict("ship", {"FC2": "pending-human"})
+        self.tool("advance")
+
+    def to_polish(self):
+        """game-polish planned F8 (a taste call, verified by A/B picks) and F9."""
+        self.to_full_verdict()
+        self.assertEqual(self.next(), "game-polish")
+        self.edit("features.json", lambda d: d["features"].extend(
+            [feature("F8", "polish", kind="human"), feature("F9", "polish")]))
+        self.commit()
+        self.tool("complete")
+
+    def queue_picks(self):
+        self.edit("state.json", lambda s: s["human_queue"].append(COMPARE))  # F8's first session made its kit
+        self.commit()
+
+    def test_polish_is_planned_even_when_reviews_already_added_polish_features(self):
+        self.to_full_verdict(polish=[feature("F10", "polish", tier="nice")])  # a review note decided `feature`
+        self.assertEqual(self.phase(), ("polish", "polish"))
+        self.assertEqual(self.load("state.json")["task"], "game-polish")
+        self.assertEqual(self.next(), "game-polish")
+        self.edit("features.json", lambda d: d["features"].append(feature("F8", "polish")))
+        self.commit()
+        self.tool("complete")
+        self.assertTrue(self.load("state.json")["polish_planned"])
+        self.set_passes("F8", "F10")
+        self.tool("advance")
+        self.assertEqual(self.next(), "game-verdict final")
+
+    def test_a_restart_clears_the_polish_plan(self):
+        self.to_core_verdict()
+        self.edit("state.json", lambda s: s.update(polish_planned=True))
+        self.commit()
+        self.record_verdict("restart")
+        self.tool("advance")
+        self.assertFalse(self.load("state.json")["polish_planned"])
+
+    def test_answered_picks_are_applied_by_a_build_session_in_polish(self):
+        self.to_polish()
+        self.queue_picks()
+        self.assertTrue(self.next().startswith("game-build F9"))  # the run moves past the feature awaiting picks
+        self.write(PICKS, "pair 1: after (the warmer grade)")
+        self.commit()
+        step = f'game-build F8 "feature F8" picks {PICKS}'
+        self.assertEqual(self.next(), step)
+        self.assertEqual(self.next("--no-user"), step)
+
+    def test_the_run_stops_for_picks_instead_of_entering_final(self):
+        self.to_polish()
+        self.queue_picks()
+        self.set_passes("F9")  # every polish feature passes or waits for its picks
+        self.assertEqual(self.next(), PICKS_WAIT)
+        self.assertEqual(self.next("--no-user"), PICKS_WAIT)
+        self.assertIn("cannot advance", self.tool("advance", ok=False))
+        self.assertEqual(self.phase(), ("polish", "polish"))
+        self.write(PICKS, "pair 1: after (the warmer grade)")
+        self.commit()
+        self.assertEqual(self.next(), f'game-build F8 "feature F8" picks {PICKS}')
+        self.edit("state.json", lambda s: s.update(human_queue=[]))  # the picks session: applied, entry removed
+        self.set_passes("F8", evidence=f"human: picks in {PICKS}")
+        self.tool("advance")
+        self.assertEqual(self.next(), "game-verdict final")
+
+    def test_picks_that_keep_failing_go_to_unblock(self):
+        self.to_polish()
+        self.queue_picks()
+        self.write(PICKS, "pair 1: after")
+        self.edit("state.json", lambda s: s["attempts"].update(F8=3))
+        self.commit()
+        self.assertEqual(self.next(), "game-plan unblock F8")
+
+    def test_answered_picks_reopen_a_run_stopped_for_the_queue(self):
+        self.to_polish()
+        self.set_passes("F9")
+        self.set_passes("F8", evidence="human: picked")
+        self.tool("advance")
+        self.assertEqual(self.next(), "game-verdict final")
+        self.set_passes("F8", value=False)  # a regression, rebuilt during the verdict: its kit waits for picks
+        self.queue_picks()
+        self.record_verdict("ship")
+        self.tool("advance")
+        self.assertEqual(self.phase()[0], "awaiting-human")
+        self.assertIn("waiting on the human queue", self.next())
+        self.write(PICKS, "pair 1: before")
+        self.commit()
+        self.assertEqual(self.next(), "advance")
+        self.tool("advance")
+        self.assertEqual(self.next(), f'game-build F8 "feature F8" picks {PICKS}')
 
     # ---------- tests: the slice ----------
     def test_production_topics_wait_until_the_slice_ships(self):

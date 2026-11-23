@@ -108,6 +108,7 @@ DEFAULT_STATE = {
     "passed_verdicts": [],
     "slice_sessions": None,
     "checkpoint_due": False,
+    "polish_planned": False,
     "adapter_verified": False,
     "docs_verified": None,
     "intent": None,
@@ -493,6 +494,14 @@ class Game:
         if playtests is None:
             return q
         return [e for e in q if (e.get("kind") == "playtest") == playtests]
+
+    def answered(self, entry):
+        return bool(entry.get("answers")) and (self.root / str(entry["answers"])).is_file()
+
+    def compares(self):
+        """The A/B-pick entries: (answered, still waiting for the person's picks)."""
+        entries = [e for e in self.queue() if e.get("kind") == "compare"]
+        return [e for e in entries if self.answered(e)], [e for e in entries if not self.answered(e)]
 
     def queued_ids(self):
         ids = set()
@@ -1102,8 +1111,9 @@ class Game:
         elif phase == "plan":
             why += self._plan_gate()
         elif phase == "awaiting-human":
-            if self.queue(playtests=False):
-                why.append(f"{len(self.queue(playtests=False))} human queue entries open")
+            waiting = [e for e in self.queue(playtests=False) if not (e.get("kind") == "compare" and self.answered(e))]
+            if waiting:  # answered picks are the next build session's to apply
+                why.append(f"{len(waiting)} human queue entries open")
             if st.get("stop_reason"):
                 why.append(f"stopped: {st['stop_reason']} (a human decides, then sets stop_reason to null)")
         if phase in ("build", "verdict", "polish", "done"):
@@ -1111,8 +1121,8 @@ class Game:
                     for f in self.failing(self.green_pool())]
         if phase == "verdict":
             why += self._verdict_gate()
-        if phase == "polish" and not self.has_polish_features():
-            why.append("no polish features yet (game-polish)")
+        if phase == "polish" and not st.get("polish_planned"):
+            why.append("polish not planned yet (game-polish)")
         return why
 
     def _ideation_gate(self):
@@ -1458,10 +1468,10 @@ class Game:
             st.update(phase="build", milestone=m, task=None)
         elif "full" not in passed:
             self._enter_verdict("full")
-        elif not self.has_polish_features():
+        elif not st.get("polish_planned"):  # features review decisions put in polish don't plan it
             st.update(phase="polish", milestone=POLISH, task="game-polish")
-        elif self.failing([POLISH]):
-            st.update(phase="polish", milestone=POLISH, task=None)
+        elif self.failing([POLISH]) or self.compares()[0] or ("final" not in passed and self.compares()[1]):
+            st.update(phase="polish", milestone=POLISH, task=None)  # picks are applied before the final verdict
         elif "final" not in passed:
             self._enter_verdict("final")
         elif self.queue(playtests=False):
@@ -1540,7 +1550,7 @@ class Game:
             self.homework_data = copy(DEFAULT_HOMEWORK)
         st.update(phase="scan", stage="slice", milestone=None, task=f"game-research restart {adr}",
                   restart_adr=adr, passed_verdicts=[], slice_sessions=None, adapter_verified=False,
-                  checkpoint_due=False, human_queue=[], attempts={})
+                  checkpoint_due=False, polish_planned=False, human_queue=[], attempts={})
         self.commit(f"restart {n}", self.features_path, archive / "features.json", archive / "human-queue.json",
                     self.homework_path, archive / "homework.json")
         return [f"restart {n}: definition of done, human queue and research homework archived to "
@@ -1629,6 +1639,10 @@ class Game:
             action = self._build_action(pool)  # judge and polish only a green build
             if action:
                 return action
+        if phase == "polish":
+            action = self._picks_action()
+            if action:
+                return action
         if phase == "verdict":
             entry = self.playtest_entry(st.get("verdict_scope"))
             calibrate = next((e for e in self.queue() if e.get("kind") == "calibrate"), None)
@@ -1661,6 +1675,10 @@ class Game:
                 return action
         if waiting:
             return f"stop: waiting for a person: start a session with someone present and run /game-next to do '{waiting}' together"
+        picks = self.compares()[1] if phase == "polish" else []
+        if picks:  # nothing else to build: the final verdict waits for the person's A/B picks
+            kits = " and ".join(f"the kit ({e.get('how')}) into {e.get('answers')}" for e in picks)
+            return f"stop: waiting for A/B picks: a person picks from {kits}, leaving the queue entry; then run /game-next"
         if self.gate():
             if phase == "verdict":
                 return f"game-verdict {st.get('verdict_scope')}"
@@ -1697,6 +1715,19 @@ class Game:
         alts = ", ".join(f["id"] for f in ready[1:3])
         return f"game-build {ready[0]['id']} \"{ready[0]['title']}\"" + (
             f" (if its tickets are blocked: {alts})" if alts else "")
+
+    def _picks_action(self):
+        """The build session that applies a person's A/B picks to the feature their compare entry unblocks."""
+        answered = self.compares()[0]
+        if not answered:
+            return None
+        e = answered[0]
+        unblocks = e.get("unblocks")
+        fid = unblocks if isinstance(unblocks, str) else (unblocks[0] if isinstance(unblocks, list) and unblocks else "")
+        f = next((f for f in self.items() if f.get("id") == fid), {})
+        if f and self.is_blocked(f):
+            return f"game-plan unblock {fid}"
+        return f"game-build {fid} \"{f.get('title', '')}\" picks {e['answers']}"
 
     def _nice_action(self, milestone):
         st = self.state
@@ -1804,6 +1835,8 @@ def main(argv, history=None):
             return 1
         done = st.get("task")
         st["task"] = None
+        if str(done).startswith("game-polish"):
+            st["polish_planned"] = True  # from now on routing builds polish instead of planning it again
         if st["phase"] == "verdict":  # answers read by this verdict are consumed with it
             st["human_queue"] = [e for e in st["human_queue"] if not (
                 (e.get("kind") == "playtest" and e.get("scope") == st.get("verdict_scope")
