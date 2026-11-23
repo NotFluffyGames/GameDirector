@@ -11,7 +11,7 @@ Turns a wiki written one topic at a time into one coherent definition, then sets
 - **slice** (task `game-consolidate`): the pages the vertical slice needs, and the bar for the slice.
 - **production** (task `game-consolidate production`): the whole game, and the bar for the full game. The slice's bar stays as it is: after the slice stage it can rise but never drop.
 
-Read `docs/agents/game.md` first and follow its session rules. When the work doesn't fit one session, stop after a finished step; the next session resumes at the first step whose criterion is unmet.
+Read `docs/agents/game.md` first and follow its session rules. When the work doesn't fit one session, stop after a finished step, committing your page drafts (session rule 6); the next session resumes at the first step whose criterion is unmet, and step 6 writes the drafts still in `docs/game/drafts/`.
 
 ## 1. Completeness
 
@@ -36,13 +36,13 @@ Read the pages along the index and the links between them, and look at the desig
 - resources with sources but no sinks (or the reverse), and feedback loops that run away;
 - three to five scenarios that combine systems (two effects at once, an edge of one system meeting another), walked through step by step.
 
-Fix what has an obvious answer in the page that is wrong, with a `Last changed` line (written last, see step 6). Anything that needs a design decision becomes a topic. A risk that can be measured becomes a candidate proxy for step 4 (for example, resource growth per run).
+Fix what has an obvious answer in the page that is wrong: draft the fix in `docs/game/drafts/<page-id>.md` with a `Last changed` line (written at step 6). Anything that needs a design decision becomes a topic. A risk that can be measured becomes a candidate proxy for step 4 (for example, resource growth per run).
 
-**Done when** no two pages disagree, every term used is in `CONTEXT.md`, and every holism finding is a page fix (drafted for step 6), a topic, or a candidate proxy.
+**Done when** no two pages disagree, every term used is in `CONTEXT.md`, and every holism finding is a committed page draft, a topic, or a candidate proxy.
 
 ## 3. Settle the tree
 
-Every open topic of this stage must be `core` or `support` work for a person, or wait: mark each `later` topic, and any `support` topic the brainstorm share left unanswered, `deferred` with a one-line reason (what it waits for). When a topic you defer is the review of a flagged page, remove that page's `flagged` entry in `wiki.json` and the note on the page (written last, as step 6 says). A deferred topic can be reopened in any later phase. Production topics stay open through the slice stage.
+Every open topic of this stage must be `core` or `support` work for a person, or wait: mark each `later` topic, and any `support` topic the brainstorm share left unanswered, `deferred` with a one-line reason (what it waits for). When a topic you defer is the review of a flagged page, remove that page's `flagged` entry in `wiki.json` in the same commit as the deferral (check fails while a flag names a topic that isn't open), and draft the page without its note (written at step 6). A deferred topic can be reopened in any later phase. Production topics stay open through the slice stage.
 
 **Done when** `gamestate.py gate` lists no open core or support topic for this stage.
 
@@ -85,6 +85,6 @@ Ids share one namespace with the fun checklist. In interactive mode, the user ap
 
 ## 6. Close
 
-`gamestate.py check --since <base>`, commit, progress entry. Then write the page fixes from step 2 in the docs place, last, record each page's new `version` and `updated` in `docs/game/wiki.json` (a change to the vision or slice also updates `docs/game/vision.json`, in the first commit), commit that, and run `gamestate.py complete`.
+`gamestate.py check --since <base>`, commit with the drafts, progress entry. Then write each draft in `docs/game/drafts/` to its page in the docs place, last (an open topic's drafts stay for its brainstorm, session rule 6); in the pages commit, record each page's new `version` and `updated` in `docs/game/wiki.json` and delete the drafts (a change to the vision or slice also updates `docs/game/vision.json`, in the first commit). Then run `gamestate.py complete`.
 
-**Done when** the page fixes and their `wiki.json` entries are committed and `complete` succeeds.
+**Done when** the page fixes and their `wiki.json` entries are committed, the only drafts left are an open topic's, and `complete` succeeds.

@@ -18,11 +18,16 @@ Take the topic the task names (`game-brainstorm T014 …`), or with none, the fi
 - the pages the topic writes, and the pages the wiki's home page links them to (ids and links in `docs/game/wiki.json`, read through the docs place);
 - `CONTEXT.md`, and the ADRs those pages link.
 
-If the topic is `open` but already has a `resolution` and `pages`, an earlier session died between its two commits (step 5). Do not re-run the conversation: find those pages in the docs place by the recorded ids and titles (a page may exist without a `wiki.json` entry), and do step 5's second half.
+**Recovery.** When the topic is `open` with a `resolution`, an earlier session ended between step 5's two commits. Look for its committed drafts: `docs/game/drafts/<page-id>.md` for the topic's `pages`.
+
+- Drafts there: the conversation is already in them. Do step 5's second half from those drafts, with no new conversation, and end the session.
+- No drafts: the answers were lost. Clear the `resolution` and run the conversation again with the person, from step 2.
+
+A draft of one of the topic's pages while it has no `resolution` belongs to another step (session rule 6): start your draft of that page from it.
 
 Then prepare your challenges before asking anything: where could this idea contradict the vision or another page, what could make it dominant, boring, confusing or too big, and how do two or three reference games handle the same question (the `research` skill, if you need facts).
 
-**Done when** you can state the topic's question, what the wiki already says about it, and your three strongest challenges.
+**Done when** you can state the topic's question, what the wiki already says about it, and your three strongest challenges; on the recovery path with drafts, when step 5 is done instead.
 
 ## 2. Grill and challenge
 
@@ -39,9 +44,9 @@ Push vague answers until they are concrete enough to test. When an answer fails 
 
 ## 3. Write it down
 
-- Draft the wiki pages the topic covers, in the page format from "The wiki" in `docs/agents/game.md`: current truth only, precise rules and numbers, links instead of repetition. A change to the vision or slice also changes `docs/game/vision.json`.
+- Draft the wiki pages the topic covers in `docs/game/drafts/<page-id>.md` (session rule 6), in the page format from "The wiki" in `docs/agents/game.md`: current truth only, precise rules and numbers, links instead of repetition. A change to the vision or slice also changes `docs/game/vision.json`.
 - A decision the user made against a challenge, or that reverses an earlier page, gets an ADR (with `domain-modeling`) linked from the page.
-- Draft an update for every other page the answers change.
+- Draft an update for every other page the answers change, and the home page's line under its area for each new page.
 - Add new terms to `CONTEXT.md`.
 
 **Done when** someone who never saw this conversation could design features from the drafts alone.
@@ -54,8 +59,8 @@ For each question the conversation raised but didn't settle, open a child topic:
 
 ## 5. Close
 
-Set the topic's `pages` (ids) and a one-line `resolution`, leaving its `status` `open` for now. `gamestate.py check --since <base>`, commit the state (topics, vision.json, ADRs, `CONTEXT.md`), progress entry.
+Set the topic's `pages` (ids, every page it drafted) and a one-line `resolution`, leaving its `status` `open` for now. `gamestate.py check --since <base>`, commit the state (topics, vision.json, ADRs, `CONTEXT.md`) with the drafts, progress entry.
 
-Then write the pages, last: create or update each drafted page in the docs place, add the home page line for each new one under its area, and record each page's `version` (from the docs tool) and `updated` in `docs/game/wiki.json` (a new page gets an entry with `id`, `title`, `area`, `link`), including the `index` entry's new `version` and `updated` when you changed the home page. When the topic was a review of a flagged page, remove that page's `flagged` entry and the note on the page. Set the topic `resolved`, close its ticket, run `check --since <base>` again, and commit that.
+Then write the pages, last: create or update each drafted page in the docs place from its draft (the home page included), and record each page's `version` (read back as `docs/agents/docs.md` says) and `updated` in `docs/game/wiki.json` (a new page gets an entry with `id`, `title`, `area`, `link`), including the `index` entry's new `version` and `updated` when you changed the home page. When the topic was a review of a flagged page, remove that page's `flagged` entry, and its draft is the text without the note. Delete the drafts, set the topic `resolved`, close its ticket, run `check --since <base>` again, and commit that: the pages commit.
 
-**Done when** the topic is resolved, its pages are written with their `wiki.json` entries committed, and check passes.
+**Done when** the topic is resolved, its pages are written with their `wiki.json` entries committed, its drafts are gone, and check passes.

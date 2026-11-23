@@ -39,10 +39,14 @@ Every game-* session is a **fresh session** doing **one task**:
 
 1. Start: note your base commit (`git rev-parse HEAD`) and run `python3 docs/game/gamestate.py status`. Read only the files your task names; reach for more only when the work demands it.
 2. Hand reading-heavy exploration to a subagent or the `research` skill, which returns a summary or writes notes to a file.
-3. When the step outgrows the session (a second unplanned subsystem appears, or you are past roughly half your context), split: write the remainder as new tickets, features or topics, commit what is green, stop. The next dispatch of the same task resumes from what is on disk.
+3. When the step outgrows the session (a second unplanned subsystem appears, or you are past roughly half your context), split: write the remainder as new tickets, features or topics, commit what is green with your page drafts, stop. The next dispatch of the same task resumes from what is on disk.
 4. Leave the repo green: commit only work whose tests pass.
 5. **Keep the wiki true.** When your work changes what the game is or how it plays, change the page that describes your change, as the last step; see The wiki. When you meet a design question no page answers, open a topic for it rather than deciding silently.
-6. End: `gamestate.py check --since <base>` passing; a commit; a progress entry of at most 10 lines appended to `docs/game/progress.md`; when the task is the phase's own (status shows `task:`) and every step is done, `gamestate.py complete`; and a short report: what changed, the **evidence**, what is left.
+6. **Page drafts.** Every page text you write is first a **draft**: the page's full new text in `docs/game/drafts/<page-id>.md`. Drafts go into your state commit (and into any earlier commit, when the step splits). The pages commit then writes each draft to the docs place, records the page's `version` and `updated` in `wiki.json`, and deletes the draft (see "Pages are written last"). So a draft on disk is a page not yet written, and nothing drafted is lost when a session ends early:
+   - To change a page that has a draft, change the draft: it is newer than the docs place.
+   - A session that resumes a task picks up that task's drafts instead of redoing the work behind them. A topic's drafts belong to its brainstorm while the topic is `open` with a `resolution`; that session finishes them (game-brainstorm's step 1).
+   - Any other drafts outlived their step (a build whose feature now passes, a GDD sync): the next game-gdd session writes them first.
+7. End: `gamestate.py check --since <base>` passing; a commit; a progress entry of at most 10 lines appended to `docs/game/progress.md`; when the task is the phase's own (status shows `task:`) and every step is done, `gamestate.py complete`; and a short report: what changed, the **evidence**, what is left.
 
 **Asking the user.** Ask the person in the session directly, one question at a time, each with your recommended answer. In an unattended session (`--unattended`), take the recommended answer and record it in an ADR as an assumption.
 
@@ -57,17 +61,20 @@ The wiki is the living description of the game: precise enough to plan, build an
 ```json
 {"pages": [
   {"id": "weapons", "title": "Weapons", "area": "Systems",
-   "link": "https://example.com/docs/weapons", "version": 3, "updated": "2026-11-22",
+   "link": "https://example.com/docs/weapons", "version": 3, "updated": "2026-11-22: stealing needs a free hand",
    "flagged": {"topic": "T031", "note": "edited by hand; check against the page"}}
 ]}
 ```
 
 - `id`: unique and stable; topics and features name pages by it.
+- `title`: the page's title.
 - `area`: Vision, Mechanics, Controls, Systems, Content, Modes and sessions, Screens and onboarding, Feel, Tone, art and world. Each area is a section of the wiki's home page, listing its pages with one line each.
 - `link`: the page's URL, or its repo-relative path for local files.
-- `version` and `updated`: bumped by the session that writes the page; they are how a direct edit is noticed.
-- `flagged`: set when a direct edit was detected. It names the open topic that reviews the edit, and clears when that topic resolves.
-- The pages `vision`, `slice` and `concepts` always exist, all from ideation: `vision` (pitch, audience and platforms, pillars, anti-pillars, core loop, target feeling, tone, references, scope, kill condition), `slice` (what the vertical slice proves, what is in and out, its quality bar, its playtest) and `concepts` (the directions compared and the choice).
+- `version`: the page's version as the session that wrote it read it back, the way `docs/agents/docs.md` says (the docs tool's version number, else its last-modified time, else a hash of the text; for local files, a git hash of the page above its comments). A page whose version moved without a session recording it was edited by hand.
+- `updated`: the date and a one-line reason, e.g. `"2026-11-22: stealing needs a free hand"`.
+- `flagged`: set when a direct edit was detected. It names the open topic that reviews the edit, and clears when that topic is resolved or deferred.
+- `index` is the wiki's home page (area Vision), created by setup from the game-ideation skill's `index-template.md`. Its sections are the areas; a session that adds a page adds the page's line under its area.
+- Once ideation is done, the pages `vision`, `slice` and `concepts` always exist: `vision` (pitch, audience and platforms, pillars, anti-pillars, core loop, target feeling, tone, references, scope, kill condition), `slice` (what the vertical slice proves, what is in and out, its quality bar, its playtest) and `concepts` (the directions compared and the choice).
 - Every other page has one subject (a system, a content type, a mode, a screen flow), is written by brainstorm topics and kept true by every phase. It starts with:
 
   ```markdown
@@ -80,7 +87,7 @@ The wiki is the living description of the game: precise enough to plan, build an
 
 **Comments only.** People comment on wiki pages; sessions edit them. A person's comment becomes a topic or a note, never a silent change. game-gdd compares each page's version in the docs tool with the `version` in `wiki.json`. A mismatch, including a missing page, becomes a topic to review it plus a `flagged` entry. `gamestate.py` only validates `flagged`.
 
-**Pages are written last.** A session finishes its work, runs `check --since <base>` and commits its state and code. Only then does it write the pages in the docs place, and it records each page's new `version` and `updated` in `wiki.json` in a second commit. If a session dies after writing a page but before committing its `wiki.json` entry, game-gdd sees the version mismatch and treats it as a direct edit. When the docs place can't be reached, the session stops with `stop: <tracker> docs unreachable` (naming the tracker from `issue-tracker.md`) rather than writing the pages elsewhere. Local files are used only when the user chose them in setup.
+**Pages are written last.** A session finishes its work, runs `check --since <base>` and commits its state and code with its page drafts (session rule 6). Only then does it write the pages in the docs place from those drafts; a second commit, the **pages commit**, records each page's new `version` and `updated` in `wiki.json` and deletes the drafts. A session that ends between the two commits leaves its drafts committed, and session rule 6 says who writes them. When the docs place can't be reached, the session stops with `stop: <tracker> docs unreachable` (naming the tracker from `issue-tracker.md`) rather than writing the pages elsewhere. Local files are used only when the user chose them in setup.
 
 **Setup is always `with-user:`.** Setup can't complete until `docs/agents/docs.md` exists and `state.json` has `docs_verified: {"place": "...", "date": "YYYY-MM-DD"}`, recording that the user's chosen place passed its smoke test.
 
@@ -118,7 +125,7 @@ Each quality bar is `placeholder`, `representative`, `production` or `final`.
 
 - `priority`: `core` (the core loop depends on it), `support` (needed before planning is complete), `later` (depth that can wait).
 - `stage`: `slice` when the vertical slice needs it answered, otherwise `production`. Production topics wait until the slice ships.
-- `status`: `open`, `resolved` (its `pages` were written or updated and `resolution` gives the answer in a line) or `deferred` (`resolution` says why it waits). Any session may reopen a topic when the game changes under it.
+- `status`: `open`, `resolved` (its `pages` were written or updated and `resolution` gives the answer in a line) or `deferred` (`resolution` says why it waits). Any session may reopen a topic when the game changes under it: `status` back to `open`, and `resolution` cleared to `""` (an open topic with a `resolution` is a brainstorm between its two commits).
 - `unblocks`: features that can't be built until it is answered; the status tool brainstorms those topics before building them.
 
 ## The GDD
@@ -131,7 +138,8 @@ A game design document for people, kept next to the tasks in the docs place `doc
 | --- | --- | --- |
 | `docs/game/seed.md` | the user's original prompt, verbatim | game-setup |
 | `docs/game/wiki.json` | index of the wiki pages (the pages live in the docs place) | ideation, brainstorm, consolidate; every phase keeps it true |
-| `docs/game/vision.json` | pillars, anti-pillars, kill condition, slice test question and quality bars, directions | ideation |
+| `docs/game/vision.json` | pillars, anti-pillars, kill condition, slice test question and quality bars, directions | ideation; brainstorm, consolidate, plan adjust and verdict when they change the vision or slice page |
+| `docs/game/drafts/` | page drafts: page text committed but not yet written in the docs place (session rule 6) | any session that writes pages |
 | `docs/game/topics.json` | the brainstorm tree | ideation, brainstorm; any phase opens topics |
 | `docs/game/fun-checklist.json` | fun checklist | game-consolidate |
 | `docs/game/keep.json` | what playtests and people said to keep, with pinned tuning values | game-verdict, game-gdd |

@@ -84,12 +84,12 @@ Set `limits.budget_sessions` to sessions already used plus the sessions the open
 
 The task names the verdict ADR. Change only the pillars and systems it names:
 
-1. Apply knob-only fixes first: the verdict's suggested knob values go into the knob files, and the pages that state them.
-2. Where the ADR changes the design, change the wiki pages (written last, in the docs place, with their `wiki.json` entries updated), linking the ADR; a change to the vision or slice also updates `docs/game/vision.json`. A change that needs a design decision the ADR doesn't make becomes a topic, brainstormed with a person before the features it `unblocks`.
+1. Apply knob-only fixes first: the verdict's suggested knob values go into the knob files, and into drafts of the pages that state them (as in 2).
+2. Where the ADR changes the design, draft the changed wiki pages in `docs/game/drafts/`, linking the ADR (session rule 6: committed with the state, written last at the close, their `wiki.json` entries updated in the pages commit); a change to the vision or slice also updates `docs/game/vision.json`. A change that needs a design decision the ADR doesn't make becomes a topic, brainstormed with a person before the features it `unblocks`.
 3. Rewrite the affected features' acceptance or verify where the design changed and set their `passes` to false; add new features; cut obsolete ones with a `cut_reason`.
 4. Ticket the new and reset features; re-estimate the budget as in step 5.
 
-**Done when** every change the ADR asks for is a knob change, a page change with its features, or an open topic. Close as in step 5, including `complete`.
+**Done when** every change the ADR asks for is a knob change, a page change with its features, or an open topic. Close as in step 5: check, commit with the drafts, progress entry, then write the drafts and make the pages commit, then `complete`.
 
 ## Checkpoint mode
 

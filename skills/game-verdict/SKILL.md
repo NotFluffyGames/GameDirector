@@ -42,9 +42,9 @@ For each proxy item and richness target in scope, run its `how` with enough seed
 
 Capture the key moments: start, the core verb mid-loop, a win, a loss, every main UI screen. Judge them against the art pages' tone and readability rules, and for the slice against the `slice` page's quality bar. Record findings as notes; they inform the decision but score nothing.
 
-Then check the wiki against what was built, for the features in scope, reading their pages through the docs place: where the game now differs from its pages in a small, settled way, fix the page with a `Last changed` line (drafted now: record each page fix in the committed `notes.md`, and write it in the docs place at this session's last commit, wherever the session ends); where the difference is a design question, open a topic.
+Then check the wiki against what was built, for the features in scope, reading their pages through the docs place: where the game now differs from its pages in a small, settled way, draft the fix in `docs/game/drafts/<page-id>.md` with a `Last changed` line (session rule 6), committed with `notes.md`; a fix to the vision or slice page also updates `docs/game/vision.json` in that commit. The drafts are written at step 4 and step 6. Where the difference is a design question, open a topic.
 
-**Done when** the captures are saved and every difference between the game and its pages is a page fix or a topic.
+**Done when** the captures are saved and every difference between the game and its pages is a committed page draft or a topic.
 
 ## 4. Human items
 
@@ -53,9 +53,9 @@ Write the playtest kit ([playtesting.md](playtesting.md)) into the evidence fold
 - **slice**: stop here and record no verdict yet. The run waits until a person has played the slice and written the answers file; the next session runs Answers mode.
 - **other scopes**: score human items `pending-human` and go on.
 
-Before stopping here, write the page fixes recorded in `notes.md` in the docs place and record each page's `version` and `updated` in `docs/game/wiki.json` in a second commit.
+Then write the drafts so far to their pages in the docs place, and make the pages commit: each page's `version` and `updated` in `docs/game/wiki.json`, the drafts deleted.
 
-**Done when** the kit and its queue entry are committed, and the page fixes recorded so far are written with their `wiki.json` entries committed.
+**Done when** the kit and its queue entry are committed, and the drafts so far are written with their `wiki.json` entries committed and the drafts gone.
 
 ## 5. Isolate failures
 
@@ -82,9 +82,9 @@ Append to `state.json` `verdicts`:
             "FC5": {"result": "not-assessed", "evidence": "capture unavailable on this machine"}}}
 ```
 
-After the commit and the progress entry, write the page fixes recorded in `notes.md` in the docs place, last, and record each page's new `version` and `updated` in `docs/game/wiki.json` in a second commit.
+After the commit and the progress entry, write the drafts still in `docs/game/drafts/` to their pages in the docs place, last (an open topic's drafts stay for its brainstorm, session rule 6), and make the pages commit: each page's new `version` and `updated` in `docs/game/wiki.json`, the drafts deleted.
 
-**Done when** every item and target in scope is scored, the page fixes are written with their `wiki.json` entries committed, and `gamestate.py complete` succeeds after `check --since <base>`.
+**Done when** every item and target in scope is scored, the page fixes are written with their `wiki.json` entries committed and their drafts gone, and `gamestate.py complete` succeeds after `check --since <base>`.
 
 ## Answers mode
 
@@ -93,6 +93,6 @@ After the commit and the progress entry, write the page fixes recorded in `notes
 1. Read their answers. Score each human item `pass` or `fail` with the answers file as its evidence.
 2. **Keep what they loved.** For each thing the answers say to keep that a tuning value controls, add an entry to `docs/game/keep.json`: what was kept, the answers file as its source, and a pin per knob (`file`, `key`, `value`). From then on `gamestate.py check` holds those values; changing one takes an ADR named in the entry's `adr`.
 3. Take the proxy scores from the latest verdict of the same scope when the build commit is unchanged; otherwise redo steps 1–2.
-4. Steps 5–6, writing the verdict ADR (a follow-up ADR linking the earlier one, when this reopens a verdict), including writing any page fixes `notes.md` still records as unwritten.
+4. Steps 5–6, writing the verdict ADR (a follow-up ADR linking the earlier one, when this reopens a verdict), including writing the drafts still in `docs/game/drafts/`.
 
 **Done when** the verdict is recorded and `gamestate.py complete` succeeds; it also consumes the answered queue entry.

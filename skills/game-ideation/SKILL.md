@@ -6,7 +6,7 @@ disable-model-invocation: true
 
 # Game Ideation
 
-Formulates the **vision** with the user (what the game is, who it is for, why it will be fun, what it will never be) and defines the **vertical slice**: the small part of the game built first, to the quality bar the user sets, to prove the game before production. Nothing is designed in detail yet. This is a conversation, whatever the autonomy mode: it runs in the session the user started, never in a subagent or an unattended loop. It writes the first wiki pages (in the docs place, see "The wiki" in `docs/agents/game.md`), `docs/game/vision.json` and the topics; game-gdd then turns them into the human GDD. Draft each page's text in the session as the user settles it; the pages are written in the docs place at step 8, after the state is committed. Read `docs/agents/game.md` first and follow its session rules.
+Formulates the **vision** with the user (what the game is, who it is for, why it will be fun, what it will never be) and defines the **vertical slice**: the small part of the game built first, to the quality bar the user sets, to prove the game before production. Nothing is designed in detail yet. This is a conversation, whatever the autonomy mode: it runs in the session the user started, never in a subagent or an unattended loop. It writes the first wiki pages (in the docs place, see "The wiki" in `docs/agents/game.md`), `docs/game/vision.json` and the topics; game-gdd then turns them into the human GDD. Draft each page in `docs/game/drafts/` as the user settles it (session rule 6 in `docs/agents/game.md`), and commit the drafts with `vision.json` whenever the session splits; the pages are written in the docs place at step 8, after the state is committed. A session that resumes ideation reads the committed drafts and `vision.json` and goes on at the first step whose **Done when** doesn't hold. Read `docs/agents/game.md` first and follow its session rules.
 
 ## 1. Read the seed
 
@@ -54,7 +54,7 @@ With the user, draft the `slice` page from [slice-template.md](slice-template.md
 
 In `docs/game/topics.json`, record the root topic `T1` ("the game", answered by the vision, pages `["vision", "slice"]`, still `open` until its pages are in `wiki.json` at step 8), then break it into first-level topics with [topic-map.md](topic-map.md): one per area this game needs, each with a question, priority, the page id it will write, and its **stage**: `slice` when the vertical slice needs it answered, otherwise `production`. Brainstorm takes slice topics first; production topics wait until the slice ships. Publish each as a ticket in the tracker (`docs/agents/issue-tracker.md`, `ready-for-human`: a person brainstorms it), and record the ticket on the topic. Show the user the list; add, drop or reprioritise as they say.
 
-On a restart, reopen the topics whose pages the restart ADR invalidates, and open new ones where the vision changed.
+On a restart, reopen the topics whose pages the restart ADR invalidates (clearing their `resolution`), and open new ones where the vision changed.
 
 **Done when** `topics.json` has `T1` and the first-level topics, each with a ticket, and the user has seen the list.
 
@@ -66,6 +66,6 @@ With the `domain-modeling` skill, add the game's own nouns from the vision and t
 
 ## 8. Close
 
-`gamestate.py check --since <base>`, commit the state (`vision.json`, `topics.json`, `CONTEXT.md`), progress entry. Then write the pages in the docs place, last: `vision`, `slice` and `concepts` from the drafts, and the home page's Vision section ([index-template.md](index-template.md) lists the three). Add a `wiki.json` entry for each of `vision`, `slice` and `concepts` (area Vision, `link`, `version` from the docs tool, `updated`), update the `index` entry's `version` and `updated`, set `T1` to `resolved`, and commit that. On a restart, update the existing pages and entries instead. Then run `python3 docs/game/gamestate.py gate`, and `gamestate.py complete`.
+Draft the home page too, with its Vision section filled ([index-template.md](index-template.md) lists the three pages). `gamestate.py check --since <base>`, commit the state (`vision.json`, `topics.json`, `CONTEXT.md`) with the drafts, progress entry. Then write the pages in the docs place, last, from the drafts: `vision`, `slice`, `concepts` and the home page. In the pages commit, add a `wiki.json` entry for each of `vision`, `slice` and `concepts` (`id`, `title`, area Vision, `link`, `version` read back as `docs/agents/docs.md` says, `updated`), update the `index` entry's `version` and `updated`, set `T1` to `resolved` with a one-line `resolution` (the vision and slice answer it), and delete the drafts. On a restart, update the existing pages and entries instead. Then run `python3 docs/game/gamestate.py gate`, and `gamestate.py complete`.
 
-**Done when** the pages and their `wiki.json` entries are committed, `gate` passes and `complete` succeeds.
+**Done when** the pages and their `wiki.json` entries are committed, no ideation draft remains, `gate` passes and `complete` succeeds.
