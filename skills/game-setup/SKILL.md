@@ -104,7 +104,7 @@ Read [adapter-contract.md](adapter-contract.md), the engine ADR and `docs/game/e
 
 For each row: write the command (or wrapper script) into the Commands table of `docs/agents/game.md`, run it, and record the smoke-test result in the Verified column. A row the engine can't support follows the contract's "When the engine resists" fallback, with the reason recorded.
 
-**Done when** every required command passed its smoke test in this session, or is `n/a` under a fallback.
+**Done when** every required command passed its smoke test in this session or is `n/a` under a fallback, and every optional output passed its smoke test (on the contract's test fixture while the game has nothing of its own to show) or is `n/a` because the engine can't give it.
 
 ### 3. Close
 

@@ -15,7 +15,7 @@ Read `docs/agents/game.md` first and follow its session rules. When the work doe
 
 ## 1. Completeness
 
-Walk the areas one by one (the list in "The wiki" in `docs/agents/game.md`, or the home page's sections), reading each area's pages (those in `docs/game/wiki.json` with that `area`) through the docs place; an area with no page is a gap, unless its role is in `vision.json` `roles_off`; in the slice stage, only what the `slice` page's In list needs (Modes and sessions can wait). For each, the pages must answer what planning will ask:
+Walk the areas one by one (the list in "The wiki" in `docs/agents/game.md`, or the home page's sections), reading each area's pages (those in `docs/game/wiki.json` with that `area`) through the docs place; an area with no page is a gap, except Art, Audio, or Narrative and world when its role (`art`, `audio`, `narrative`) is in `vision.json` `roles_off`; in the slice stage, only what the `slice` page's In list needs (Modes and sessions can wait). For each, the pages must answer what planning will ask:
 
 - **Mechanics**: every object, action, win and fail condition, and edge case (ties, timeouts, simultaneous actions), precise enough to write tests from.
 - **Controls**: every input action with its binding per device.
@@ -71,7 +71,7 @@ Write items to `docs/game/fun-checklist.json`, drawn from the vision's target fe
 
 - **Slice stage**: 3–6 proxy and human items with scope `core-loop` (the core loop alone, judged on bots before the slice is polished) or `slice` (the slice as a whole). At least one core-loop proxy, and at least one `human` item for the slice playtest, matching the `slice` page's Playtest section and the vision's kill condition. Then at least one `review` item with scope `slice` for each of `creative`, `art` and `feel` that is active, for example "a fresh capture reads as this game, not its genre default" (`creative`), "captures match the visual target" (`art`), "every core action meets its feel sheet" (`feel`).
 - **Production stage**: add items with scope `full` for what only the whole game can show, 10 proxy and human items at most in all, and at least one `review` item with scope `full` for each active role.
-- Each item is observable within one play session. Make it a **proxy** whenever a metric can stand for it ([fun-proxies.md](fun-proxies.md)); a **review** when the roles judge it on captures, strips, logs or bot traces against an anchor the person set; otherwise `human`. Only a proxy has `metric`, `threshold` and `how`. A review item names its `roles` and `taste`: `true` when calibration labels anchor the judgment (a look, a feel, identity, the first minute), `false` when a page rule or a measurement settles it, as for every `audio`, `narrative` and `design` item. How review items score is in the Vocabulary of `docs/agents/game.md`; the 10-item cap leaves them out.
+- Each item is observable within one play session. Make it a **proxy** whenever a metric can stand for it ([fun-proxies.md](fun-proxies.md)); a **review** when the roles judge it on captures, strips, logs or bot traces against an anchor the person set; otherwise `human`. Only a proxy has `metric`, `threshold` and `how`. A review item names its `roles` and its `taste` flag; the Vocabulary of `docs/agents/game.md` defines `taste` and how review items score. The 10-item cap leaves them out.
 
 In interactive mode, the user approves the checklist.
 

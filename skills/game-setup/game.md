@@ -118,11 +118,11 @@ The wiki is the living description of the game: precise enough to plan, build an
             "reserved": ["self: vermilion"], "lost": ["Neon arcade: fights the duel's quiet"]}
   },
   "invariants": ["Every hit reads as one ink stroke", "One button dashes"],
-  "roles_off": {"audio": "the game is played muted in class"}
+  "roles_off": {}
 }
 ```
 
-- **Quality bars** are `placeholder`, `representative`, `production` or `final`, one per aspect. The roles read their bar here: `art` → `art`, `feel` → `feel`, `audio` → `audio`, `ux` → `ui` (HUD, contrast, text, settings) and `onboarding` (the first minute), `narrative` → `ui`. Production features use the slice's bar. The `slice` page can narrow a bar: the art bar for the visual target's area, with the rest of the slice a step lower.
+- **Quality bars** are `placeholder`, `representative`, `production` or `final`, one per aspect. The roles read their bar here: `art` → `art`, `feel` → `feel`, `audio` → `audio`, `ux` → `ui` (HUD, contrast, text, settings) and `onboarding` (the first minute), `narrative` → `ui`. Production features use the slice's bar. Reviewers read only these values. When the `slice` page's Means column narrows a bar to an area (the art bar to the visual target's area, the rest of the slice a step lower), game-plan's acceptance per feature carries the narrowing.
 - `north_stars`: one object per active role, set with the person in ideation by the role skill's `north-star` mode. Each has a `statement` and at least two `references` ("title: what we take"). Beyond those:
   - `creative`: `genre_default`, `departure`;
   - `design`: `variety` (what makes runs or matches differ);
@@ -132,7 +132,7 @@ The wiki is the living description of the game: precise enough to plan, build an
   - `narrative`: `setting`, `tone_words` (three), `anti_words` (three), `ui_voice`, `story_light`;
   - `ux`: `player`, `input`, `session`, `access`.
 - `invariants`: two to five identity invariants, what polish must never remove, set by `creative` last in ideation. They are the same strings as the vision page's "Identity invariants"; only the person changes them.
-- `roles_off`: `{"<role>": "<the reason the person accepted>"}`.
+- `roles_off`: `{"<role>": "<the reason the person accepted>"}`, for example `{"audio": "the game is played muted in class"}`; `{}` when every role is on.
 
 Of these, the ideation gate checks the pillars, anti-pillars, kill condition, directions, the slice's test question and bars, each active role's `statement` and `references`, art's `directions` and `choice`, feel's `actions`, and the invariants. The other north-star fields are their role skills' to fill.
 
@@ -156,7 +156,7 @@ Of these, the ideation gate checks the pillars, anti-pillars, kill condition, di
 
 ## Roles
 
-Every taste aspect of the game has an owner, its **role**. A role sets a north star with the person in ideation, keeps its pages, brings its challenges to the brainstorm topics it is on, and reviews the running game. Its process lives in the role skill `game-role-<role>`; a thin agent of the same name runs it in parallel for game-review and game-research. Roles sharpen the person's questions and challenge their answers; they never answer for the person.
+Every taste aspect of the game has an owner, its **role**. A role sets a north star with the person in ideation, keeps its pages, brings its challenges to the brainstorm topics it is on, and reviews the running game. Its process lives in the role skill `game-role-<role>`; an agent named by its role id (`agents/<role>.md`) runs it in parallel for game-review and game-research. Roles sharpen the person's questions and challenge their answers; they never answer for the person.
 
 | Role | Owns | Its pages |
 | --- | --- | --- |
@@ -203,7 +203,7 @@ Topics and features get a `roles` list of role ids, set by whoever creates them:
 - <date> <target> <kind>: <what> (why: <their reason>)
 ```
 
-Kinds: `overruled` (the person set aside one of the role's notes, or changed a decision of creative's), `pick` (an A/B pick), `label` (a calibration label's reason, for `art`, `ux` and `creative` from stills, `feel` from strips). A north-star mode records the person's picks the same way, target `ideation`.
+Kinds: `overruled` (the person set aside one of the role's notes, or changed a decision of creative's), `pick` (an A/B pick), `label` (a calibration label's reason, for `art`, `ux` and `creative` from stills, `feel` from strips). In ideation, `narrative`'s north-star mode also records there which sample strings the person picked, and why.
 
 ## Research
 
@@ -280,7 +280,7 @@ A game design document for people, kept next to the tasks in the docs place `doc
 | `docs/game/research/` | `references.json`, `homework.json`, and per reference `refs/<id>/` (see Research) | game-research; ideation opens references |
 | `docs/game/references/` | images the person gives as references | ideation |
 | `docs/game/reviews/<target>/` | the roles' review records, their inputs and the decisions (see Reviews) | game-review |
-| `docs/game/roles/<role>.md` | role memory: what the person taught each role | game-review; the roles' north-star modes |
+| `docs/game/roles/<role>.md` | role memory: what the person taught each role | game-review; `narrative`'s north-star mode |
 | `docs/game/calibration/labels.json` | the person's calibration labels | the person, through a `calibrate` entry |
 | `docs/game/fun-checklist.json` | fun checklist | game-consolidate |
 | `docs/game/keep.json` | what playtests and people said to keep, with pinned tuning values | game-verdict, game-gdd |
@@ -310,7 +310,7 @@ Decisions are ADRs and game terms live in `CONTEXT.md`, both where `docs/agents/
 - **Fun checklist**: statements that are true when the game is fun, each observable in one play session, with a `scope`: `core-loop`, `slice` or `full`, and a `kind`:
   - **proxy**: a metric, threshold and method a bot run or replay can measure;
   - **human**: needs a person;
-  - **review**: judged by the named `roles` from this build's review records, with `taste: true` when it judges taste that calibration anchors (a look, a feel, identity), else `false`. It `fail`s when a role's review has an anchored note whose `item` is this one; it is `not-assessed` when a review wasn't independent or was not assessed, or when it is a taste item for `creative`, `art`, `feel` or `ux` and no calibration labels exist yet; otherwise it `pass`es. Unanchored notes never change its score.
+  - **review**: judged by the named `roles` from this build's review records, with `taste: true` when calibration labels anchor its judgment (a look, a feel, identity, the first minute), else `false`, as for every `audio`, `narrative` and `design` item, whose judgments a page rule or a measurement settles. It `fail`s when a role's review has an anchored note whose `item` is this one; it is `not-assessed` when a review wasn't independent or was not assessed, or when it is a taste item for `creative`, `art`, `feel` or `ux` and no calibration labels exist yet; otherwise it `pass`es. Unanchored notes never change its score.
 
   The checklist's 10-item cap counts only proxy and human items.
 - **Richness targets**: `richness.json` targets `{id, aspect, scope, statement, metric, threshold, how}` with `scope` `slice` or `full`; the full game needs at least one per aspect: **depth** (systems that change each other), **breadth** (distinct content), **variety** (playthroughs that differ).

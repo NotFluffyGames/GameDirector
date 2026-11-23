@@ -30,7 +30,7 @@ What the full game has that the slice leaves out, by name, so nobody builds it e
 | UI | representative | |
 | Onboarding | representative | a new player gets going without help |
 
-Each bar is `placeholder`, `representative`, `production` or `final`, chosen by the user; the bars above are the recommendation. A slice that leaves art or audio at placeholder can't show whether the game will look and sound right. The roles review against these bars: art reads Art, feel Game feel, audio Audio, ux UI and Onboarding, narrative UI. The Means column narrows a bar to an area, as the Art row does.
+Each bar is `placeholder`, `representative`, `production` or `final`, chosen by the user; the bars above are the recommendation. A slice that leaves art or audio at placeholder can't show whether the game will look and sound right. The roles review against these bars as `vision.json` holds them: art reads Art, feel Game feel, audio Audio, ux UI and Onboarding, narrative UI. The Means column narrows a bar to an area, as the Art row does, and game-plan's acceptance per feature carries the narrowing.
 
 ## Playtest
 
