@@ -1,0 +1,5 @@
+interface:
+  display_name: "Art Role"
+  short_description: "Art director: art bible, visual target, palette and cohesion"
+policy:
+  allow_implicit_invocation: false

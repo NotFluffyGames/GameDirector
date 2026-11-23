@@ -28,6 +28,9 @@
     "./skills/game-build",
     "./skills/game-verdict",
     "./skills/game-polish",
-    "./skills/game-role-creative"
+    "./skills/game-role-creative",
+    "./skills/game-role-design",
+    "./skills/game-role-feel",
+    "./skills/game-role-art"
   ]
 }
