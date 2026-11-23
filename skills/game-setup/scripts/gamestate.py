@@ -88,7 +88,10 @@ IMAGE_TYPES = (".png", ".jpg", ".jpeg", ".webp")
 PAGE_ROLES = ("feel", "art", "audio", "narrative", "ux")  # roles whose page ideation seeds a slice topic for
 NICE_RESERVE = 10  # sessions kept back for verdicts and polish before nice features are built
 
-CURRENT_VERSION = 6
+QUEUE_KINDS = ["playtest", "calibrate", "compare"]
+TARGETS = ["visual", "feel"]  # a feature's target: the visual look or the feel the slice is built to fix
+
+CURRENT_VERSION = 7
 # from_version -> migrate(game) -> notes; brings game.state to from_version + 1. Write files with
 # game._write, so `upgrade` commits them.
 # Empty so far: a game past setup can't be upgraded until a release adds entries.
@@ -574,6 +577,7 @@ class Game:
         errs += self._vision_shape()
         errs += self._check_keep()
         errs += self._check_reviews()
+        errs += self._check_labels()
         errs += self._check_research()
         if st.get("phase") == "research":  # a role that lost its reference is a fix: step
             errs += self._reference_coverage()
@@ -584,6 +588,10 @@ class Game:
                 errs.append("human_queue entries need id and what")
             if e.get("kind") == "playtest" and not (e.get("scope") in SCOPES and e.get("answers")):
                 errs.append(f"human_queue {e.get('id')}: a playtest entry needs scope in {SCOPES} and answers")
+            if e.get("kind") == "calibrate" and not (e.get("how") and e.get("answers")):
+                errs.append(f"human_queue {e.get('id')}: a calibrate entry needs how and answers")
+            if e.get("kind") == "compare" and not (e.get("how") and e.get("answers") and e.get("unblocks")):
+                errs.append(f"human_queue {e.get('id')}: a compare entry needs how, answers and unblocks")
         for v in st.get("verdicts", []):
             if v.get("outcome") not in OUTCOMES or not v.get("adr") or v.get("scope") not in SCOPES:
                 errs.append(f"verdict {v.get('scope')}: needs scope in {SCOPES}, outcome in {OUTCOMES} and an adr path")
@@ -630,12 +638,41 @@ class Game:
             pages = f.get("pages", [])
             bad = self.page_list(fid, pages)
             errs += bad or [f"{fid}: page '{p}' is not in wiki.json" for p in pages if p not in page_ids]
+            if "target" in f and f["target"] not in TARGETS:
+                errs.append(f"{fid}: target must be one of {TARGETS}")
             roles = f.get("roles", [])
             errs += self._check_roles(fid, roles, on_feature=True)
             if not roles:
                 taste = {p["id"] for p in self.wiki_pages() if p.get("area") in TASTE_AREAS}
                 if verify.get("kind") == "capture" or (not bad and taste & set(pages)):
                     errs.append(f"{fid}: visible work needs roles (pages in {TASTE_AREAS} or verify kind capture)")
+        if (any(f.get("passes") and f.get("target") == "visual" for f in self.items())
+                and not (self.root / LABELS).exists()
+                and not any(e.get("kind") == "calibrate" for e in self.queue())):
+            errs.append("the visual target passes: queue a calibrate entry for a person (kind calibrate)")
+        return errs
+
+    def _check_labels(self):
+        path = self.root / LABELS
+        if not path.is_file():
+            return []
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except ValueError:
+            return ["calibration labels: not valid JSON"]
+        if not isinstance(data, dict) or not isinstance(data.get("labels"), list):
+            return ["calibration labels: must be an object with a labels list"]
+        errs = []
+        for n, label in enumerate(data["labels"]):
+            if not isinstance(label, dict):
+                errs.append(f"calibration labels: entry {n} must be an object")
+                continue
+            if not label.get("capture"):
+                errs.append(f"calibration labels: entry {n} needs a capture")
+            if not isinstance(label.get("ours"), bool):
+                errs.append(f"calibration labels: entry {n} needs ours true or false")
+            if not (isinstance(label.get("why"), str) and label["why"].strip()):
+                errs.append(f"calibration labels: entry {n} needs a why")
         return errs
 
     def _check_targets(self):
@@ -1235,6 +1272,12 @@ class Game:
             why.append(f"no must feature in milestone '{SLICE_MS[0]}'")
         if not slice_stage and not any(f.get("tier") == "must" for f in build):
             why.append("no must feature in the production milestones")
+        if slice_stage:
+            for target, role, ms in (("visual", "art", SLICE_MS[1]), ("feel", "feel", SLICE_MS[0])):
+                if role in self.active_roles() and not any(
+                        f.get("tier") == "must" and f.get("milestone") == ms and f.get("target") == target
+                        for f in build):
+                    why.append(f"no must feature with target {target} in milestone {ms}")
         why += [f"{f['id']}: no tickets" for f in build if not f.get("tickets")]
         why += [f"{f['id']}: no wiki pages it implements" for f in build if f.get("tier") == "must" and not f.get("pages")]
         measuring = SLICE_MS if slice_stage else self.build_ms()
@@ -1543,6 +1586,10 @@ class Game:
                 return action
         if phase == "verdict":
             entry = self.playtest_entry(st.get("verdict_scope"))
+            calibrate = next((e for e in self.queue() if e.get("kind") == "calibrate"), None)
+            if calibrate and st.get("verdict_scope") == "slice" and not (self.root / LABELS).exists():
+                return (f"stop: waiting for calibration: a person labels the kit ({calibrate['how']}) "
+                        f"into {LABELS}; then run /game-next")
             if entry and (self.root / entry["answers"]).exists():
                 return f"game-verdict {st['verdict_scope']} answers {entry['answers']}"
             if entry and st.get("verdict_scope") == "slice":
@@ -1713,8 +1760,9 @@ def main(argv):
         st["task"] = None
         if st["phase"] == "verdict":  # answers read by this verdict are consumed with it
             st["human_queue"] = [e for e in st["human_queue"] if not (
-                e.get("kind") == "playtest" and e.get("scope") == st.get("verdict_scope")
-                and (game.root / e.get("answers", "")).is_file())]
+                (e.get("kind") == "playtest" and e.get("scope") == st.get("verdict_scope")
+                 and (game.root / e.get("answers", "")).is_file())
+                or (e.get("kind") == "calibrate" and (game.root / LABELS).is_file()))]
         game.save_state(f"complete {done}")
         print(f"complete: {done}\nnext: {game.next_action()}")
         return 0
