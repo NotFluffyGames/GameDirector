@@ -64,8 +64,8 @@ MIN_SEED_TOPICS = 5
 NICE_RESERVE = 10  # sessions kept back for verdicts and polish before nice features are built
 
 CURRENT_VERSION = 6
-# from_version -> migrate(game) -> notes; brings game.state to from_version + 1.
-# Empty so far: a game past setup can't be upgraded until a release adds entries.
+# from_version -> migrate(game) -> notes; brings game.state to from_version + 1. Write files with
+# game._write, so `upgrade` commits them. Empty so far: a game past setup can't be upgraded until a release adds entries.
 MIGRATIONS = {}
 
 DEFAULT_STATE = {
@@ -116,6 +116,10 @@ def copy(data):
     return json.loads(json.dumps(data))
 
 
+def whole(value):
+    return isinstance(value, int) and not isinstance(value, bool)
+
+
 class UpgradeError(Exception):
     pass
 
@@ -132,6 +136,7 @@ class Game:
         self.keep_path = self.dir / "keep.json"
         self.wiki_index_path = self.dir / "wiki.json"
         self.vision_path = self.dir / "vision.json"
+        self.written = []  # every file this run wrote, so the command that wrote them can commit them
         self.state = self._load(self.state_path, DEFAULT_STATE)
         self.found_version = self._found_version()
         self.features = self._load(self.features_path, DEFAULT_FEATURES)
@@ -167,14 +172,19 @@ class Game:
         return merged
 
     def _found_version(self):
-        """The version written in state.json (1 when absent); _load overwrites it with the default."""
+        """The version written in state.json: 1 when absent, None without a state.json (_load fills in the default)."""
         if not self.state_path.exists():
-            return CURRENT_VERSION
-        return json.loads(self.state_path.read_text(encoding="utf-8")).get("version", 1)
+            return None
+        return self._read(self.state_path).get("version", 1)
+
+    def older(self):
+        """The game's state predates this tool."""
+        return whole(self.found_version) and self.found_version < CURRENT_VERSION
 
     # ---------- persistence ----------
     def _write(self, path, data):
         path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+        self.written.append(path)
 
     def _git(self, *args):
         return subprocess.run(["git", *args], cwd=self.root, capture_output=True, text=True)
@@ -211,27 +221,43 @@ class Game:
         return created
 
     def upgrade(self):
-        """Bring the state to CURRENT_VERSION; returns notes. Raises UpgradeError when it can't."""
+        """Bring the state to CURRENT_VERSION; returns notes. Raises UpgradeError, changing nothing, when it can't."""
         old = self.found_version
-        if old >= CURRENT_VERSION:
+        if old is None:
+            raise UpgradeError("no game state here (docs/game/state.json is missing): nothing to upgrade; "
+                               "set the game up with game-setup, which runs `gamestate.py init`")
+        if not whole(old):
+            raise UpgradeError(f"docs/game/state.json version {old!r} is not a whole number: set it to the "
+                               "version of the tool that wrote the game (a missing version counts as 1)")
+        if old > CURRENT_VERSION:
+            raise UpgradeError(f"this game is at version {old}, newer than this tool ({CURRENT_VERSION}): "
+                               "nothing changed; update the plugin and use its gamestate.py")
+        if old == CURRENT_VERSION:
             return [f"already at version {CURRENT_VERSION}"]
         if self.state.get("phase") == "setup":
             fresh = copy(DEFAULT_STATE)
-            for key in ("limits", "counters", "human_queue"):
+            for key in ("limits", "counters", "human_queue", "adapter_verified"):
                 fresh[key] = self.state.get(key, fresh[key])
             fresh["task"] = "game-setup upgrade"
             self.state.clear()
             self.state.update(fresh)
             self._write(self.state_path, self.state)
+            self.features["milestones"] = list(MILESTONES)  # no features exist yet at setup
+            self._write(self.features_path, self.features)
+            self.found_version = CURRENT_VERSION
             notes = [f"version {old} -> {CURRENT_VERSION}"]
             return notes + [f"created {path}" for path in self.write_missing_files()]
+        missing = [v for v in range(old, CURRENT_VERSION) if v not in MIGRATIONS]
+        if missing:
+            raise UpgradeError(f"upgrade from version {old} in phase {self.state.get('phase')} isn't supported "
+                               f"(no migration from version {missing[0]}): nothing changed; finish this game with "
+                               f"the plugin release it was made with")
         notes = []
         for v in range(old, CURRENT_VERSION):
-            if v not in MIGRATIONS:
-                raise UpgradeError(f"upgrade from version {v} in phase {self.state.get('phase')} "
-                                   f"isn't supported: no migration from version {v}")
             notes += MIGRATIONS[v](self)
             self.state["version"] = v + 1
+        self._write(self.state_path, self.state)
+        self.found_version = CURRENT_VERSION
         return [f"version {old} -> {CURRENT_VERSION}"] + notes
 
     def save_state(self, message):
@@ -445,6 +471,9 @@ class Game:
         st = self.state
         if st.get("phase") not in PHASES:
             errs.append(f"state.phase '{st.get('phase')}' is not one of {PHASES}")
+        if self.found_version is not None and not whole(self.found_version):
+            errs.append(f"state.json version {self.found_version!r} is not a whole number: set it to the version "
+                        "of the tool that wrote the game")
         for key in ("max_adjusts", "max_restarts", "max_attempts", "max_repeats"):
             if not isinstance(st["limits"].get(key), int):
                 errs.append(f"state.limits.{key} must be an integer")
@@ -1018,7 +1047,7 @@ class Game:
                 return f"stop: {st.get('stop_reason') or 'waiting on the human queue'} ({len(self.queue(False))} open)"
             action = "game-gdd"  # people read the GDD while the run waits
         else:
-            errs = self.check()
+            errs = [] if phase == "setup" and self.older() else self.check()  # an old game is upgraded, then checked
             action = "fix: " + "; ".join(errs[:3]) if errs else self._work(no_user)
             if action == "advance" or action.startswith("stop:"):
                 return action
@@ -1056,6 +1085,10 @@ class Game:
                 return (f"stop: waiting for the slice playtest: a person plays the build with the kit "
                         f"({entry.get('how', 'see the human queue')}) and writes {entry['answers']}; then run /game-next")
         task = st.get("task")
+        if phase == "setup" and self.older():
+            task = "game-setup upgrade"
+        elif phase in ("setup", "ideation") and not task and self.gate():
+            task = f"game-{phase}"  # conversations, even when no task was recorded
         if task and task.startswith(("game-ideation", "game-setup")):
             if not no_user:
                 return f"with-user: {task}"
@@ -1189,10 +1222,9 @@ def main(argv):
         except UpgradeError as e:
             print(e)
             return 1
-        if game.found_version < CURRENT_VERSION:
-            game._write(game.state_path, game.state)
-            new = [game.root / n[len("created "):] for n in notes if n.startswith("created ")]
-            game.commit(f"upgrade to version {CURRENT_VERSION}", game.state_path, *new)
+        created = [game.root / n[len("created "):] for n in notes if n.startswith("created ")]
+        if game.written or created:  # everything the upgrade wrote, so a migration's own files are committed too
+            game.commit(f"upgrade to version {CURRENT_VERSION}", *dict.fromkeys(game.written + created))
         print("\n".join(notes))
         print(f"next: {game.next_action()}")
         return 0

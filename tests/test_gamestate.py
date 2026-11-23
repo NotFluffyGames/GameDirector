@@ -73,6 +73,54 @@ RICHNESS = {"targets": [
 EVIDENCE = "docs/game/playtests/evidence.md"
 ANSWERS = "docs/game/playtests/slice/answers.md"
 
+# EveLikeBrawl's real files: a game set up with release 0.3.0 (state version 3), still at setup, no task.
+EVE_STATE = """{
+  "version": 3,
+  "phase": "setup",
+  "milestone": null,
+  "task": null,
+  "verdict_scope": null,
+  "verdict_index": 0,
+  "passed_verdicts": [],
+  "checkpoint_due": false,
+  "adapter_verified": false,
+  "restart_adr": null,
+  "resume": null,
+  "stop_reason": null,
+  "counters": {
+    "sessions": 0,
+    "adjusts": 0,
+    "restarts": 0
+  },
+  "limits": {
+    "budget_sessions": 150,
+    "max_adjusts": 2,
+    "max_restarts": 1,
+    "max_attempts": 3,
+    "max_repeats": 5
+  },
+  "attempts": {},
+  "last_dispatch": {
+    "action": null,
+    "repeats": 0
+  },
+  "human_queue": [],
+  "verdicts": []
+}
+"""
+EVE_FEATURES = """{
+  "milestones": [
+    "core-loop",
+    "systems",
+    "content",
+    "verdict-build",
+    "polish"
+  ],
+  "features": []
+}
+"""
+MILESTONES = ["core-loop", "slice", "systems", "content", "verdict-build", "polish"]
+
 
 def feature(fid, milestone, tier="must", kind="test", measures=()):
     return {"id": fid, "title": f"feature {fid}", "pillar": "P1", "tier": tier, "milestone": milestone,
@@ -717,7 +765,7 @@ class GameRun(unittest.TestCase):
             self.sync()
 
     def test_the_gdd_is_never_stale_while_the_index_has_no_pages(self):
-        self.to_ideation()  # no wiki.json yet, and the GDD was never synced
+        self.to_ideation()  # init wrote an empty wiki.json, and the GDD was never synced
         self.assertIn("human GDD: in sync", self.tool("status"))
         self.write("docs/game/own-calls.md", "| today | F1 | a call |\n")
         self.write("docs/game/wiki.json", json.dumps({"pages": []}))
@@ -747,16 +795,91 @@ class GameRun(unittest.TestCase):
 
     def test_upgrade_resets_an_old_game_still_at_setup(self):
         self.tool("init")
-        self.edit("state.json", lambda s: (s.pop("stage"), s.update(version=3, phase="setup", task=None)))
+        kept = {"limits": dict(self.load("state.json")["limits"], budget_sessions=80),
+                "counters": {"sessions": 4, "brainstorm_sessions": 0, "adjusts": 0, "restarts": 0},
+                "human_queue": [{"id": "H1", "what": "make a ClickUp space"}], "adapter_verified": True}
+        self.edit("state.json", lambda s: (s.pop("stage"), s.update(version=3, phase="setup", task=None, **kept)))
+        self.edit("features.json", lambda d: d.update(milestones=["core-loop", "systems", "content", "verdict-build",
+                                                                  "polish"]))
         (self.game / "vision.json").unlink()
         self.commit()
         out = self.tool("upgrade")
         self.assertIn("version 3 -> 6", out)
         s = self.load("state.json")
         self.assertEqual((s["version"], s["phase"], s["task"], s["stage"]), (6, "setup", "game-setup upgrade", "slice"))
+        self.assertEqual({k: s[k] for k in kept}, kept)
+        self.assertEqual(self.load("features.json")["milestones"], MILESTONES)
         self.assertTrue((self.game / "vision.json").exists())
+        self.assertTrue(self.clean(), self.git("status", "--porcelain"))
         self.assertEqual(self.next(), "with-user: game-setup upgrade")
         self.assertIn("already at version 6", self.tool("upgrade"))
+
+    def test_upgrade_brings_eve_like_brawl_up_to_date(self):
+        """The real 0.3.0 game: the plugin's tool upgrades it before its old copy is replaced."""
+        self.write("docs/game/state.json", EVE_STATE)
+        self.write("docs/game/features.json", EVE_FEATURES)
+        self.write("docs/game/fun-checklist.json", '{\n  "items": []\n}\n')
+        self.write("docs/game/richness.json", '{\n  "targets": []\n}\n')
+        self.write("docs/game/gamestate.py", "# the 0.3.0 tool\n")
+        self.write("docs/agents/game.md", "# Game workflow\n")
+        self.commit()
+        self.assertEqual(self.plugin("status").split("next: ", 1)[1].strip(), "with-user: game-setup upgrade")
+        self.assertIn("to do 'game-setup upgrade' together", self.plugin("status", "--no-user"))
+        self.assertIn("version 3 -> 6", self.plugin("upgrade"))
+        s, old = self.load("state.json"), json.loads(EVE_STATE)
+        self.assertEqual((s["version"], s["phase"], s["task"]), (6, "setup", "game-setup upgrade"))
+        self.assertEqual(s["human_queue"], old["human_queue"])
+        self.assertEqual(s["adapter_verified"], old["adapter_verified"])
+        self.assertEqual({k: s["limits"][k] for k in old["limits"]}, old["limits"])
+        self.assertEqual({k: s["counters"][k] for k in old["counters"]}, old["counters"])
+        self.assertEqual(self.load("features.json")["milestones"], MILESTONES)
+        self.assertTrue(self.clean(), self.git("status", "--porcelain"))
+        self.assertEqual(self.plugin("status").split("next: ", 1)[1].strip(), "with-user: game-setup upgrade")
+        self.edit("features.json", lambda d: d["features"].append(feature("F1", "slice")))
+        self.assertNotIn("milestone 'slice' is not in features.milestones", self.plugin("check", ok=False))
+
+    def test_upgrade_needs_game_state_and_never_downgrades(self):
+        out = self.tool("upgrade", ok=False)
+        self.assertIn("no game state", out)
+        self.assertIn("init", out)
+        self.assertFalse((self.game / "state.json").exists())
+        self.tool("init")
+        self.edit("state.json", lambda s: s.update(version=7))
+        self.commit()
+        before = (self.game / "state.json").read_text()
+        self.assertIn("version 7, newer than this tool (6)", self.tool("upgrade", ok=False))
+        self.assertEqual((self.game / "state.json").read_text(), before)
+        self.assertTrue(self.clean())
+        self.edit("state.json", lambda s: s.update(version="3"))
+        self.commit()
+        out = self.tool("upgrade", ok=False)
+        self.assertNotIn("Traceback", out)
+        self.assertIn("version '3' is not a whole number", out)
+        out = self.tool("status")
+        self.assertNotIn("Traceback", out)
+        self.assertIn("next: fix: state.json version '3' is not a whole number", out)
+
+    def test_setup_and_ideation_without_a_task_are_conversations(self):
+        self.tool("init")
+        self.edit("state.json", lambda s: s.update(task=None))
+        self.commit()
+        self.assertEqual(self.next(), "with-user: game-setup")
+        self.assertIn("to do 'game-setup' together", self.next("--no-user"))
+        self.edit("state.json", lambda s: s.update(version=3))
+        self.commit()
+        self.assertEqual(self.next(), "with-user: game-setup upgrade")
+        self.assertIn("stop: waiting for a person", self.next("--no-user"))
+        self.assertIn("to do 'game-setup upgrade' together", self.next("--no-user"))
+        self.edit("state.json", lambda s: s.update(version=6))
+        (self.root / "docs" / "agents" / "game.md").write_text("# Game workflow\n")
+        (self.root / "docs" / "agents" / "docs.md").write_text("# Docs\n")
+        self.edit("state.json", lambda s: s.update(docs_verified={"place": "ClickUp doc", "date": "2026-11-22"}))
+        self.commit()
+        self.tool("advance")
+        self.edit("state.json", lambda s: s.update(task=None))
+        self.commit()
+        self.assertEqual(self.next(), "with-user: game-ideation")
+        self.assertIn("to do 'game-ideation' together", self.next("--no-user"))
 
     def test_upgrade_refuses_an_old_game_mid_run(self):
         self.to_plan()
