@@ -16,7 +16,7 @@ Read the roles' pages (`feel`, `art-bible`, `audio`, `tone-and-world`, `screens`
 
 ## 2. Write the polish features
 
-Work through the checklist one section at a time; when this task resumes in a new session, start at the first section with no features yet. Turn every applicable line into features in `docs/game/features.json` (milestone `polish`), each with a pillar, tier (`must`, or `nice` for a line the game can ship without), the wiki `pages` it implements, acceptance and verify method, then ticket them as game-plan's step 5 describes. Specifically:
+Work through the checklist one section at a time; when this task resumes in a new session, start at the first section with no features yet. Turn every applicable line into features in `docs/game/features.json` (milestone `polish`), each with a pillar, tier (`must`, or `nice` for a line the game can ship without; the Bugs, Packaged build, and Credits and licenses lines are always `must`, so every polish pass has a `must` feature, which `complete` asks for), the wiki `pages` it implements, acceptance and verify method, then ticket them as game-plan's step 5 describes. Specifically:
 
 - one feel feature per core action on the `feel` page;
 - one final-asset feature per group of placeholder assets in assets.md, citing the art bible, or the `audio` page for sounds;
@@ -30,7 +30,7 @@ Each feature also gets:
 
 A switched-off role's section doesn't apply (`roles_off`), except the lines the checklist marks **kept**: the game needs them whoever owns them, so their features carry `creative` and the roles of what they visibly change, and no review by the role that is off. Lines that don't apply get one sentence each in the progress entry saying why.
 
-**Done when** every applicable checklist line maps to a feature with a ticket, every polish feature has its section's role (where it has one) and `creative` in `roles`, every taste call is verify `human` with its pairs named, and `gamestate.py check --since <base>` passes.
+**Done when** every applicable checklist line maps to a feature with a ticket, at least one polish feature is `must`, every polish feature has `creative` in `roles` and its section's role unless the section has no owner or the line is kept with its role off, every taste call is verify `human` with its pairs named, and `gamestate.py check --since <base>` passes.
 
 ## 3. Re-estimate and close
 

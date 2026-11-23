@@ -7,7 +7,7 @@ Each applicable line becomes a feature in the `polish` milestone. A section name
 The design role judges these at the final verdict, from bot traces, never on a feature: their features carry `creative` and the roles of what they visibly change.
 
 - **Balance**: every fun proxy and richness target passes with margin on the final content, re-measured with the verdict's bots. [bot]
-- **Bugs**: every open bug ticket fixed or cut; a 2-hour crash and softlock fuzz run clean. [bot]
+- **Bugs**: every open bug ticket fixed or cut; a 2-hour crash and softlock fuzz run clean. Always `must`. [bot]
 
 ## feel
 
@@ -48,5 +48,5 @@ The design role judges these at the final verdict, from bot traces, never on a f
 No role owns these: their features carry `creative` and the roles of what they visibly change.
 
 - **Performance**: frame time, load time, memory and build size within the budget ADR on each target platform, measured on the heaviest scene. [sim or capture]
-- **Packaged build**: the `package` command produces a build per target platform this machine can build for; each launches without dev tools and plays from title screen to the end of a session in a smoke run. [check]
-- **Credits and licenses**: a credits screen and a licenses file covering every sourced asset and dependency. [check]
+- **Packaged build** (always `must`): the `package` command produces a build per target platform this machine can build for; each launches without dev tools and plays from title screen to the end of a session in a smoke run. [check]
+- **Credits and licenses**: a credits screen and a licenses file covering every sourced asset and dependency. Always `must`. [check]

@@ -12,10 +12,10 @@ The task gives the scope:
 
 | Task | Scores | Notes |
 | --- | --- | --- |
-| `game-verdict core-loop` | `core-loop` fun items | on bots, before the slice is polished |
+| `game-verdict core-loop` | `core-loop` fun items | on bots, before the slice is polished; never waits for calibration |
 | `game-verdict slice` | `core-loop` and `slice` items, `slice` richness targets | the gate into production; waits for the calibration labels and a person's playtest, and checks the kill condition |
-| `game-verdict full` | every item and target | the unpolished full game |
-| `game-verdict final` | every item and target, plus the playable-build checks in step 1 | shipping it ends the run |
+| `game-verdict full` | every item and target | the unpolished full game; waits for the labels while a calibration kit is queued without them |
+| `game-verdict final` | every item and target, plus the playable-build checks in step 1 | shipping it ends the run; waits for queued A/B picks, and for the labels as `full` does |
 | `game-verdict <scope> answers <file>` | the human items, from a person's answers | Answers mode, at the end |
 
 The status tool only schedules a verdict once the scope's must features pass.
