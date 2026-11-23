@@ -26,7 +26,7 @@ Each feature also gets:
 
 - **`roles`**: its section's role, any other role whose aspect it changes ("Which roles are in charge" in `docs/agents/game.md`), and `creative`, which reviews every polish feature against the identity invariants. The design section and the playable build put no owner on their features: `design` judges its section at the final verdict, and no role owns the build.
 - **Acceptance** with its roles' measured checks, one per line with the page's number in it, as game-plan's step 4 writes them: a measured failure of it blocks a polish feature like any other.
-- **A/B picks** when its acceptance is a taste call (a grade, a feel retune, a mix): verify `human`, the acceptance naming what the person picks, and `how` naming the two to four before-and-after pairs to show, with the measured checks beside them. game-build makes the compare kit and queues its `compare` entry; the picks go into `docs/game/keep.json` and the role's memory, and the feature passes on them ([kits.md](../game-build/kits.md), "Compare kit").
+- **A/B picks** when its acceptance is a taste call (a grade, a feel retune, a mix): verify `human`, the acceptance naming what the person picks, and `how` naming the two to four before-and-after pairs to show, with the measured checks beside them. game-build makes the compare kit and queues its `compare` entry; once the person has picked, a picks session puts the picks into `docs/game/keep.json` and the role's memory, and the feature passes on them; the final verdict waits for the picks ([kits.md](../game-build/kits.md), "Compare kit").
 
 A switched-off role's section doesn't apply (`roles_off`). Lines that don't apply get one sentence each in the progress entry saying why.
 

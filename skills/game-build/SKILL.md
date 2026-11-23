@@ -1,6 +1,6 @@
 ---
 name: game-build
-description: Build and prove one feature of the game's definition of done in one fresh session - claim its ticket, build it test-first, run its verify method, have its roles review it, commit and record the evidence, and queue the person's calibration kit when the visual target passes. Runs after plan in the game-* workflow; also builds nice and polish features and fixes regressions.
+description: Build and prove one feature of the game's definition of done in one fresh session - claim its ticket, build it test-first, run its verify method, have its roles review it, commit and record the evidence, and queue the person's calibration kit when the visual target passes; also applies a person's A/B picks. Runs after plan in the game-* workflow; also builds nice and polish features and fixes regressions.
 disable-model-invocation: true
 ---
 
@@ -12,7 +12,7 @@ One session, one feature. Read `docs/agents/game.md` first and follow its sessio
 
 - The feature the task names (`game-build F012 …`). If its ticket is blocked in the tracker, take the first alternative the task lists whose ticket isn't.
 
-Claim the ticket as `docs/agents/issue-tracker.md` describes. Read the ticket, the feature, the wiki `pages` it implements (ids in `docs/game/wiki.json`, read through the docs place), `CONTEXT.md`, the ADRs those pages link, and the engine-notes.md entries for the commands you will run. A feature that was tried before has notes on its ticket: start from them. A polish feature verified by A/B picks takes two sessions: [kits.md](kits.md) ("Compare kit") says what each does.
+Claim the ticket as `docs/agents/issue-tracker.md` describes. Read the ticket, the feature, the wiki `pages` it implements (ids in `docs/game/wiki.json`, read through the docs place), `CONTEXT.md`, the ADRs those pages link, and the engine-notes.md entries for the commands you will run. A feature that was tried before has notes on its ticket: start from them. A polish feature verified by A/B picks takes two sessions, the second a task ending `picks <answers>`: [kits.md](kits.md) ("Compare kit") says what each does.
 
 **Done when** you can state the acceptance criteria and the exact verify command you will run at the end.
 
@@ -50,13 +50,13 @@ Red: run the `diagnosing-bugs` loop, fix, verify again.
 
 ## 5. Record
 
-1. In `features.json`, set `passes: true` and `evidence`: the command, the result (numbers, hash, artifact path) and the commit. When game-review fixed anything, the commit is its last fix commit and the result is that commit's verify run. A `human` verify leaves `passes` to the person, or to a compare kit's second session.
+1. In `features.json`, set `passes: true` and `evidence`: the command, the result (numbers, hash, artifact path) and the commit. When game-review fixed anything, the commit is its last fix commit and the result is that commit's verify run. A `human` verify leaves `passes` to the person, or to the A/B picks session.
 2. **Own calls**: for every choice a player could notice that no page specified (a timing, a number, a behaviour, a visual), append a row to `docs/game/own-calls.md` (date, feature, the call, the page now stating it). People see them in the GDD and keep or change each.
-3. **The visual target** (`target: visual`) passing: queue the person's calibration kit as [kits.md](kits.md) ("Calibration kit") says, in this step's commit.
+3. **Calibration**: when this feature is the kit's trigger (the visual target; with `art` off, the feel target; with `feel` off too, the first slice feature with `roles`), queue the person's calibration kit as [kits.md](kits.md) ("Calibration kit") says, in this step's commit.
 4. Close the ticket, commit with your drafts, append the progress entry.
 5. Write each of your drafts to its page in the docs place, last; in the pages commit, record each page's new `version` and `updated` in `docs/game/wiki.json` and delete the drafts.
 
-**Done when** `gamestate.py check --since <base>` passes on the final commit, every page fix is written with its `wiki.json` entry committed and its draft gone, and a visual target that passed has its `calibrate` entry committed, unless labels for the current art direction already exist.
+**Done when** `gamestate.py check --since <base>` passes on the final commit, every page fix is written with its `wiki.json` entry committed and its draft gone, and a calibration trigger that passed has its `calibrate` entry committed, unless labels for the current art direction already exist.
 
 ## When the feature doesn't fit the session
 

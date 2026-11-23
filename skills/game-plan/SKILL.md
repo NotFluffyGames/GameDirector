@@ -132,4 +132,6 @@ The task names blocked features (a `blocked` reason, or `max_attempts` build ses
 - **cut** it with a reason, when it is not `must`;
 - **hand it over**: a human queue entry that `unblocks` it, and its ticket relabelled `ready-for-human`.
 
+A feature blocked in its A/B picks session loses its `compare` entry when you replace or cut it, so the run stops waiting for those picks.
+
 **Done when** no failing `must` feature named in the task is still blocked.

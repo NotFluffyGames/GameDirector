@@ -12,9 +12,9 @@ An unattended loop needs the agent's permissions pre-approved for this repo's bu
 
 Ideation and brainstorm topics always wait for a person: when the loop stops with `waiting for a person`, start a session yourself and run `/game-next`. Builds that don't depend on the open topic carry on unattended until nothing else is left.
 
-Two of the person's short moments stop the loop too, each with its own stop line saying what to do:
+The person's short moments stop the loop too, each with its own stop line saying what to do:
 
 - **Research homework**: while an item in `docs/game/research/homework.json` is open, brainstorm waits (`stop: waiting for research homework`). Answer or skip each open item (on the homework page, on its ticket, or in a session with a person), then run `/game-next` yourself: its homework step folds the answers in before brainstorm.
 - **Calibration**: once the visual target passes, the slice verdict waits for the calibration labels (`stop: waiting for calibration`). Label the kit the stop names into `docs/game/calibration/labels.json`, commit, and run the loop again. Builds go on meanwhile; only the slice verdict waits.
-
-The slice playtest stops it the same way (`stop: waiting for the slice playtest`).
+- **The slice playtest** (`stop: waiting for the slice playtest`): play the build with the kit and write the answers file.
+- **A/B picks**: once nothing else in polish is left to build, the final verdict waits for the picks (`stop: waiting for A/B picks`). Write one pick per pair into the file the stop names, leave the queue entry, commit, and run the loop again: a build session applies them.

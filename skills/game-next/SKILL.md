@@ -53,7 +53,7 @@ While `next:` is `advance`, run `gamestate.py advance`. Then tell the user, brie
 - what this session did, with its evidence;
 - where the game stands: stage (slice or production) and phase, open topics, definition-of-done counts, the last verdict;
 - the next step from `next:`, and whether it needs them (`with-user:`) or could run unattended ([unattended.md](unattended.md));
-- for a stop: the stop line itself, on a line of its own starting with `stop:` (for example `stop: ClickUp docs unreachable`), then what it needs from them (answering or skipping the research homework, labelling the calibration kit, playing the slice and writing its answers, other playtest answers, the human queue, a raised limit, a person for a conversation step, a decision after a kill, an upgrade).
+- for a stop: the stop line itself, on a line of its own starting with `stop:` (for example `stop: ClickUp docs unreachable`), then what it needs from them (answering or skipping the research homework, labelling the calibration kit, playing the slice and writing its answers, making the A/B picks, other playtest answers, the human queue, a raised limit, a person for a conversation step, a decision after a kill, an upgrade).
 
 End with: **start a new session and run `/game-next`**. Do not start the next step here: each step gets a fresh session.
 
