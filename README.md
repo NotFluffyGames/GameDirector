@@ -131,7 +131,9 @@ Edit any of them; the skills read them fresh every session.
 ## Develop
 
 ```
-python3 -m unittest discover tests
+python3 tests/run.py
 ```
+
+That runs all tests in parallel (`-j N` sets the bucket count, extra arguments filter test ids by substring); `python3 -m unittest discover tests` runs them serially.
 
 `tests/test_skills.py` checks the skills themselves: packaging, links, a completion criterion on every step, real tool commands, and a skill for every step and mode the state tool can schedule. Edit skills following the `writing-for-agents` skill. The state schemas (`state.json`, `features.json`, `fun-checklist.json`, `richness.json`, `topics.json`, `keep.json`, `wiki.json`, `vision.json`) live in two places that must agree: `skills/game-setup/game.md` plus the templates, and `skills/game-setup/scripts/gamestate.py`.
