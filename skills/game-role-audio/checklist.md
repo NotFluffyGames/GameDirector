@@ -1,6 +1,6 @@
 # Audio: review checklist
 
-Unheard: say so in the `result` reason. Mark each line passed, a note, or `not-assessed` with the reason. In a feature review a note is `blocking` only when a measured check written into the feature's frozen acceptance fails at the quality bar in `vision.json` `slice.quality_bar`; every other note is `advisory`, and in a verdict or polish-scope review all are. An anchor (a chosen reference or a page rule) decides whether a note can fail an item through its `item`, never its severity. A `placeholder` bar gets no judgment of how a sound is made, and no loudness check. Read the `review` items that name `audio` first.
+Unheard: say so in the `result` reason. Mark each line passed, a note, or `not-assessed` with the reason. In a feature review a note is `blocking` only when a measured check written into the feature's frozen acceptance fails at the quality bar in `vision.json` `slice.quality_bar`; every other note is `advisory`, and in a verdict-scope review all are (a polish feature's review is a feature review). An anchor (a chosen reference or a page rule) decides whether a note can fail an item through its `item`, never its severity. A `placeholder` bar gets no judgment of how a sound is made, and no loudness check. Read the `review` items that name `audio` first.
 
 ## Checked first (from the event list, the log and the sound list)
 

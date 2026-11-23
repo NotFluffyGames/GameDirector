@@ -1,6 +1,6 @@
 # Narrative: review checklist
 
-Mark each line passed, a note, or `not-assessed` with the reason. In a feature review a note is `blocking` only when a measured check written into the feature's frozen acceptance fails at the quality bar in `vision.json` `slice.quality_bar`; every other note is `advisory`, and in a verdict or polish-scope review all are. A page rule is the anchor; it decides whether a note can fail an item through its `item`, never its severity. A `placeholder` bar gets no tone judgment of placeholder text. Read the `review` items that name `narrative` first.
+Mark each line passed, a note, or `not-assessed` with the reason. In a feature review a note is `blocking` only when a measured check written into the feature's frozen acceptance fails at the quality bar in `vision.json` `slice.quality_bar`; every other note is `advisory`, and in a verdict-scope review all are (a polish feature's review is a feature review). A page rule is the anchor; it decides whether a note can fail an item through its `item`, never its severity. A `placeholder` bar gets no tone judgment of placeholder text. Read the `review` items that name `narrative` first.
 
 ## Checked first (from the string tables)
 

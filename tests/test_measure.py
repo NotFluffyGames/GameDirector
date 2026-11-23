@@ -97,6 +97,23 @@ class Commands(MeasureCase):
             for c in rows[0][1][:3]:
                 self.assertGreaterEqual(c, 253)
 
+    def test_shrink_caps_the_longest_side_and_keeps_colour(self):
+        path = self.png("wide.png", [[px("#c03020")] * 2000] * 100)
+        out = self.dir / "small.png"
+        result = self.run_json("shrink", path, "--out", out)
+        self.assertEqual(result["size"], [1280, 64])
+        w, h, rows = measure.read_png(str(out))
+        self.assertEqual((w, h), (1280, 64))
+        self.assertEqual(rows[10][700], px("#c03020"))
+        self.run_json("shrink", path, "--out", out, "--max", 500)
+        self.assertEqual(measure.read_png(str(out))[:2], (500, 25))
+
+    def test_shrink_copies_a_small_image_at_its_size(self):
+        path = self.png("small.png", [[px("#000000"), px("#ffffff")]] * 3)
+        out = self.dir / "copy.png"
+        self.assertEqual(self.run_json("shrink", path, "--out", out)["size"], [2, 3])
+        self.assertEqual(measure.read_png(str(out))[2], measure.read_png(path)[2])
+
     def test_sheet_tiles_frames(self):
         colours = ["#ff0000", "#00ff00", "#0000ff", "#ffff00"]
         frames = [self.png(f"f{i}.png", [[px(c)] * 2] * 2) for i, c in enumerate(colours)]
@@ -229,6 +246,7 @@ class Corrupt(MeasureCase):
         blocker.write_text("x")
         self.assert_exits_2("derive", src, "--out", blocker / "sub")
         self.assert_exits_2("sheet", src, "--out", self.dir / "nodir" / "s.png")
+        self.assert_exits_2("shrink", src, "--out", self.dir / "nodir" / "s.png")
 
 
 if __name__ == "__main__":

@@ -1,6 +1,6 @@
 # Art: review checklist
 
-Mark each line passed, a note, or `not-assessed` with the reason. In a feature review a note is `blocking` only when a measured check written into the feature's frozen acceptance fails at the quality bar in `vision.json` `slice.quality_bar`; every other note is `advisory`, and in a verdict or polish-scope review all are. An anchor (a label, a chosen reference or a bible rule) decides whether a note can fail an item through its `item`, never its severity. A `placeholder` bar gets no palette or value checks. Read the `review` items that name `art` first.
+Mark each line passed, a note, or `not-assessed` with the reason. In a feature review a note is `blocking` only when a measured check written into the feature's frozen acceptance fails at the quality bar in `vision.json` `slice.quality_bar`; every other note is `advisory`, and in a verdict-scope review all are (a polish feature's review is a feature review). An anchor (a label, a chosen reference or a bible rule) decides whether a note can fail an item through its `item`, never its severity. A `placeholder` bar gets no palette or value checks. Read the `review` items that name `art` first.
 
 ## Checked first (with `measure.py`)
 

@@ -6,6 +6,7 @@ Usage: python3 measure.py <command> ...   (prints JSON to stdout; exit 2 with "m
   values PNG                                         luma histogram (Rec. 709, 10 bins) and midtone share
   contrast PNG --a x,y,w,h --b x,y,w,h               WCAG contrast ratio of two regions' mean luminance
   derive PNG --out DIR                               grayscale, thumb and three colour-blindness simulations
+  shrink PNG --out PNG [--max 1280]                  copy with the longest side at most --max (box average)
   sheet PNG... --out PNG [--cols 4]                  contact sheet of equal-size frames, row-major
 
 Reads PNG bit depth 8, colour types 0, 2, 3, 4, 6, no interlace. Writes 8-bit RGB or RGBA.
@@ -311,6 +312,15 @@ def cmd_derive(args):
     return {"written": written}
 
 
+def cmd_shrink(args):
+    width, height, rows = read_png(args.png)
+    if args.max < 1:
+        raise Bad("shrink needs --max of at least 1")
+    w, h, small = thumbnail(width, height, rows, longest=args.max)
+    write_png(args.out, w, h, small)
+    return {"written": args.out, "size": [w, h]}
+
+
 def cmd_sheet(args):
     frames = [read_png(p) for p in args.png]
     w, h = frames[0][:2]
@@ -348,6 +358,12 @@ def build_parser():
     p.add_argument("png")
     p.add_argument("--out", required=True)
     p.set_defaults(run=cmd_derive)
+    p = sub.add_parser("shrink")
+    p.add_argument("png")
+    p.add_argument("--out", required=True)
+    p.add_argument("--max", type=int, default=1280)
+    p.set_defaults(run=cmd_shrink)
+
     p = sub.add_parser("sheet")
     p.add_argument("png", nargs="+")
     p.add_argument("--out", required=True)
