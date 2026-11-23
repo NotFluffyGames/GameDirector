@@ -41,7 +41,7 @@ Every game-* session is a **fresh session** doing **one task**:
 2. Hand reading-heavy exploration to a subagent or the `research` skill, which returns a summary or writes notes to a file.
 3. When the step outgrows the session (a second unplanned subsystem appears, or you are past roughly half your context), split: write the remainder as new tickets, features or topics, commit what is green, stop. The next dispatch of the same task resumes from what is on disk.
 4. Leave the repo green: commit only work whose tests pass.
-5. **Keep the wiki true.** When your work changes what the game is or how it plays, update the wiki page that describes it in the same commit. When you meet a design question no page answers, open a topic for it rather than deciding silently.
+5. **Keep the wiki true.** When your work changes what the game is or how it plays, change the page that describes your change, as the last step; see The wiki. When you meet a design question no page answers, open a topic for it rather than deciding silently.
 6. End: `gamestate.py check --since <base>` passing; a commit; a progress entry of at most 10 lines appended to `docs/game/progress.md`; when the task is the phase's own (status shows `task:`) and every step is done, `gamestate.py complete`; and a short report: what changed, the **evidence**, what is left.
 
 **Asking the user.** Ask the person in the session directly, one question at a time, each with your recommended answer. In an unattended session (`--unattended`), take the recommended answer and record it in an ADR as an assumption.
@@ -78,9 +78,9 @@ The wiki is the living description of the game: precise enough to plan, build an
 
 - Link instead of repeating; split a page that passes about 200 lines; use the terms in `CONTEXT.md`.
 
-**Comments only.** People comment on wiki pages; sessions edit them. A person's comment becomes a topic or a note, never a silent change. Each session compares the pages' versions with `wiki.json` and, for a page edited directly, sets `flagged` and opens a topic to review it.
+**Comments only.** People comment on wiki pages; sessions edit them. A person's comment becomes a topic or a note, never a silent change. game-gdd compares each page's version in the docs tool with the `version` in `wiki.json`. A mismatch, including a missing page, becomes a topic to review it plus a `flagged` entry. `gamestate.py` only validates `flagged`.
 
-**Pages are written last.** A session finishes its work first, then writes the pages and updates `wiki.json` in the same commit. When the docs place can't be reached, the session stops with `stop: <tracker> docs unreachable` (naming the tracker from `issue-tracker.md`) rather than writing the pages elsewhere. Local files are used only when the user chose them in setup.
+**Pages are written last.** A session finishes its work, runs `check --since <base>` and commits its state and code. Only then does it write the pages in the docs place, and it records each page's new `version` and `updated` in `wiki.json` in a second commit. If a session dies after writing a page but before committing its `wiki.json` entry, game-gdd sees the version mismatch and treats it as a direct edit. When the docs place can't be reached, the session stops with `stop: <tracker> docs unreachable` (naming the tracker from `issue-tracker.md`) rather than writing the pages elsewhere. Local files are used only when the user chose them in setup.
 
 **Setup is always `with-user:`.** Setup can't complete until `docs/agents/docs.md` exists and `state.json` has `docs_verified: {"place": "...", "date": "YYYY-MM-DD"}`, recording that the user's chosen place passed its smoke test.
 
@@ -91,7 +91,7 @@ The wiki is the living description of the game: precise enough to plan, build an
 ```json
 {
   "pillars": [{"id": "P1", "statement": "Every fight is a negotiation"}],
-  "anti_pillars": ["No grinding for stats"],
+  "anti_pillars": ["We will not add stat grinding, because it would compromise P1"],
   "kill_condition": "Fewer than half of testers start a second match",
   "slice": {
     "test_question": "Is one match fun enough to repeat?",

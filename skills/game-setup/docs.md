@@ -31,7 +31,7 @@ Run in the docs place during setup; every step must pass before setup completes.
 
 ## Wiki pages
 
-| Id | Id or link |
+| Page id | Link |
 | --- | --- |
 | vision | |
 | slice | |
@@ -41,7 +41,7 @@ The ids match `docs/game/wiki.json`, which holds every page; list here the pages
 
 ## GDD pages
 
-| GDD page | Id or link |
+| GDD page | Link |
 | --- | --- |
 | Overview | |
 | Vertical slice | |
