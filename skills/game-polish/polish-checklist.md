@@ -1,6 +1,6 @@
 # Polish checklist
 
-Each applicable line becomes a feature in the `polish` milestone. A section named for a role is owned by it: the role goes in its features' `roles` beside `creative` (SKILL.md step 2). The design and playable-build sections say what theirs carry. The suggested verify kind is in brackets; where two are listed, use the first as `kind` and put both commands in `how`. **Taste** marks a call the person makes by A/B picks: verify `human`, with the measured checks in `how`.
+Each applicable line becomes a feature in the `polish` milestone. A section named for a role is owned by it: the role goes in its features' `roles` beside `creative` (SKILL.md step 2). The design and playable-build sections say what theirs carry. The suggested verify kind is in brackets; where two are listed, use the first as `kind` and put both commands in `how`. **Taste** marks a call the person makes by A/B picks: verify `human`, the measured checks in acceptance beside what the person picks, and the pairs and the commands that run the checks in `how` (SKILL.md step 2). **Kept** marks a line that stays when its role is switched off.
 
 ## design
 
@@ -38,10 +38,10 @@ The design role judges these at the final verdict, from bot traces, never on a f
 ## ux
 
 - **Onboarding timing**: a new player reaches the core verb in their first minute without outside help; launch-to-control within the `onboarding` page's target; the scripted new-player bot meets the onboarding threshold. [bot + replay]
-- **Screens**: the full screen flow from the `screens` page works from launch to quit: title, menus, settings, pause, results, quit. [replay or capture]
+- **Screens**: the full screen flow from the `screens` page works from launch to quit: title, menus, settings, pause, results, quit. Kept. [replay or capture]
 - **Accessibility settings**: remappable controls; subtitles or captions for speech and key sounds; no information carried by colour alone; scalable or large-enough UI text; difficulty or assist options where the genre allows; pause anywhere in single-player; no flashing above 3 times per second; and whatever else the `screens` page's accessibility minimum lists. [check + capture]
-- **Settings and saves**: settings persist; saves survive quit, crash and a version change. [replay]
-- **How to play**: in-game help or a short README section with the controls and how to start. [check]
+- **Settings and saves**: settings persist; saves survive quit, crash and a version change. Kept. [replay]
+- **How to play**: in-game help or a short README section with the controls and how to start. Kept. [check]
 
 ## Playable build
 

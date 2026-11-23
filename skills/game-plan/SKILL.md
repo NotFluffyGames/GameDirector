@@ -72,7 +72,7 @@ For **production** (`game-plan production`), the rest of the game from the full 
 - **content**: every content type at its target count, built from the Content pages' kit pieces at the slice's quality bar. Modes, sessions and the full screen flow land here too.
 - **verdict-build**: what the full verdict needs: a metrics feature for every `full` proxy and richness target (listed in its `measures`), the bot policies those metrics require, and a build that runs on every target platform the agent can build for.
 
-Leave `polish` empty; game-polish fills it. Every item needs a pillar, tier, the wiki `pages` (ids from `wiki.json`) it implements, observable acceptance criteria taken from those pages, and a verify method. Choose verify kinds in this order of preference: `test`, `sim`, `replay`, `bot`, `capture`, `check`, `human`. When the adapter marks `sim`, `replay` or `bot` `n/a`, proxy metrics come from instrumented `test` runs or the item becomes `human`.
+Add nothing to `polish` (review decisions may already have put features there); game-polish plans it. Every item needs a pillar, tier, the wiki `pages` (ids from `wiki.json`) it implements, observable acceptance criteria taken from those pages, and a verify method. Choose verify kinds in this order of preference: `test`, `sim`, `replay`, `bot`, `capture`, `check`, `human`. When the adapter marks `sim`, `replay` or `bot` `n/a`, proxy metrics come from instrumented `test` runs or the item becomes `human`.
 
 **Roles.** Give every feature its `roles` as "Which roles are in charge" in `docs/agents/game.md` says: the roles of its pages' areas when the player sees, hears or does it with their hands; `[]` when it is rules-only; never `design`.
 
@@ -113,7 +113,7 @@ The task names the verdict ADR. Change only the pillars and systems it names:
 
 1. Apply knob-only fixes first: the verdict's suggested knob values go into the knob files, and into drafts of the pages that state them (as in 2).
 2. Where the ADR changes the design, draft the changed wiki pages in `docs/game/drafts/`, linking the ADR (session rule 6: committed with the state, written last at the close, their `wiki.json` entries updated in the pages commit); a change to the vision or slice also updates `docs/game/vision.json`. A change that needs a design decision the ADR doesn't make becomes a topic, brainstormed with a person before the features it `unblocks`.
-3. Rewrite the affected features' acceptance or verify where the design changed and set their `passes` to false; add new features; cut obsolete ones with a `cut_reason`. When the ADR changes `north_stars.art`, the visual target is among them: rebuilt to the new direction, its pass queues a fresh calibration kit.
+3. Rewrite the affected features' acceptance or verify where the design changed and set their `passes` to false; add new features; cut obsolete ones with a `cut_reason`. When the ADR changes `north_stars.art`, the visual target is among them: rebuilt to the new direction, its pass queues a fresh calibration kit, and the next verdict waits for its labels.
 4. Ticket the new and reset features; re-estimate the budget as in step 6.
 
 **Done when** every change the ADR asks for is a knob change, a page change with its features, or an open topic. Close as in step 6: check, commit with the drafts, progress entry, then write the drafts and make the pages commit, then `complete`.
@@ -126,12 +126,12 @@ Sessions are running ahead of milestones. Cut `nice` features of the remaining b
 
 ## Unblock mode
 
-The task names blocked features (a `blocked` reason, or `max_attempts` build sessions spent). For each, read the reason and ticket history, then do one of:
+The task names blocked features, `must` or `nice` (a `blocked` reason, or `max_attempts` build sessions spent). For each, read the reason and ticket history, then do one of:
 
 - **replace** it: add smaller features, or ones with a different approach (record the approach change in an ADR), with new tickets; then cut the original with `cut_reason: "replaced by F0xx, F0yy"`. Outside the plan phase this is the only way a must item's acceptance or verify changes.
 - **cut** it with a reason, when it is not `must`;
 - **hand it over**: a human queue entry that `unblocks` it, and its ticket relabelled `ready-for-human`.
 
-A feature blocked in its A/B picks session loses its `compare` entry when you replace or cut it, so the run stops waiting for those picks.
+A feature blocked in its A/B picks session (its `compare` entry answered) loses that entry whichever move you make: a hand-over replaces it with a plain human entry naming the picks file and what to apply, so the state tool stops scheduling the picks session.
 
-**Done when** no failing `must` feature named in the task is still blocked.
+**Done when** every feature named in the task is replaced, cut or handed over, and none of them keeps a `compare` entry.

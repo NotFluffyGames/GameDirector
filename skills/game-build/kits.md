@@ -1,6 +1,6 @@
 # Kits for a person
 
-game-build makes two kits a person works through: the **calibration kit** when the slice's look first passes, and the **compare kit** for a polish feature verified by A/B picks. Their human queue entries are kinds `calibrate` and `compare` ("Human queue" in `docs/agents/game.md` gives their fields and what the person writes). For both:
+game-build makes two kits a person works through: the **calibration kit** when its trigger passes (the list under "Calibration kit"), and the **compare kit** for a polish feature verified by A/B picks. Their human queue entries are kinds `calibrate` and `compare` ("Human queue" in `docs/agents/game.md` gives their fields and what the person writes). For both:
 
 - every capture and strip comes from this session's build through the adapter (Commands in `docs/agents/game.md`; the named states and strips are the capture protocol in `docs/game/engine-notes.md`);
 - every image is committed shrunk to at most 1280 px on its longest side with game-review's `measure.py` (`../game-review/scripts/measure.py` beside this skill): `python3 <measure.py> shrink IN.png --out OUT.png`; separate frames are stitched into one sheet with `measure.py sheet`;
@@ -29,7 +29,7 @@ Make it in `docs/game/calibration/kit-<n>/`, `n` one past the latest kit:
 5. **`art.json`**: `north_stars.art` as `vision.json` holds it now (`null` with `art` off).
 6. **`index.md`**: the items numbered in mixed order under neutral names, so the person judges each by eye without being told which are the decoys; the ask, per item "ours" or "not ours" with one line why, into `docs/game/calibration/labels.json` in the shape "Human queue" gives (`capture` is the item's path); and the return path: commit the labels and run `/game-next`.
 
-When an older `labels.json` exists, move it into the previous kit's folder (`kit-<n-1>/labels.json`): the person's new labels replace it. Until they arrive, the taste judgments of `creative`, `feel`, `art` and `ux` are `not-assessed` and the slice verdict waits; builds go on.
+When an older `labels.json` exists, move it into the previous kit's folder (`kit-<n-1>/labels.json`): the person's new labels replace it. Until they arrive, the taste judgments of `creative`, `feel`, `art` and `ux` are `not-assessed` and the slice, full and final verdicts wait; builds go on.
 
 Queue the entry: `kind` `calibrate`, `how` the kit's `index.md`, `answers` `docs/game/calibration/labels.json`, `unblocks` `[]`.
 
@@ -40,7 +40,7 @@ A polish feature whose acceptance is a taste call (a grade, a feel retune, a mix
 **First session.** Build each candidate behind tuning knobs, each within the pages' rules, the feature's measured checks and the identity invariants (`vision.json` `invariants`), and run the full suite. Make the kit in `docs/game/playtests/evidence/<id>/compare/`:
 
 - the pairs: each the same named state or strip rendered before and after the change, with each side's values in the knob file while it renders and the current values restored after; for a mix, which the person must hear, the knob file of each side to run the build with;
-- `index.md`: per pair, what changes (the knob and its two values); and the return path: one pick per pair, with one line why, in `picks.md` beside it; leave the queue entry, commit, and run `/game-next`.
+- `index.md`: per pair, what changes (the knob and its two values); and the return path: one pick per pair, with one line why, in `picks.md` beside it; leave the queue entry, commit, and run `/game-next`. `picks.md` is the person's to create: its existence is the signal that the picks are in, so the session making the kit never writes it.
 
 Queue the entry: `kind` `compare`, `how` the kit's `index.md`, `answers` its `picks.md`, `unblocks` `["<id>"]`. Then do step 4's code review and step 5 without `passes`, the ticket left open as `ready-for-human`. The roles review the picked build in the picks session.
 

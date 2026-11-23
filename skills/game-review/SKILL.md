@@ -124,7 +124,7 @@ You carry the decisions out; the decider makes them. The builder never decides a
 - For a feature or polish feature, set its `reviews` in `features.json`: `{role: path}` for every role in its `roles`.
 - **Role memory.** Append to `docs/game/roles/<role>.md` (create it if missing) one line per lesson the person taught: `- <date> <target> <kind>: <what> (why: <their reason>)`. Kinds: `overruled`, in the memory of the role whose call the person overruled (a reviewer's note they set aside with `wontfix`, or a decision of creative's they changed); `pick`, each A/B pick in this target's compare answers; `label`, each calibration label's reason that memory doesn't hold yet, for `art`, `ux` and `creative` (stills) and `feel` (strips).
 - Run `gamestate.py check --since <base>`, then commit `game-review: <target> round <n> recorded`.
-- Report to the caller: the round; per role, the result and each note with its decision; the blocking notes still open; the last fix commit; the review file paths. A verdict puts the paths in its review items' `reviews` and lists every note and decision in its ADR.
+- Report to the caller: the round; per role, the result and each note with its decision; the blocking notes still open; the last fix commit; the review file paths. A verdict puts the paths in its review items' `reviews` and summarises each role's notes and decisions in its ADR (game-verdict's step 6).
 
 When round 1 of a feature or polish feature fixed anything, run round 2 from step 2 on the new commit. After round 2, an open blocking note keeps the feature failing, and the caller counts the attempt.
 

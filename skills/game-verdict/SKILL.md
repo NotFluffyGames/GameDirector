@@ -42,19 +42,19 @@ For each proxy item and richness target in scope, run its `how` with enough seed
 
 Run `game-review <scope>`: read the game-review skill's SKILL.md (`../game-review/SKILL.md` beside this skill) and follow it with that task. Every active role reviews this build's captures, strips, event logs and bot traces; game-review builds the same code at its own commit (the commits since step 1 change no code) and commits its own work. Every note of a verdict-scope review is advisory, and its decision is `feature`, `topic` or `wontfix:`, never `fixed` (in interactive mode the person decides, game-review's step 6). A `feature` decision's new feature goes, in place of game-review's current milestone (a verdict has none), in the milestone the run builds next: `slice` after core-loop, `systems` after slice, `polish` after full and final, or `polish` whenever the decision says polish.
 
-For the slice, while a `calibrate` entry is queued and `docs/game/calibration/labels.json` doesn't exist yet, the review waits for the labels: record that in `notes.md`, and Answers mode runs it.
+The slice, full and final reviews need the calibration labels: while a `calibrate` entry is queued and `docs/game/calibration/labels.json` doesn't exist (a first kit, or a repeat after an adjust or restart changed the art direction), the state tool holds these verdicts until the person has labelled the kit. The core-loop verdict, judged on bots, doesn't wait.
 
 Score each `review` item in scope from the review files, as "Fun checklist" in the Vocabulary of `docs/agents/game.md` says: `reviews` lists the records of the roles it names, `evidence` is the record holding the anchored note that fails it, its first record for a pass, or the reason for `not-assessed`; and `gamestate.py gate` recomputes the result from those records and refuses one that differs. Name the review files and decisions files in `notes.md`.
 
 Then check the wiki against what was built, for the features in scope, reading their pages through the docs place: where the game now differs from its pages in a small, settled way, draft the fix in `docs/game/drafts/<page-id>.md` with a `Last changed` line (session rule 6), committed with `notes.md`; a fix to the vision or slice page also updates `docs/game/vision.json` in that commit. The drafts are written at step 4 and step 6. Where the difference is a design question, open a topic.
 
-**Done when** game-review has reported and every `review` item in scope is scored with its `reviews` (or, for the slice, `notes.md` says the review waits for the labels), and every difference between the game and its pages is a committed page draft or a topic.
+**Done when** game-review has reported and every `review` item in scope is scored with its `reviews`, and every difference between the game and its pages is a committed page draft or a topic.
 
 ## 4. Human items
 
 Write the playtest kit ([playtesting.md](playtesting.md)) into the evidence folder, following the `slice` page's Playtest section for the slice, and add a human queue entry: `{"id": "...", "what": "playtest <scope>", "kind": "playtest", "scope": "<scope>", "answers": "<evidence folder>/answers.md", "how": "<path to the kit>"}`. Remove unanswered playtest entries of this scope or a narrower one (core-loop < slice < full < final): this kit supersedes them. Tell the user the kit is ready.
 
-- **slice**: stop here and record no verdict yet. The run waits until a person has labelled the calibration kit (while its `calibrate` entry is queued) and has played the slice and written the answers file; the next session runs Answers mode.
+- **slice**: stop here and record no verdict yet. The run waits until a person has played the slice and written the answers file; the next session runs Answers mode.
 - **other scopes**: score human items `pending-human` and go on.
 
 Then write the drafts so far to their pages in the docs place, and make the pages commit: each page's `version` and `updated` in `docs/game/wiki.json`, the drafts deleted.
@@ -98,7 +98,7 @@ After the commit and the progress entry, write the drafts still in `docs/game/dr
 
 1. Read their answers. Score each human item `pass` or `fail` with the answers file as its evidence.
 2. **Keep what they loved.** For each thing the answers say to keep that a tuning value controls, add an entry to `docs/game/keep.json`: what was kept, the answers file as its source, and a pin per knob (`file`, `key`, `value`). From then on `gamestate.py check` holds those values; changing one takes an ADR named in the entry's `adr`.
-3. When the build commit is unchanged, take the proxy and review scores from the latest verdict of the same scope, or from this verdict's `notes.md`; otherwise redo steps 1–3. Either way, run step 3's review when it waited for the calibration labels, or when `docs/game/calibration/labels.json` changed after its commit.
+3. When the build commit is unchanged, take the proxy and review scores from the latest verdict of the same scope, or from this verdict's `notes.md`; otherwise redo steps 1–3. Either way, run step 3's review again when `docs/game/calibration/labels.json` changed after its commit.
 4. Steps 5–6, writing the verdict ADR (a follow-up ADR linking the earlier one, when this reopens a verdict), including writing the drafts still in `docs/game/drafts/`.
 
 **Done when** the verdict is recorded and `gamestate.py complete` succeeds; it also consumes the answered queue entry.

@@ -16,7 +16,7 @@ Read the roles' pages (`feel`, `art-bible`, `audio`, `tone-and-world`, `screens`
 
 ## 2. Write the polish features
 
-Work through the checklist one section at a time; when this task resumes in a new session, start at the first section with no features yet. Turn every applicable line into features in `docs/game/features.json` (milestone `polish`), each with a pillar, tier, the wiki `pages` it implements, acceptance and verify method, then ticket them as game-plan's step 5 describes. Specifically:
+Work through the checklist one section at a time; when this task resumes in a new session, start at the first section with no features yet. Turn every applicable line into features in `docs/game/features.json` (milestone `polish`), each with a pillar, tier (`must`, or `nice` for a line the game can ship without), the wiki `pages` it implements, acceptance and verify method, then ticket them as game-plan's step 5 describes. Specifically:
 
 - one feel feature per core action on the `feel` page;
 - one final-asset feature per group of placeholder assets in assets.md, citing the art bible, or the `audio` page for sounds;
@@ -26,9 +26,9 @@ Each feature also gets:
 
 - **`roles`**: its section's role, any other role whose aspect it changes ("Which roles are in charge" in `docs/agents/game.md`), and `creative`, which reviews every polish feature against the identity invariants. The design section and the playable build put no owner on their features: `design` judges its section at the final verdict, and no role owns the build.
 - **Acceptance** with its roles' measured checks, one per line with the page's number in it, as game-plan's step 4 writes them: a measured failure of it blocks a polish feature like any other.
-- **A/B picks** when its acceptance is a taste call (a grade, a feel retune, a mix): verify `human`, the acceptance naming what the person picks, and `how` naming the two to four before-and-after pairs to show, with the measured checks beside them. game-build makes the compare kit and queues its `compare` entry; once the person has picked, a picks session puts the picks into `docs/game/keep.json` and the role's memory, and the feature passes on them; the final verdict waits for the picks ([kits.md](../game-build/kits.md), "Compare kit").
+- **A/B picks** when its acceptance is a taste call (a grade, a feel retune, a mix): verify `human`; its acceptance names what the person picks beside the measured checks, and its `how` names the two to four before-and-after pairs to show and the commands that run the checks. game-build makes the compare kit and queues its `compare` entry; once the person has picked, a picks session puts the picks into `docs/game/keep.json` and the role's memory, and the feature passes on them; the final verdict waits for the picks ([kits.md](../game-build/kits.md), "Compare kit").
 
-A switched-off role's section doesn't apply (`roles_off`). Lines that don't apply get one sentence each in the progress entry saying why.
+A switched-off role's section doesn't apply (`roles_off`), except the lines the checklist marks **kept**: the game needs them whoever owns them, so their features carry `creative` and the roles of what they visibly change, and no review by the role that is off. Lines that don't apply get one sentence each in the progress entry saying why.
 
 **Done when** every applicable checklist line maps to a feature with a ticket, every polish feature has its section's role (where it has one) and `creative` in `roles`, every taste call is verify `human` with its pairs named, and `gamestate.py check --since <base>` passes.
 

@@ -34,7 +34,7 @@ Run the feature's verify method through the adapter commands:
 
 - `test`, `sim`, `replay`, `bot`, `check`: run it; the output must meet the acceptance criteria.
 - `capture`: render, open the image and check it shows what the acceptance criteria describe; judging how it looks is the roles' work in step 4. Save it under `docs/game/playtests/evidence/<feature-id>/`.
-- `human`: add a human queue entry that `unblocks` the feature, saying exactly what to check and how; label the ticket `ready-for-human`; go to step 4 without setting `passes`. A polish feature verified by A/B picks makes its compare kit instead ([kits.md](kits.md)).
+- `human`: add a human queue entry that `unblocks` the feature, saying exactly what to check and how; label the ticket `ready-for-human`; go to step 4 without setting `passes`. A polish feature verified by A/B picks makes its compare kit instead, in its first session; its picks session follows [kits.md](kits.md).
 
 Red: run the `diagnosing-bugs` loop, fix, verify again.
 
