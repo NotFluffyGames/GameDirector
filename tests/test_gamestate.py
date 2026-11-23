@@ -205,6 +205,31 @@ class GameRun(unittest.TestCase):
         self.edit("features.json", fn)
         self.commit()
 
+    def note(self, **overrides):
+        n = {"id": "N1", "what": "HUD text sinks into the sky", "evidence": "inputs/hud-bright.png contrast 2.1:1",
+             "rule": "art-bible: HUD contrast >= 4.5:1", "severity": "advisory",
+             "anchor": {"kind": "rule", "ref": "art-bible#hud"}, "item": "FC7",
+             "suggestion": "outline the text", "decision": "feature F031"}
+        n.update(overrides)
+        return n
+
+    def write_review(self, target, role, commit, notes=(), result=None):
+        """A valid review file for target by role; for a feature target it also sets that feature's reviews[role]."""
+        if commit == "HEAD":
+            commit = self.git("rev-parse", "HEAD").strip()
+        rel = f"docs/game/reviews/{target}/{role}.json"
+        notes = list(notes)
+        self.write(rel, json.dumps({"role": role, "target": target, "commit": commit, "independent": True,
+                                    "inputs": [], "result": result or ("notes" if notes else "ok"),
+                                    "reason": "", "notes": notes}))
+        if re.fullmatch(r"F\d+", target):
+            def fn(d):
+                for f in d["features"]:
+                    if f["id"] == target:
+                        f.setdefault("reviews", {})[role] = rel
+            self.edit("features.json", fn)
+        self.commit()
+
     def record_verdict(self, outcome, results=None, complete=True):
         self.write(EVIDENCE, "metrics")
         results = results or {}
@@ -286,6 +311,50 @@ class GameRun(unittest.TestCase):
         self.tool("advance")
         self.assertEqual(self.phase(), ("plan", None))
         self.assertEqual(self.next(), "game-plan")
+
+    def test_a_visible_feature_passes_only_after_its_roles_reviewed_it(self):
+        self.to_plan()
+        self.plan(extra=[feature("F4", "slice", kind="capture", roles=("art", "feel"))])
+        self.set_passes("F1", "F2")
+        base = self.git("rev-parse", "HEAD").strip()
+        self.set_passes("F4")
+        out = self.tool("check", "--since", base, ok=False)
+        self.assertIn("F4: passes without a review by art", out)
+        self.write_review("F4", "art", base)
+        self.write_review("F4", "feel", base, notes=[self.note(severity="blocking", decision="")])
+        out = self.tool("check", "--since", base, ok=False)
+        self.assertIn("F4: feel review note N1 is blocking and not fixed", out)
+
+    def test_a_review_older_than_the_session_does_not_count(self):
+        self.to_plan()
+        self.plan(extra=[feature("F4", "slice", kind="capture", roles=("art",))])
+        self.set_passes("F1", "F2")
+        old = self.git("rev-parse", "HEAD").strip()
+        self.commit()
+        base = self.git("rev-parse", "HEAD").strip()
+        self.write_review("F4", "art", old, notes=[self.note(decision="wontfix: fine")])
+        self.set_passes("F4")
+        self.assertIn("F4: the art review predates this session's work; review again",
+                      self.tool("check", "--since", base, ok=False))
+        self.write_review("F4", "art", "HEAD", notes=[self.note(decision="wontfix: fine")])
+        self.assertNotIn("predates", self.tool("check", "--since", base))
+
+    def test_review_notes_need_decisions_that_point_somewhere(self):
+        self.to_plan()
+        self.write_review("F1", "art", "HEAD", notes=[self.note(decision="feature F099")])
+        self.assertIn("docs/game/reviews/F1/art.json: note N1 decision names F099, which does not exist",
+                      self.tool("check", ok=False))
+        self.write_review("F1", "art", "HEAD", notes=[self.note(decision="maybe later")])
+        self.assertIn("note N1 decision 'maybe later' is not", self.tool("check", ok=False))
+        self.write_review("F1", "art", "HEAD", notes=[self.note(decision="")])
+        self.tool("check")  # a note still awaiting its decision is fine until the feature passes
+
+    def test_malformed_reviews_are_reasons_not_crashes(self):
+        self.to_plan()
+        self.write("docs/game/reviews/F1/art.json", "[]")
+        self.assertIn("docs/game/reviews/F1/art.json: not a JSON object", self.tool("check", ok=False))
+        self.write("docs/game/reviews/F1/art.json", "{nope")
+        self.assertIn("docs/game/reviews/F1/art.json: not a JSON object", self.tool("check", ok=False))
 
     def test_topics_and_features_name_known_roles(self):
         self.to_plan()

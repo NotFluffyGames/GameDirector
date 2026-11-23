@@ -65,6 +65,10 @@ QUALITY_ASPECTS = ["code", "feel", "art", "audio", "ui", "onboarding"]
 QUALITY_BARS = ["placeholder", "representative", "production", "final"]
 FUN_FIELDS = ["statement", "scope", "kind", "metric", "threshold", "how"]
 RICH_FIELDS = ["aspect", "scope", "statement", "metric", "threshold", "how"]
+REVIEW_RESULTS = ["ok", "notes", "not-assessed"]
+SEVERITIES = ["blocking", "advisory"]
+ANCHOR_KINDS = ["label", "reference", "rule"]
+DECISION_RE = r"^(fixed [0-9a-f]{7,40}|feature F\d+|topic T\d+|wontfix: \S.*)$"
 MIN_SEED_TOPICS = 5
 NICE_RESERVE = 10  # sessions kept back for verdicts and polish before nice features are built
 
@@ -513,6 +517,7 @@ class Game:
         errs += self._check_wiki()
         errs += self._vision_shape()
         errs += self._check_keep()
+        errs += self._check_reviews()
         if self.stage() not in STAGES:
             errs.append(f"state.stage must be one of {STAGES}")
         for e in self.queue():
@@ -525,6 +530,7 @@ class Game:
                 errs.append(f"verdict {v.get('scope')}: needs scope in {SCOPES}, outcome in {OUTCOMES} and an adr path")
         if st.get("phase") not in PLANNING_PHASES:
             errs += self._feature_guard(since)
+            errs += self._review_guard(since)
         if not (self.stage() == "slice" and st.get("phase") in DESIGN_PHASES):
             errs += self._target_guard(since, self.fun_path, "items", FUN_FIELDS, "fun", self.fun)
             errs += self._target_guard(since, self.richness_path, "targets", RICH_FIELDS, "richness", self.richness)
@@ -697,6 +703,102 @@ class Game:
             except json.JSONDecodeError:
                 pass
         return ids
+
+    # ---------- reviews ----------
+    def review(self, path):
+        """The review file at path (relative to the game root) as a dict; None when missing, unreadable or not an object."""
+        try:
+            data = json.loads((self.root / path).read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return None
+        return data if isinstance(data, dict) else None
+
+    def _review_shape(self, path):
+        """Reasons the review file at path is malformed."""
+        r = self.review(path)
+        if r is None:
+            return [f"{path}: not a JSON object"]
+        errs = []
+        if r.get("role") not in ROLES:
+            errs.append(f"{path}: role '{r.get('role')}' is not one of {ROLES}")
+        for key in ("target", "commit"):
+            if not r.get(key):
+                errs.append(f"{path}: missing {key}")
+        if r.get("result") not in REVIEW_RESULTS:
+            errs.append(f"{path}: result must be one of {REVIEW_RESULTS}")
+        if r.get("result") == "not-assessed" and not r.get("reason"):
+            errs.append(f"{path}: a not-assessed review needs a reason")
+        notes = r.get("notes", [])
+        if not isinstance(notes, list) or not all(isinstance(n, dict) for n in notes):
+            return errs + [f"{path}: notes must be a list of objects"]
+        features, topics = {f.get("id") for f in self.items()}, {t.get("id") for t in self.topics()}
+        for n in notes:
+            nid = n.get("id") or "<no id>"
+            for key in ("id", "what", "evidence"):
+                if not n.get(key):
+                    errs.append(f"{path}: note {nid} is missing {key}")
+            if n.get("severity") not in SEVERITIES:
+                errs.append(f"{path}: note {nid} severity must be one of {SEVERITIES}")
+            anchor = n.get("anchor")
+            if anchor is not None and not (isinstance(anchor, dict) and anchor.get("kind") in ANCHOR_KINDS
+                                           and anchor.get("ref")):
+                errs.append(f"{path}: note {nid} anchor needs kind in {ANCHOR_KINDS} and a ref")
+            d = n.get("decision") or ""
+            if not d:
+                continue  # reviews are written before the decide pass; the pass gate demands the decision
+            m = re.match(DECISION_RE, str(d))
+            if not m:
+                errs.append(f"{path}: note {nid} decision '{d}' is not one of "
+                            "fixed <commit> | feature F.. | topic T.. | wontfix: <reason>")
+            elif d.startswith(("feature ", "topic ")):
+                kind, ref = d.split(" ", 1)
+                if ref not in (features if kind == "feature" else topics):
+                    errs.append(f"{path}: note {nid} decision names {ref}, which does not exist")
+        return errs
+
+    def _check_reviews(self):
+        errs = []
+        for p in sorted((self.dir / "reviews").glob("**/*.json")):
+            errs += self._review_shape(p.relative_to(self.root).as_posix())
+        for f in self.items():
+            fid, roles = f.get("id") or "<no id>", f.get("roles")
+            if not f.get("passes") or not roles or not isinstance(roles, list):
+                continue
+            reviews = f.get("reviews") if isinstance(f.get("reviews"), dict) else {}
+            for role in roles:
+                r = self.review(reviews[role]) if isinstance(reviews.get(role), str) else None
+                if r is None:
+                    errs.append(f"{fid}: passes without a review by {role}")
+                    continue
+                for n in r.get("notes", []) if isinstance(r.get("notes"), list) else []:
+                    if not isinstance(n, dict):
+                        continue
+                    d = str(n.get("decision") or "")
+                    if n.get("severity") == "blocking" and not d.startswith("fixed"):
+                        errs.append(f"{fid}: {role} review note {n.get('id')} is blocking and not fixed")
+                    if not d:
+                        errs.append(f"{fid}: {role} review note {n.get('id')} has no decision")
+        return errs
+
+    def _review_guard(self, since):
+        """A feature that passes in this session needs reviews made on this session's work, not before it."""
+        old_data = self._old(since, self.features_path)
+        if old_data is None:
+            return []
+        old = {f.get("id"): f for f in old_data.get("features", [])}
+        errs = []
+        for f in self.items():
+            fid = f.get("id")
+            if fid not in old or old[fid].get("passes") or not f.get("passes"):
+                continue
+            reviews = f.get("reviews") if isinstance(f.get("reviews"), dict) else {}
+            for role in f.get("roles") if isinstance(f.get("roles"), list) else []:
+                r = self.review(reviews[role]) if isinstance(reviews.get(role), str) else None
+                if r is None:
+                    continue  # _check_reviews reports the missing review
+                if self._git("merge-base", "--is-ancestor", since, str(r.get("commit"))).returncode != 0:
+                    errs.append(f"{fid}: the {role} review predates this session's work; review again")
+        return errs
 
     def _old(self, since, path):
         if not self.in_git():
