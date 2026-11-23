@@ -1,6 +1,6 @@
 {
   "name": "game-director",
-  "version": "0.5.1",
+  "version": "0.6.0",
   "description": "Make a fun, playable, rich, working and tested game over many sessions, one step per session with /game-next: ideation and topic-by-topic brainstorming with you, a vertical slice gated by your playtest before production, a living agent-facing wiki and a human GDD next to your tasks, and verdicts backed by evidence. Engine-, genre-, platform- and tracker-agnostic.",
   "author": {
     "name": "NotFluffyGames",

@@ -37,9 +37,9 @@ The **vertical slice** comes first: a small part of the game, one complete start
 | Skill | Step | Produces | With you? | Leans on |
 | --- | --- | --- | --- | --- |
 | `game-next` | every session | runs the next step, checks it, reports what's next | — | — |
-| `game-setup` | first session | `docs/agents/game.md` and `docs.md` config, state files, verified engine commands | decisions | `research` |
+| `game-setup` | first session | `docs/agents/game.md` and `docs.md` config, state files, the tasks home and docs place (chosen or created, then smoke-tested), wiki and GDD skeletons, verified engine commands | always | `research` |
 | `game-ideation` | vision | vision (with anti-pillars and a kill condition), the vertical slice definition, directions considered, the first topics | always | `grilling`, `domain-modeling` |
-| `game-brainstorm` | one topic | the topic's wiki pages, follow-up topics | always | `grilling`, `research` |
+| `game-brainstorm` | one topic | the topic's wiki pages (in your docs place), follow-up topics | always | `grilling`, `research` |
 | `game-consolidate` | after each brainstorm pass | a complete, consistent wiki (with a whole-design review); the fun checklist and richness targets | interactive mode | — |
 | `game-gdd` | whenever the wiki changed | the human GDD, next to your tasks, in sync with the wiki, including the AI's own calls for you to keep or change | — | — |
 | `game-plan` | plan | tech ADRs, walking skeleton, `features.json`, tickets | interactive mode | `codebase-design`, `domain-modeling`, `research` |
@@ -49,7 +49,9 @@ The **vertical slice** comes first: a small part of the game, one complete start
 
 **Ideation and brainstorming, with you.** Ideation grills you on the raw idea, compares 3–5 directions that play differently, lets you choose, writes the vision (with anti-pillars and a kill condition), and defines the vertical slice with you. It then breaks "the game" into first-level topics. Each brainstorm session takes one topic, grills you on it, and challenges every answer hard against the vision, the rest of the wiki, how it plays and what it costs. It then writes or updates the topic's pages and opens the follow-up topics the conversation raised. The tree grows until every topic is answered precisely enough to plan features and write tests from.
 
-**Living documents.** The **wiki** (`docs/game/wiki/`) is for agents: the current truth about the game, precise enough to build and test from, with ADRs for why things changed. Every session that changes what the game is updates its page in the same commit, and any design question a later phase hits becomes a topic. The **GDD** is for people and lives next to your tasks (for example a ClickUp Doc beside the task list). `game-gdd` rewrites it from the wiki before each phase or milestone moves on. Your comments and edits there come back as topics.
+**Living documents.** The **wiki** is for agents: the current truth about the game, precise enough to build and test from, with ADRs for why things changed. Its pages live in a docs place next to your tasks (for example ClickUp Docs beside the task list), so you can read and comment on them there; `docs/game/wiki.json` in the repo indexes them, and `docs/game/vision.json` holds the vision's facts. If you chose local files instead, the pages are in `docs/game/wiki/`. Every session that changes what the game is updates its page in the same step, and any design question a later phase hits becomes a topic. People comment on wiki pages and sessions edit them; if you edit a page by hand, `game-gdd` flags it and the next session checks it. The **GDD** is for people and lives in the same place. `game-gdd` rewrites it from the wiki before each phase or milestone moves on. Your comments and edits there come back as topics.
+
+**Setup is a conversation.** `game-setup` asks where your tasks live, choosing an existing home or creating one, picks the docs place, and runs a smoke test that writes and reads back a page. It creates the wiki and GDD skeletons, and it can't finish until that test passes (`docs_verified` in `state.json`).
 
 **The state tool decides.** `docs/game/gamestate.py` owns every transition:
 - It re-plans after an adjust and re-ideates after a restart.
@@ -99,12 +101,13 @@ Copy the folders under `skills/` into your agent's skills directory, keeping the
 | to start a game | `/game-next <idea>` (add `--interactive` to approve tickets and decide verdicts too) |
 | the next step | `/game-next`, in a fresh session |
 | steps that need no person to run back to back | `AGENT_CMD='claude -p' skills/game-next/scripts/loop.sh` (see `skills/game-next/unattended.md`) |
+| to bring a game set up with an older version up to date | `/game-setup upgrade` (updates `gamestate.py` and state to schema version 6, and sets up the docs place if the game has none) |
 | a specific phase by hand | `/game-ideation`, `/game-brainstorm T014`, `/game-consolidate`, `/game-gdd`, `/game-plan`, `/game-build F012`, `/game-verdict full`, `/game-polish` |
 
 The game repo ends up with:
 - `docs/agents/game.md`: config, session rules, vocabulary, adapter commands, companion-skill fallbacks.
-- `docs/agents/docs.md`: where the GDD lives.
-- `docs/game/`: the seed idea, the wiki, the topic tree, fun checklist, richness targets, definition of done, state, progress log, assets and playtests.
+- `docs/agents/docs.md`: where the wiki and GDD live, and how to read, write and comment there.
+- `docs/game/`: the seed idea, the wiki index (`wiki.json`), the vision facts (`vision.json`), the topic tree, fun checklist, richness targets, definition of done, state, progress log, assets and playtests.
 - ADRs.
 
 Edit any of them; the skills read them fresh every session.
@@ -122,6 +125,7 @@ Edit any of them; the skills read them fresh every session.
 - Ideation and brainstorming need you in the session; an unattended loop stops at them.
 - Engines whose gameplay can't leave the editor give weaker determinism; the adapter contract's fallbacks trade exact hashes for tolerances.
 - Platforms the machine can't build for (consoles, signed mobile builds) are reported, not built.
+- Every session that reads wiki pages needs the tracker's docs connector (for example ClickUp's) connected; without it, choose local files at setup.
 - Nothing has been measured yet: these skills have not been run end to end on a real game.
 
 ## Develop
