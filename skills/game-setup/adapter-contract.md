@@ -44,7 +44,7 @@ The roles review the running game from these outputs; game-review makes them onc
   - `launch` and `control`, from a run that starts at launch (a `replay` recorded from the title screen): the launch and the first accepted input, with wall-clock `ms`, giving launch-to-control time.
 
   The same seed and input write the same log, `ms` aside.
-- **Dumps**: `dump strings` lists every player-facing string with its id and where it shows (screen, and place: button, title, tooltip, subtitle); `dump ui` lists, per screen, each text box with its id, position and size in pixels, and its text size; `dump settings` lists what the settings menu offers, each option with its values.
+- **Dumps**: `dump strings` lists every player-facing string with its id and where it shows (screen, and place: button, title, tooltip, subtitle); `dump ui` lists, per screen, its size and each text box with its id, position and size in pixels, and its text size; `dump settings` lists what the settings menu offers, each option with its values.
 - **Loudness**: `loudness` renders S seconds of the mix in a named state offline and measures it (ffmpeg's `ebur128` filter, for one).
 
 ## Smoke test
