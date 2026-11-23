@@ -139,17 +139,26 @@ class Game:
         self.richness = self._load(self.richness_path, DEFAULT_RICHNESS)
         self.topics_data = self._load(self.topics_path, DEFAULT_TOPICS)
         self.keep = self._load(self.keep_path, DEFAULT_KEEP)
-        self.wiki_index = self._load(self.wiki_index_path, DEFAULT_WIKI)
-        self.vision_data = self._load(self.vision_path, DEFAULT_VISION)
+        self.wiki_index = self._load(self.wiki_index_path, DEFAULT_WIKI, shape_checked=True)
+        self.vision_data = self._load(self.vision_path, DEFAULT_VISION, shape_checked=True)
 
-    def _load(self, path, default):
+    def _read(self, path):
+        try:
+            return json.loads(path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as e:
+            sys.exit(f"error: {path.relative_to(self.root)} is not valid JSON: {e}")
+
+    def _load(self, path, default, shape_checked=False):
+        """The file merged over its defaults. A file that isn't a JSON object stops the tool, unless its
+        shape check reports it (then it is returned as is)."""
         merged = copy(default)
         if not path.exists():
             return merged
-        try:
-            data = json.loads(path.read_text(encoding="utf-8"))
-        except json.JSONDecodeError as e:
-            sys.exit(f"error: {path.relative_to(self.root)} is not valid JSON: {e}")
+        data = self._read(path)
+        if not isinstance(data, dict):
+            if shape_checked:
+                return data
+            sys.exit(f"error: {path.relative_to(self.root)} must hold a JSON object, not {type(data).__name__}")
         for key, value in data.items():
             if isinstance(value, dict) and isinstance(merged.get(key), dict):
                 merged[key].update(value)
@@ -235,10 +244,36 @@ class Game:
         return path.read_text(encoding="utf-8") if path.exists() else ""
 
     def wiki_pages(self):
-        return self.wiki_index.get("pages", [])
+        """The well-formed page entries; _wiki_shape reports the rest."""
+        pages = self.wiki_index.get("pages") if isinstance(self.wiki_index, dict) else None
+        if not isinstance(pages, list):
+            return []
+        return [p for p in pages if isinstance(p, dict) and isinstance(p.get("id"), str) and p["id"]]
 
     def page_ids(self):
-        return {p.get("id") for p in self.wiki_pages()}
+        return {p["id"] for p in self.wiki_pages()}
+
+    def _wiki_shape(self):
+        """Reasons wiki.json has a value of the wrong type; wiki_pages() leaves those entries out."""
+        if not isinstance(self.wiki_index, dict):
+            return ["wiki.json is not an object"]
+        pages = self.wiki_index.get("pages", [])
+        if not isinstance(pages, list):
+            return ["wiki.json pages is not a list"]
+        why = []
+        for n, p in enumerate(pages, 1):
+            if not isinstance(p, dict):
+                why.append(f"wiki.json pages: entry {n} is not an object")
+            elif not (isinstance(p.get("id"), str) and p["id"]):
+                why.append(f"wiki.json pages: entry {n} has no id")
+        return why
+
+    @staticmethod
+    def page_list(owner, pages):
+        """Reasons a feature's or topic's `pages` isn't a list of page ids."""
+        if isinstance(pages, list) and all(isinstance(p, str) for p in pages):
+            return []
+        return [f"{owner}: pages must be a list of page ids"]
 
     def vision(self):
         return self.vision_data if isinstance(self.vision_data, dict) else {}
@@ -420,6 +455,7 @@ class Game:
         errs += self._check_features()
         errs += self._check_targets()
         errs += self._check_topics()
+        errs += self._wiki_shape()
         errs += self._check_wiki()
         errs += self._vision_shape()
         errs += self._check_keep()
@@ -472,7 +508,9 @@ class Game:
                 errs.append(f"{fid}: a human-verified feature passes only with evidence starting 'human:'")
             if f.get("tier") == "cut" and not f.get("cut_reason"):
                 errs.append(f"{fid}: cut without cut_reason")
-            errs += [f"{fid}: page '{p}' is not in wiki.json" for p in f.get("pages", []) if p not in page_ids]
+            pages = f.get("pages", [])
+            errs += self.page_list(fid, pages) or [f"{fid}: page '{p}' is not in wiki.json"
+                                                    for p in pages if p not in page_ids]
         return errs
 
     def _check_targets(self):
@@ -523,8 +561,9 @@ class Game:
                 errs.append(f"topic {tid}: parent '{t.get('parent')}' is not a topic")
             if t.get("status") in ("resolved", "deferred") and not t.get("resolution"):
                 errs.append(f"topic {tid}: a {t.get('status')} topic needs a resolution (the answer, or why it waits)")
-            if t.get("status") == "resolved":
-                pages = t.get("pages", [])
+            pages, bad = t.get("pages", []), self.page_list(f"topic {tid}", t.get("pages", []))
+            errs += bad
+            if not bad and t.get("status") == "resolved":
                 if not pages:
                     errs.append(f"topic {tid}: resolved without a wiki page it wrote or updated")
                 errs += [f"topic {tid}: page '{p}' is not in wiki.json" for p in pages if p not in page_ids]
@@ -534,10 +573,12 @@ class Game:
         errs, seen = [], set()
         open_topics = {t.get("id") for t in self.topics() if t.get("status") == "open"}
         for p in self.wiki_pages():
-            pid = p.get("id") or "<no id>"
+            pid = p["id"]
             if pid in seen:
                 errs.append(f"page {pid}: duplicate id")
             seen.add(pid)
+            errs += [f"page {pid}: missing {key}" for key in ("title", "version", "updated")
+                     if p.get(key) is None or str(p.get(key)).strip() == ""]
             if p.get("area") not in AREAS:
                 errs.append(f"page {pid}: area '{p.get('area')}' is not one of {AREAS}")
             link = p.get("link") or ""
@@ -687,7 +728,8 @@ class Game:
         n = len(self.pillars() or [])
         if not 3 <= n <= 4:
             why.append(f"vision.json has {n} pillars; needs 3-4")
-        if not (v.get("anti_pillars") if isinstance(v.get("anti_pillars"), list) else None):
+        anti = v.get("anti_pillars") if isinstance(v.get("anti_pillars"), list) else []
+        if not any(str(a).strip() for a in anti):  # a blank anti-pillar protects nothing
             why.append("vision.json has no anti-pillar")
         if not str(v.get("kill_condition") or "").strip():
             why.append("vision.json has no kill condition")

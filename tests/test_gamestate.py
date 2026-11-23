@@ -103,12 +103,21 @@ class GameRun(unittest.TestCase):
         self.git("add", "-A")
         self.git("commit", "-qm", "work", "--allow-empty")
 
-    def tool(self, *args, ok=True):
-        r = subprocess.run([sys.executable, str(self.game / "gamestate.py"), *args],
+    def tool(self, *args, ok=True, script=None):
+        r = subprocess.run([sys.executable, str(script or self.game / "gamestate.py"), *args],
                            cwd=self.root, capture_output=True, text=True)
         if ok:
             self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
-        return r.stdout
+        else:
+            self.assertNotEqual(r.returncode, 0, r.stdout + r.stderr)
+        return r.stdout + r.stderr
+
+    def plugin(self, *args, ok=True):
+        """The plugin's own copy of the tool, run against this game (as game-next and upgrade do)."""
+        return self.tool(*args, "--root", str(self.root), ok=ok, script=SCRIPT)
+
+    def clean(self):
+        return self.git("status", "--porcelain") == ""
 
     def next(self, *flags):
         return self.tool("status", *flags).split("next: ", 1)[1].strip()
@@ -400,6 +409,34 @@ class GameRun(unittest.TestCase):
         self.assertNotIn("Traceback", out)
         self.assertIn("vision.json directions is not an object", out)
         self.assertIn("flagged is not an object", out)
+
+    def test_malformed_wiki_shapes_are_reasons_not_crashes(self):
+        self.to_ideation()
+        self.write("docs/game/wiki.json", json.dumps({"pages": [
+            "vision", {"id": ["x"], "area": "Vision"}, {"id": "slice", "area": "Vision", "link": "https://d/s"}]}))
+        self.edit("topics.json", lambda d: d["topics"].append(topic("T9", parent=None, pages=[["vision"]])))
+        self.edit("features.json", lambda d: d["features"].append(dict(feature("F1", "core-loop"), pages=[["x"]])))
+        out = self.tool("check", ok=False)
+        for expected in ("wiki.json pages: entry 1 is not an object", "wiki.json pages: entry 2 has no id",
+                         "page slice: missing title", "page slice: missing version", "page slice: missing updated",
+                         "topic T9: pages must be a list of page ids", "F1: pages must be a list of page ids"):
+            self.assertIn(expected, out)
+        self.assertNotIn("Traceback", out)
+        self.assertNotIn("Traceback", self.tool("status"))
+        for text, expected in (("[]", "wiki.json is not an object"), ('{"pages": "x"}', "wiki.json pages is not a list")):
+            self.write("docs/game/wiki.json", text)
+            out = self.tool("check", ok=False) + self.tool("status") + self.tool("gate", ok=False)
+            self.assertIn(expected, out)
+            self.assertNotIn("Traceback", out)
+        self.write("docs/game/features.json", "[]")
+        out = self.tool("status", ok=False)
+        self.assertIn("features.json must hold a JSON object", out)
+        self.assertNotIn("Traceback", out)
+
+    def test_blank_anti_pillars_count_as_none(self):
+        self.to_ideation()
+        self.edit("vision.json", lambda d: d.update(VISION_JSON, anti_pillars=["", "  "]))
+        self.assertIn("vision.json has no anti-pillar", self.tool("gate", ok=False))
 
     def test_consolidate_gate_needs_a_page_per_area_for_the_stage(self):
         self.to_ideation()
