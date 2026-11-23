@@ -2,7 +2,7 @@
 # Run unattended game-* sessions back to back: one fresh agent process per step, until
 # the next step needs a person, or the run stops.
 # Usage: AGENT_CMD='<agent non-interactive command>' loop.sh [max-sessions]
-# Run from the game repo's root, after ideation and brainstorm have been done with a person.
+# Run from the game repo's root, after setup. It runs the scan unattended, and stops at every with-user step: ideation, homework, brainstorm topics, calibration, the slice playtest and A/B picks.
 # Run it where the plugin installed it: it compares the game's version with the plugin's.
 set -euo pipefail
 
