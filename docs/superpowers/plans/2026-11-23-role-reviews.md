@@ -623,6 +623,55 @@ def test_upgrade_brings_a_version_6_game_at_setup_to_7(self):
 
 ---
 
+### Task 6b: Tests stop making throwaway commits
+
+Inserted during execution (the user's call). The end-to-end tests built a real git repo per test and drove the tool through whole runs. That came to thousands of commits per full run, and each was signed by the machine's signing service, which exhausted it and blocked every commit in the session. The product stays git-based: the edit guard, the tool's own bookkeeping commits, GDD staleness and review freshness all read git history. Only the tests change.
+
+**Files:**
+- Modify: `skills/game-setup/scripts/gamestate.py` (one seam for every git call)
+- Create: `tests/memory_history.py` (test-only double)
+- Modify: `tests/test_gamestate.py` (helpers run the tool in-process against the double)
+- Modify: `tests/test_run.py`, `tests/run.py` only if needed
+
+**Interfaces:**
+- Produces:
+  - **`class GitHistory`** in gamestate.py, the only code that runs `git`. Its methods:
+    - `__init__(root: Path)`;
+    - `in_repo() -> bool`;
+    - `tracked(rel: str) -> bool`;
+    - `commit(message: str, rels: list) -> None` (stages and commits those paths only, as `Game.commit` does today);
+    - `head() -> str | None`;
+    - `show(commit: str, rel: str) -> str | None`;
+    - `changed(a: str, b: str, rels: list) -> list`;
+    - `is_ancestor(a: str, b: str) -> bool`.
+  - **`Game(root, history=None)`** uses `history or GitHistory(root)`. `_git` goes away; `in_git`, `commit`, `gdd_stale`, `_old`, `_review_guard` and `main`'s HEAD lookup call the seam.
+  - **`main(argv, history=None)`** passes it through, so tests can call `gamestate.main([...], history=h)` in-process.
+  - **`tests/memory_history.MemoryHistory(root)`** implements the same methods. It keeps per-commit snapshots of the working tree's files (excluding `.git`) in memory, in a linear chain of ids. It adds:
+    - `commit_all(message)` for the tests' own `commit()` helper;
+    - `clean() -> bool`, replacing `git status --porcelain`;
+    - `rev_parse(ref) -> str`, for `HEAD`.
+
+**Steps:**
+- [ ] Write `tests/test_memory_history.py` first. It checks that `GitHistory` and `MemoryHistory` behave alike on the same script of edits: commit two files, change one, `changed`, `show` at the first commit, `is_ancestor` both ways, `tracked`, `head`. It runs once against a real temporary repo and once against the double. The real repo is created with `GIT_CONFIG_GLOBAL=/dev/null` and `GIT_CONFIG_NOSYSTEM=1` in its environment, so its few commits never use the machine's signing; this is the only test file that touches real git besides the Loop tests.
+- [ ] Introduce the seam in gamestate.py, test-first, and keep every existing behaviour.
+- [ ] Switch `GameRun` to the double:
+  - `tool()` calls `gamestate.main([...args, "--root", str(self.root)], history=self.history)` in-process, capturing stdout, stderr and the exit code (`SystemExit`);
+  - `git()`, `commit()` and `clean()` go through `MemoryHistory`;
+  - there's no `git init` in `setUp`.
+
+  Add `test_game_runs_never_call_git`: patch `subprocess.run` during one full-run test to fail on any `git` argv.
+- [ ] Keep the `Loop` tests on real processes (`loop.sh` runs the tool as a program). Give their subprocesses the same isolated git environment, so their commits are unsigned and local to the temporary folder.
+
+**Done when:**
+- `python3 tests/run.py` passes;
+- `GameRun` makes no git calls (the guard test);
+- a full run makes no signed commits;
+- the report gives the new suite time against the old one, about 112 s in parallel.
+
+**Commit:** `tests: the state tool's git history behind one seam; game runs test against memory`
+
+---
+
 ### Task 7: measure.py
 
 **Files:**
@@ -1024,3 +1073,80 @@ maxTurns: 40
 - [ ] **Step 3: Commit** `Release 0.7.0: role reviews and a research phase`
 
   The release PR (`design/role-reviews` → `main`) is opened by the controller after the final review. The user merges it.
+
+---
+
+## Execution notes (handoff)
+
+Running with superpowers:subagent-driven-development; the local ledger lives in `.superpowers/` (git-ignored). If it's missing, resume from here and from `git log`.
+
+**Done** (each reviewed, findings fixed):
+- **Tasks 1–5:** 7988923..6d1c7b2.
+- **Task 5b** (parallel runner `tests/run.py`, inserted): b4834e5.
+- **Task 6:** committed through the GitHub connection after this machine's commit signer ran out of file handles.
+
+**Next:** Task 6b, then Task 7. Every later task runs `python3 tests/run.py` once before committing. Skill-writing Tasks 8–14 iterate with only the skill checks.
+
+**Rulings made during execution** (each: decision — reason — cost if wrong):
+
+- **R1.** `_review_shape` accepts a note with an empty decision (pending). Decisions are required only where a passing feature or a verdict depends on the review.
+  - Why: reviews are written before the creative decide pass.
+  - Cost if wrong: one condition.
+- **R2.** `ship_slice()` calibrates before a slice ship, and `record_verdict()` scores the review items.
+  - Why: otherwise the slice-ship tests fail on not-assessed taste items.
+  - Cost if wrong: helper edits.
+- **R3.** Test fixtures pass the visual-target feature F5 with a calibrate entry queued.
+  - Why: check demands one once the visual target passes.
+  - Cost if wrong: helper edits.
+- **R4.** Reviews are linted only at `docs/game/reviews/*/*.json`, and non-string roles become reasons, not crashes.
+  - Why: measure outputs will live in `reviews/<target>/inputs/`.
+  - Cost if wrong: two lines.
+- **R5.** Task 5b, the parallel test runner, was inserted.
+  - Why: the user asked for faster runs.
+  - Cost if wrong: one script.
+- **R6.** Tasks 8–14 iterate with the skill checks only, and stay on a mid-tier model.
+  - Why: prose and judgment work.
+  - Cost if wrong: slower skill tasks.
+- **R7.** Research never hands out a bare `game-research` step. A restart archives `homework.json`, so the brief is redone.
+  - Cost if wrong: two routing changes.
+- **R8.** In phase research, `check()` and the research gate report any active role with no open or studied reference.
+  - Why: the spec's first research criterion.
+  - Cost if wrong: one call site.
+- **Task 6b** was inserted at the user's call: tests stop making throwaway commits.
+
+**Deferred minors** (for the final whole-branch review to triage):
+- **T1:**
+  - the consolidate filter uses a `""` sentinel;
+  - the consolidate test lacks a positive control;
+  - a falsy non-list `roles` gives two reasons;
+  - duplicate roles are accepted;
+  - no test pins that narrative-off skips only "Narrative and world".
+- **T2:**
+  - a review isn't tied to its slot (role and target) or confined to `docs/game/reviews`;
+  - the guard skips features absent at `since`;
+  - a review's commit is only checked to be non-empty;
+  - `_review_shape` rebuilds the id sets per file;
+  - coverage gaps: "has no decision", a blocking note with `wontfix`, a not-assessed reason, an invalid role or anchor.
+- **T3:**
+  - no `_review_guard` test for R4b;
+  - `_review_item_gate` doesn't check that a review is the verdict's own, of the current build;
+  - `next(...)` without a default;
+  - the lint test's assertion is weak.
+- **T4:**
+  - a non-int `directions` is reported as 0;
+  - references count `str(None)`;
+  - feel action entries are unchecked;
+  - a non-dict `north_stars` gives both shape and missing reasons;
+  - no direct test that `roles_off` skips the north-star requirement.
+- **T5:**
+  - the homework step string never changes, so the stall guard fires after 5 sessions of partial answers;
+  - the audit's role and target aren't checked (should be `creative` and `<id>`);
+  - sources aren't de-duplicated;
+  - dossiers are demanded for roles that are switched off;
+  - R7 rests on a docstring;
+  - small duplication;
+  - the coverage reason can be listed twice.
+- **T5b:**
+  - round-robin buckets ignore test cost (about 2x on 4 cores);
+  - the runner is silent until all buckets finish;
+  - the `-j` help text.
