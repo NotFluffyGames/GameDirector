@@ -7,7 +7,7 @@ Mark each line passed, a note, or `not-assessed` with the reason. In a feature r
 - `palette` of each capture against the bible's hex table: the share of pixels outside the table.
 - `values`: the whole capture's value histogram against the bible's overall range (it can't split layers).
 - `contrast` between the regions the bible names (player against ground, HUD text against its backdrop).
-- `derive` run on each capture, so the judged lines below have their copies.
+- Each capture's derived copies are in `inputs/derived/<capture>/` (game-review makes them; you never run `derive`), so the judged lines below have them; a line whose copy is missing is `not-assessed`.
 
 ## Judged (beside the visual target and references)
 

@@ -118,7 +118,7 @@ Task `game-setup upgrade`: bring an older game's files up to this version, with 
 
 ### 1. Upgrade the state
 
-Run this skill's copy of the tool against the repo, before replacing the repo's copy: `python3 <this skill's folder>/scripts/gamestate.py upgrade --root .` (the file is [scripts/gamestate.py](scripts/gamestate.py)). It commits what it changed. When it refuses (no game state here, a game newer than this plugin, a version that isn't a whole number, or a game past setup), it has changed nothing: tell the user what it said and stop. Otherwise copy [scripts/gamestate.py](scripts/gamestate.py) over `docs/game/gamestate.py` and commit it.
+Run this skill's copy of the tool against the repo, before replacing the repo's copy: `python3 <this skill's folder>/scripts/gamestate.py upgrade --root .` (the file is [scripts/gamestate.py](scripts/gamestate.py)). It commits what it changed. A game still at setup gets a fresh state that keeps its limits, counters, human queue, `adapter_verified` and `docs_verified`, so step 3 doesn't choose the tasks home or smoke-test the docs place again. When it refuses (no game state here, a game newer than this plugin, a version that isn't a whole number, or a game past setup), it has changed nothing: tell the user what it said and stop. Otherwise copy [scripts/gamestate.py](scripts/gamestate.py) over `docs/game/gamestate.py` and commit it.
 
 **Done when** `upgrade` reports the current version (or that it was already there) and `docs/game/gamestate.py` is this skill's copy, committed; or it refused and the user has its message.
 

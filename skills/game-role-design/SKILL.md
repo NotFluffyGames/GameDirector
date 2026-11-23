@@ -15,7 +15,7 @@ The game designer owns the rules, systems, levels, opposition and economy: wheth
 - Every design note is `advisory`: design never reviews a feature, and the verdict scores proxy items itself. The anchor decides whether a note can fail an item through its `item`.
 - A note says the problem, the evidence (a path to a trace, a metrics file or a quoted line) and the rule. A suggested fix is optional and marked as a suggestion.
 - You see only the artifacts you were given, never the builder's reasoning. A review that finds nothing on a first build has probably not looked: say what you checked before you say `ok`.
-- Read `docs/game/roles/design.md` first, if it exists: this person's earlier decisions, overruled notes and label reasons. Follow it.
+- Read `docs/game/roles/design.md` first, if it exists: this person's earlier decisions and overruled notes (design gets no label lines). Follow it.
 - You never edit the game. Write only your output file.
 - Fun is the person's: whether it's worth replaying, and how hard is too hard, are never notes, only `not-assessed` lines.
 

@@ -107,7 +107,7 @@ Copy the folders under `skills/` into your agent's skills directory, keeping the
 - an agent harness that can run shell commands
 - whatever the chosen engine needs, installed by the adapter's `bootstrap` command
 - for research, these hosts (setup probes them and records `research_sources`; any HTTP status counts as reachable, only no response or a proxy refusal as unreachable, and what research loses without one becomes homework): `store.steampowered.com`, `api.steampowered.com`, `steamspy.com`, `itch.io`
-- for the roles as parallel agents, Claude Code (see Known limits)
+- Claude Code, for the role agents: without them no slice, full or final verdict can ship (see Known limits)
 
 ## Use
 
@@ -140,7 +140,7 @@ Edit any of them; the skills read them fresh every session.
 - Every step that needs you stops an unattended loop: ideation, research homework, brainstorm topics, calibration, the slice playtest and A/B picks. The scan runs unattended right after setup.
 - Audio is never heard. The audio role judges the event log and loudness numbers against the audio page; how it sounds is your call.
 - Taste judgments (creative, art, feel, ux) stay provisional, scored not-assessed, until your calibration labels exist.
-- The role agents are Claude Code-only. Elsewhere the session runs each role itself, from the role skill's path, and its reviews are marked not independent, so verdicts score their items not-assessed.
+- The role agents are Claude Code-only: outside Claude Code they can't run. The session then runs each role itself, from the role skill's path, and marks its reviews not independent, so verdicts score every review item not-assessed. No review item can pass, so the slice, full and final verdicts can't ship (nor the core-loop verdict, when the checklist gives it a review item).
 - Research needs the hosts above; a source this machine can't reach becomes homework, not a guess.
 - Engines whose gameplay can't leave the editor give weaker determinism; the adapter contract's fallbacks trade exact hashes for tolerances.
 - Platforms the machine can't build for (consoles, signed mobile builds) are reported, not built.
@@ -157,4 +157,4 @@ That runs all tests in parallel (`-j N` sets the bucket count, extra arguments f
 
 Both must pass.
 
-`tests/test_skills.py` checks the skills themselves: packaging, links, a completion criterion on every step, real tool commands, and a skill for every step and mode the state tool can schedule. Edit skills following the `writing-for-agents` skill. The state schemas (`state.json`, `features.json`, `fun-checklist.json`, `richness.json`, `topics.json`, `keep.json`, `wiki.json`, `vision.json`) live in two places that must agree: `skills/game-setup/game.md` plus the templates, and `skills/game-setup/scripts/gamestate.py`.
+`tests/test_skills.py` checks the skills themselves: packaging, links, a completion criterion on every step, real tool commands, and a skill for every step and mode the state tool can schedule. Edit skills following the `writing-for-agents` skill. The state schemas (`state.json`, `features.json`, `fun-checklist.json`, `richness.json`, `topics.json`, `keep.json`, `wiki.json`, `vision.json`, `research/references.json`, `research/homework.json`, the review records under `reviews/` and `calibration/labels.json`) live in two places that must agree: `skills/game-setup/game.md` plus the templates, and `skills/game-setup/scripts/gamestate.py`.

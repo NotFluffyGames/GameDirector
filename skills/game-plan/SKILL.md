@@ -113,10 +113,10 @@ The task names the verdict ADR. Change only the pillars and systems it names:
 
 1. Apply knob-only fixes first: the verdict's suggested knob values go into the knob files, and into drafts of the pages that state them (as in 2).
 2. Where the ADR changes the design, draft the changed wiki pages in `docs/game/drafts/`, linking the ADR (session rule 6: committed with the state, written last at the close, their `wiki.json` entries updated in the pages commit); a change to the vision or slice also updates `docs/game/vision.json`. A change that needs a design decision the ADR doesn't make becomes a topic, brainstormed with a person before the features it `unblocks`.
-3. Rewrite the affected features' acceptance or verify where the design changed and set their `passes` to false; add new features; cut obsolete ones with a `cut_reason`. When the ADR changes `north_stars.art`, the visual target is among them: rebuilt to the new direction, its pass queues a fresh calibration kit, and the next verdict waits for its labels.
+3. Rewrite the affected features' acceptance or verify where the design changed and set their `passes` to false; add new features; cut obsolete ones with a `cut_reason`. As in unblock mode, a feature you cut or replace loses its `compare` entry in the human queue, so the state tool never schedules picks for it. When the ADR changes `north_stars.art`, the visual target is among them: rebuilt to the new direction, its pass queues a fresh calibration kit, and the next verdict waits for its labels.
 4. Ticket the new and reset features; re-estimate the budget as in step 6.
 
-**Done when** every change the ADR asks for is a knob change, a page change with its features, or an open topic. Close as in step 6: check, commit with the drafts, progress entry, then write the drafts and make the pages commit, then `complete`.
+**Done when** every change the ADR asks for is a knob change, a page change with its features, or an open topic, and no cut or replaced feature keeps a `compare` entry. Close as in step 6: check, commit with the drafts, progress entry, then write the drafts and make the pages commit, then `complete`.
 
 ## Checkpoint mode
 

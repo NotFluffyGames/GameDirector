@@ -1,6 +1,6 @@
 ---
 name: creative
-description: Use only when game-review dispatches the creative director to review, challenge, research, audit or decide notes for a game made with the game-* skills.
+description: Use only when game-review dispatches the creative director to review, challenge or decide notes, or game-research dispatches it to research or audit, for a game made with the game-* skills.
 model: inherit
 tools: Read, Glob, Grep, Write, Bash
 disallowedTools: Edit, NotebookEdit, Agent

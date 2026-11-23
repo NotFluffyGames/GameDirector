@@ -54,7 +54,7 @@ The roles review the running game from these outputs; game-review makes them onc
 
 Run each command on the current project in this session and record the result in the Verified column (date and a one-line result).
 
-**Test fixtures.** Adapter mode runs at plan's walking skeleton, before the game has a title screen, a settings menu or a sound. An optional output the engine supports is smoke-tested on a **test fixture** the skeleton adds for the purpose: a test state or scene, outside the shipped game, holding one scripted action that fires a visual effect and a test tone, one text box, and one settings entry. Such an output is never `n/a` for want of content: `n/a` means the engine can't give it.
+**Test fixtures.** Adapter mode runs at plan's walking skeleton, before the game has a title screen, a settings menu or a sound. An optional output the engine supports is smoke-tested on a **test fixture** the skeleton adds for the purpose: a test state or scene, outside the shipped game, holding one scripted action that fires a visual effect and a test tone, one input it drops, one text box, and one settings entry. Such an output is never `n/a` for want of content: `n/a` means the engine can't give it.
 
 A command is verified when:
 
@@ -66,7 +66,7 @@ A command is verified when:
 - `capture`: writes a non-empty image; look at it.
 - `capture --state`: writes a non-empty image for each state `engine-notes.md` names, or for the fixture's state before game-plan names any; look at one.
 - `capture --strip`: a strip of a core action, or of the fixture's action, writes N frames or a sheet showing them; look at it: the action plays across the frames.
-- the event log: a `replay` of a core action, or of the fixture's action, with `--events` logs an `input` line per input, an `action` line with `input`, `response` and at least one channel, and a `sound` line for the sound it plays; an input the game drops logs `accepted: false` with its `why`; two `sim` runs with the same seed write the same log; a run from launch logs `launch` and `control`.
+- the event log: a `replay` of a core action, or of the fixture's action, with `--events` logs an `input` line per input, an `action` line with `input`, `response` and at least one channel, and a `sound` line for the sound it plays; an input the game drops (the fixture's, before the game has its own) logs `accepted: false` with its `why`; two `sim` runs with the same seed write the same log; a run from launch logs `launch` and `control`.
 - `dump`: each kind writes valid JSON holding the game's strings, text boxes and settings, or at least the fixture's text box and settings entry before the game has its own.
 - `loudness`: prints LUFS and true peak for a state with sound: the fixture's test tone before the game has its own.
 - `package`: produces an artifact for at least the dev platform that launches.

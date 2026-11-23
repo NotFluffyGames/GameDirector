@@ -1,6 +1,6 @@
 ---
 name: art
-description: Use only when game-review dispatches the art director to review, challenge or research for a game made with the game-* skills.
+description: Use only when game-review dispatches the art director to review or challenge, or game-research dispatches it to research, for a game made with the game-* skills.
 model: inherit
 tools: Read, Glob, Grep, Write, Bash
 disallowedTools: Edit, NotebookEdit, Agent

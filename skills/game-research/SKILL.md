@@ -25,7 +25,7 @@ Keeps the game from being designed from memory. The **scan** maps the landscape 
 - **Images** are the evidence for the art, ux and feel sections, committed with the dossier, always downscaled.
   - Save each in `docs/game/research/refs/<id>/<role>/` for the role that uses it (`art`, `ux`, `feel`; in both folders when two use it), named by what it shows (`hud.png`, `dash-strip.png`), with its source in `material/index.md`.
   - Shrink it: `python3 <measure.py> shrink IN.png --out OUT.png` (longest side at most 1280 px). `measure.py` reads only 8-bit, non-interlaced PNG: convert anything else (JPEG, WebP, a 16-bit or interlaced PNG) first with what this machine has (`magick` or `convert`, `ffmpeg`, Python's Pillow, macOS `sips`). With no converter, keep an original PNG, JPEG or WebP as is only when it is at most 1280 px on its longest side and at most 500 KB (`file` prints its dimensions; Steam's `path_thumbnail` qualifies); otherwise save nothing, and the image is `not-assessed: no converter`.
-- **Homework candidates.** What the agent can't do goes on a list as it arises: a game it can't play (a person playing it is the strongest evidence for feel, ux and audio), sound it can't hear, an unreachable source, an image no source gives, an audit finding it couldn't fix. In a ref session, into the reference's `homework` list in `references.json`, one line each: what a person does and the gap it fills ("play R3 for 20 minutes and time the dash's recovery: feel"); the gate accepts a reference short of sources whose gap is named there. In a scan, into the landscape page's "Not researched" section. The brief ranks them.
+- **Homework candidates.** What the agent can't do goes on a list as it arises: a game it can't play (a person playing it is the strongest evidence for feel, ux and audio), sound it can't hear, an unreachable source, an image no source gives, an audit finding it couldn't fix. In a ref session, into the reference's `homework` list in `references.json`, one line each: what a person does and the gap it fills ("play R3 for 20 minutes and time the dash's recovery: feel"); the gate accepts a reference short of three sources whose gap is named there, as long as it has at least one. In a scan, into the landscape page's "Not researched" section. The brief ranks them.
 - **Pages last.** Every page is drafted in `docs/game/drafts/<page-id>.md` and written in the docs place after the state commit, as "Pages are written last" in `docs/agents/game.md` says. A new wiki page gets a `wiki.json` entry (`id`, `title`, area `Vision`, `link`, `version` read back as `docs/agents/docs.md` says, `updated`) and a line under Vision on the home page, whose `index` entry gets its new `version` and `updated` in the same pages commit.
 - **Offer, never choose.** Which comps count as "us", which anchors to break, the hook, the references and the price are the person's picks in ideation. A weak number states the odds; it never drops a direction.
 
@@ -127,7 +127,7 @@ Into `material/`, once for every role:
 - for a reference that isn't a game (a film, a book, an artwork), its pages and published stills;
 - `material/index.md`: one line per source with its URL, retrieval date, what it gave and the file that holds it; a source that failed: `<source>: n/a: <reason>`.
 
-**Done when** every source is a file under `material/` with its index line, or an `n/a` line with its reason, and at least three are gathered, or each gap has a candidate in the entry's `homework` saying what a person does to fill it (the failed hosts go in the progress entry).
+**Done when** every source is a file under `material/` with its index line, or an `n/a` line with its reason, and at least three are gathered, or at least one is and each gap has a candidate in the entry's `homework` saying what a person does to fill it (the failed hosts go in the progress entry).
 
 ### 3. Play and capture
 
@@ -161,7 +161,7 @@ In the reference's entry: `how_studied` per role, from its section (`how`, and t
 
 ### 6. Audit, at most two rounds
 
-1. Dispatch `creative` in `audit` mode, with the most capable model available, as in step 4: the reference's `references.json` entry with its `homework` list, the section paths, each role's `dossier.md`, `material/index.md`, and the output `docs/game/research/refs/<id>/audit.json`. A gap the entry's `homework` names (fewer than three sources, a missing number, image or sample) is the person's to fill, so it is no finding. Check independence as in step 4, then set the record's facts yourself: role `creative`, target `<id>`, `commit` (HEAD at dispatch), `independent: true` (`false` without a subagent tool), `inputs` (the section paths). Its findings are all `blocking` by the audit mode's rule, unlike a review's. Run `check --since <base>` and commit: `game-research: <id> audit round <n>`.
+1. Dispatch `creative` in `audit` mode, with the most capable model available, as in step 4: the reference's `references.json` entry with its `homework` list, the section paths, each role's `dossier.md`, `material/index.md`, and the output `docs/game/research/refs/<id>/audit.json`. A gap the entry's `homework` names (one or two sources where three are wanted, a missing number, image or sample) is the person's to fill, so it is no finding; a dossier with no source at all is always a finding. Check independence as in step 4, then set the record's facts yourself: role `creative`, target `<id>`, `commit` (HEAD at dispatch), `independent: true` (`false` without a subagent tool), `inputs` (the section paths). Its findings are all `blocking` by the audit mode's rule, unlike a review's. Run `check --since <base>` and commit: `game-research: <id> audit round <n>`.
 2. `result` `ok`: the audit is done. Otherwise fix every finding:
    - a missing image, number or source: gather it (steps 2–3);
    - send each role with findings back to its section as in step 4, with the audit's path and its note ids, to rewrite what they name;
@@ -221,13 +221,13 @@ Run `gamestate.py check --since <base>`, commit `homework.json` and `references.
 - the homework page in the docs place beside the wiki (after a restart, rewrite the one the latest `docs/game/archive/*/homework.json` links). It isn't a wiki page, since people write answers on it: record its link as `homework.json` `page`;
 - each item as a `ready-for-human` ticket (`docs/agents/issue-tracker.md`) titled `<id>: <what>`, linking the homework page, recorded as the item's `ticket`.
 
-Delete the drafts and commit: the pages commit. Then `gamestate.py gate` and `gamestate.py complete`.
+Delete the drafts and commit: the pages commit. Then run `gamestate.py gate`. The research phase has no task (status shows no `task:`), so there is no `complete`: a passing gate ends the phase.
 
-**Done when** the `research` page and its `wiki.json` entry, the homework page's link and the tickets are committed, no brief draft remains, and `complete` succeeds.
+**Done when** the `research` page and its `wiki.json` entry, the homework page's link and the tickets are committed, no brief draft remains, and `gate` passes.
 
 ## Homework
 
-Task `with-user: game-research homework`. Phase brainstorm, with a person, before any topic: brainstorm waits until every item is `answered` or `skip`.
+Task `with-user: game-research homework (<n> open)`, `<n>` the items still open. Phase brainstorm, with a person, before any topic: brainstorm waits until every item is `answered` or `skip`.
 
 ### 1. Read
 

@@ -8,7 +8,7 @@ Mark each line passed, a note, or `not-assessed` with the reason. In a feature r
 - Contrast: `measure.py contrast` between each HUD text region and its backdrop, against the ratios the `screens` page states.
 - Text size and overlaps, from the UI dump where the adapter gives one: no text under the page's minimum size, no two elements overlapping, nothing off-screen. Otherwise `not-assessed`: no dump.
 - Settings present, from the settings list against the `screens` page's Accessibility minimum section: list each entry it names that is missing.
-- `derive` run on each capture, so the judged lines below have their copies.
+- Each capture's derived copies are in `inputs/derived/<capture>/` (game-review makes them; you never run `derive`), so the judged lines below have them; a line whose copy is missing is `not-assessed`.
 
 ## Judged (on captures, against the pages)
 

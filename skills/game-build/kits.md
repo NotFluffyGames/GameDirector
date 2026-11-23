@@ -17,7 +17,7 @@ The person marks what is "ours" and what is "not ours", which gives the roles' t
 
 and either:
 
-- no `docs/game/calibration/labels.json` exists and no `calibrate` entry is queued; or
+- no `docs/game/calibration/labels.json` exists and no `calibrate` entry is queued (`gamestate.py check` asks for the entry until one is queued or labels exist); or
 - the art direction changed since the latest kit: `north_stars.art` in `docs/game/vision.json` differs from that kit's `art.json` (an adjust or a restart changed it).
 
 Make it in `docs/game/calibration/kit-<n>/`, `n` one past the latest kit:
