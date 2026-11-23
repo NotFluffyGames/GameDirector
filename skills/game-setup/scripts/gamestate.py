@@ -53,6 +53,8 @@ AREAS = ["Vision", "Mechanics", "Controls", "Systems", "Content", "Modes and ses
          "Screens and onboarding", "Feel", "Tone, art and world"]
 SLICE_AREAS = [a for a in AREAS if a != "Modes and sessions"]
 REQUIRED_PAGES = ["vision", "slice", "concepts"]
+QUALITY_ASPECTS = ["code", "feel", "art", "audio", "ui", "onboarding"]
+QUALITY_BARS = ["placeholder", "representative", "production", "final"]
 FUN_FIELDS = ["statement", "scope", "kind", "metric", "threshold", "how"]
 RICH_FIELDS = ["aspect", "scope", "statement", "metric", "threshold", "how"]
 MIN_SEED_TOPICS = 5
@@ -178,13 +180,34 @@ class Game:
         return {p.get("id") for p in self.wiki_pages()}
 
     def vision(self):
-        return self.vision_data
+        return self.vision_data if isinstance(self.vision_data, dict) else {}
 
     def pillars(self):
         pillars = self.vision().get("pillars")
-        if pillars is None:
+        if not isinstance(pillars, list):
             return None
-        return [p.get("id") for p in pillars]
+        return [p.get("id") for p in pillars if isinstance(p, dict)]
+
+    def _vision_shape(self):
+        """Reasons vision.json has a value of the wrong type, so later reads can trust the shapes."""
+        if not isinstance(self.vision_data, dict):
+            return ["vision.json is not an object"]
+        v, why = self.vision_data, []
+        pillars = v.get("pillars", [])
+        if not isinstance(pillars, list):
+            why.append("vision.json pillars is not a list")
+        else:
+            why += [f"vision.json pillars: entry {n} is not an object"
+                    for n, p in enumerate(pillars, 1) if not isinstance(p, dict)]
+        if not isinstance(v.get("anti_pillars", []), list):
+            why.append("vision.json anti_pillars is not a list")
+        for key in ("slice", "directions"):
+            if not isinstance(v.get(key, {}), dict):
+                why.append(f"vision.json {key} is not an object")
+        sl = v.get("slice")
+        if isinstance(sl, dict) and not isinstance(sl.get("quality_bar", {}), dict):
+            why.append("vision.json slice quality_bar is not an object")
+        return why
 
     def items(self):
         return self.features.get("features", [])
@@ -337,6 +360,7 @@ class Game:
         errs += self._check_targets()
         errs += self._check_topics()
         errs += self._check_wiki()
+        errs += self._vision_shape()
         errs += self._check_keep()
         if self.stage() not in STAGES:
             errs.append(f"state.stage must be one of {STAGES}")
@@ -461,7 +485,9 @@ class Game:
             elif "://" not in link and not (self.root / link).exists():
                 errs.append(f"page {pid}: local link '{link}' does not exist")
             flagged = p.get("flagged")
-            if flagged and flagged.get("topic") not in open_topics:
+            if flagged and not isinstance(flagged, dict):
+                errs.append(f"page {pid}: flagged is not an object")
+            elif flagged and flagged.get("topic") not in open_topics:
                 errs.append(f"page {pid}: flagged for topic {flagged.get('topic')}, which is not open")
         return errs
 
@@ -590,15 +616,31 @@ class Game:
         return why
 
     def _ideation_gate(self):
-        why = []
+        why = self._vision_shape()
+        v = self.vision()
         n = len(self.pillars() or [])
         if not 3 <= n <= 4:
             why.append(f"vision.json has {n} pillars; needs 3-4")
-        directions = self.vision().get("directions") or {}
-        if not isinstance(directions.get("count"), int) or not 3 <= directions["count"] <= 5:
-            why.append(f"vision.json directions.count is {directions.get('count')}; needs 3-5")
+        if not (v.get("anti_pillars") if isinstance(v.get("anti_pillars"), list) else None):
+            why.append("vision.json has no anti-pillar")
+        if not str(v.get("kill_condition") or "").strip():
+            why.append("vision.json has no kill condition")
+        directions = v.get("directions") if isinstance(v.get("directions"), dict) else {}
+        count = directions.get("count")
+        if not isinstance(count, int) or isinstance(count, bool) or not 3 <= count <= 5:
+            why.append(f"vision.json directions: {count if isinstance(count, int) else 0} compared; needs 3-5")
         if not re.search(r"\bC\d+\b", str(directions.get("choice") or "")):
-            why.append("vision.json directions.choice names no direction")
+            why.append("vision.json directions: no choice")
+        sl = v.get("slice") if isinstance(v.get("slice"), dict) else {}
+        if not str(sl.get("test_question") or "").strip():
+            why.append("vision.json slice: no test question")
+        bar = sl.get("quality_bar") if isinstance(sl.get("quality_bar"), dict) else {}
+        for aspect in QUALITY_ASPECTS:
+            level = bar.get(aspect)
+            if level is None:
+                why.append(f"vision.json slice quality bar: {aspect} missing")
+            elif level not in QUALITY_BARS:
+                why.append(f"vision.json slice quality bar: {aspect} is '{level}'; needs one of {QUALITY_BARS}")
         ids = self.page_ids()
         why += [f"wiki.json has no page '{i}'" for i in REQUIRED_PAGES if i not in ids]
         seeded = [t for t in self.topics() if t.get("parent") is not None]

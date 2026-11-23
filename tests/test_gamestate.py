@@ -356,8 +356,45 @@ class GameRun(unittest.TestCase):
             topic(f"T{i}", stage="production") for i in range(2, 8)]}))
         self.commit()
         out = self.tool("gate", ok=False)
-        for expected in ("directions.count is 2", "wiki.json has no page 'slice'", "wiki.json has no page 'concepts'", "no topic marked"):
+        for expected in ("directions: 2 compared; needs 3-5", "wiki.json has no page 'slice'", "wiki.json has no page 'concepts'", "no topic marked"):
             self.assertIn(expected, out)
+
+    def test_ideation_gate_reads_vision_json_and_required_pages(self):
+        self.to_ideation()
+        self.edit("vision.json", lambda d: d.update(pillars=[{"id": "P1", "statement": "x"}], anti_pillars=[],
+                                                     kill_condition="", directions={"count": 2, "choice": ""},
+                                                     slice={"test_question": "", "quality_bar": {"art": "shiny"}}))
+        out = self.tool("gate", ok=False)
+        for expected in ("vision.json has 1 pillars; needs 3-4", "vision.json has no anti-pillar",
+                         "vision.json has no kill condition", "vision.json directions: 2 compared; needs 3-5",
+                         "vision.json directions: no choice", "vision.json slice: no test question",
+                         "vision.json slice quality bar: art is 'shiny'", "vision.json slice quality bar: code missing",
+                         "wiki.json has no page 'slice'"):
+            self.assertIn(expected, out)
+
+    def test_malformed_vision_and_flagged_shapes_are_reasons_not_crashes(self):
+        self.to_ideation()
+        self.edit("vision.json", lambda d: d.update(pillars=["P1", "P2", "P3"], slice="x", directions=[]))
+        self.write_wiki(["Vision"])
+        self.edit("wiki.json", lambda d: d["pages"][0].update(flagged="T9"))
+        self.commit()
+        out = self.tool("gate", ok=False)
+        self.assertNotIn("Traceback", out)
+        self.assertIn("vision.json pillars: entry 1 is not an object", out)
+        self.assertIn("vision.json slice is not an object", out)
+        out = self.tool("check", ok=False)
+        self.assertNotIn("Traceback", out)
+        self.assertIn("vision.json directions is not an object", out)
+        self.assertIn("flagged is not an object", out)
+
+    def test_consolidate_gate_needs_a_page_per_area_for_the_stage(self):
+        self.to_ideation()
+        self.ideate()
+        self.write_wiki([a for a in SLICE_AREAS if a != "Feel"])
+        self.resolve("T2", "T3")
+        self.sync()
+        self.tool("advance")
+        self.assertIn("wiki.json has no page in area 'Feel'", self.tool("gate", ok=False))
 
     def test_slice_consolidate_needs_a_human_item_and_production_needs_richness(self):
         self.to_ideation()
