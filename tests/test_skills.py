@@ -102,8 +102,6 @@ class Packaging(unittest.TestCase):
     def test_every_role_has_one_agent(self):
         for role in load_tool().ROLES:
             with self.subTest(role=role):
-                if not (SKILLS / f"game-role-{role}" / "SKILL.md").is_file():
-                    self.skipTest("no role skill yet")  # Task 10 removes this skip
                 path = ROOT / "agents" / f"{role}.md"
                 self.assertTrue(path.is_file())
                 fm = agent_frontmatter(path.read_text())

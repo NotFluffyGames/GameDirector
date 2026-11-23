@@ -1,0 +1,5 @@
+interface:
+  display_name: "Audio Role"
+  short_description: "Audio director: sonic pillars, priority tiers, event coverage and loudness"
+policy:
+  allow_implicit_invocation: false
