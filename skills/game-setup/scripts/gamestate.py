@@ -575,6 +575,8 @@ class Game:
         errs += self._check_keep()
         errs += self._check_reviews()
         errs += self._check_research()
+        if st.get("phase") == "research":  # a role that lost its reference is a fix: step
+            errs += self._reference_coverage()
         if self.stage() not in STAGES:
             errs.append(f"state.stage must be one of {STAGES}")
         for e in self.queue():
@@ -1094,8 +1096,9 @@ class Game:
                 for r in self.active_roles() if r not in covered]
 
     def _research_gate(self):
-        """Each reason here has a _research_action step, so the phase never stalls on a bare game-research."""
-        why = []
+        """Coverage is also a check() reason in this phase and each other reason has a _research_action step,
+        so the phase never stalls on a bare game-research."""
+        why = self._reference_coverage()
         for r in self.references():
             if r.get("status") == "open":
                 why.append(f"{r['id']}: open, not studied yet")

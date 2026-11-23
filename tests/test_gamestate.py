@@ -958,6 +958,24 @@ class GameRun(unittest.TestCase):
         (r1 / "audit.json").unlink()
         self.assertIn("R1: no audit (docs/game/research/refs/R1/audit.json)", self.tool("gate", ok=False))
 
+    def test_research_keeps_a_reference_open_for_every_active_role(self):
+        self.to_ideation()
+        self.ideate()
+        self.research()
+        reason = "references.json: no reference opened for study for role narrative"
+
+        def narrative(status):
+            self.edit(REFS, lambda d: next(r for r in d["refs"] if r["roles"] == ["narrative"]).update(status=status))
+            self.commit()
+        narrative("candidate")  # R5, the only narrative reference
+        self.assertTrue(self.next().startswith(f"fix: {reason}"))
+        self.assertTrue(self.next("--no-user").startswith(f"fix: {reason}"))
+        self.assertIn(reason, self.tool("complete", ok=False))
+        self.assertIn(reason, self.tool("gate", ok=False))
+        narrative("open")
+        self.assertNotIn(reason, self.tool("check"))
+        self.assertEqual(self.next(), "game-research ref R5")
+
     def test_brainstorm_waits_on_open_homework(self):
         self.to_brainstorm()
         self.edit(HOMEWORK, lambda d: d["items"][0].update(status="open", answer=""))
