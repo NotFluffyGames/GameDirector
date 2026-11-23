@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Give every taste aspect of a game an owner: seven role skills and agents. They set north stars with the person, study references in a new research phase, challenge brainstorm topics, and review the running build. A visible feature isn't done until its roles have reviewed it, and a role can fail a verdict only when its judgment is anchored to the person.
+**Goal:** Give every taste aspect of a game an owner: seven role skills and agents. They set north stars with the person after a landscape scan, study the chosen references in a research phase before brainstorm, challenge brainstorm topics, and review the running build. A visible feature isn't done until its roles have reviewed it, and a role can fail a verdict only when its judgment is anchored to the person.
 
 **Architecture:**
 - **The state tool** (`gamestate.py`) learns roles, reviews, review-kind fun items, the research phase, calibration and the new `vision.json` fields, all enforced by `check`, the gates and the routing.
@@ -45,7 +45,7 @@
 2. **Malformed new files** (`references.json`, `homework.json`, a review JSON, `labels.json` that is a list or has non-dict entries) give reasons, not tracebacks. Tests are in Tasks 2 and 5.
 3. **A note decision that names a feature or topic that doesn't exist** (`feature F099`) is a `check` reason. The test is in Task 2.
 4. **A taste `review` item scored `pass` before `docs/game/calibration/labels.json` exists** is refused by the verdict gate. The test is in Task 3.
-5. **A `hobby` game doesn't need comps; a `sell` game needs three.** Setup refuses a missing `intent`. Tests are in Task 5.
+5. **A `hobby` game doesn't need comps; a `sell` game needs three in the scan.** Setup refuses a missing `intent`. Tests are in Task 5.
 6. **`measure.py` on a PNG it can't decode** (16-bit, interlaced, not a PNG) exits 2 with a message, not a traceback. The test is in Task 7.
 
 ---
@@ -62,7 +62,7 @@
 | `skills/game-role-<id>/` (×7) | the role's process per mode, plus `questions.md`, `page-template.md`, `checklist.md`, `dossier.md` | 8–10 |
 | `agents/<id>.md` (×7) | thin plugin agents preloading their role skill | 8–10 |
 | `skills/game-review/SKILL.md` | how a review runs | 11 |
-| `skills/game-research/SKILL.md` | the research phase | 5 (stub), 12 |
+| `skills/game-research/SKILL.md` | the scan and research phases | 5 (stub), 12 |
 | `skills/game-setup/*` | intent, research sources, roles in `game.md`, capture contract | 12, 13 |
 | `skills/game-{ideation,brainstorm,consolidate}/*` | north stars, role challenges, review items | 13 |
 | `skills/game-{plan,build,verdict,polish,gdd,next}/*` | capture protocol, targets, reviews, role passes, GDD pages | 14 |
@@ -410,19 +410,21 @@ def test_each_role_with_a_page_has_a_slice_topic(self):
 
 ---
 
-### Task 5: The research phase
+### Task 5: The landscape scan and the research phase
 
 **Files:**
-- Modify: `skills/game-setup/scripts/gamestate.py` (PHASES, DESIGN_PHASES, DEFAULT_STATE, setup gate, `advance`, `_restart`, `_work`, `gate`, docstring Commands untouched)
-- Create: `skills/game-research/SKILL.md` (**stub**: frontmatter, a one-paragraph purpose, and a `## Modes` table naming `game-research`, `ref`, `brief`, `homework` and `restart`, each with one line; no numbered steps yet. Task 12 writes the skill.) and `skills/game-research/agents/openai.yaml`
+- Modify: `skills/game-setup/scripts/gamestate.py` (PHASES, DESIGN_PHASES, DEFAULT_STATE, setup and ideation gates, `advance`, `_restart`, `_work`, `gate`)
+- Create: `skills/game-research/SKILL.md` (**stub**: frontmatter, a one-paragraph purpose, and a `## Modes` table naming `scan`, `ref`, `brief`, `homework` and `restart`, each with one line; no numbered steps yet. Task 12 writes the skill.) and `skills/game-research/agents/openai.yaml`
 - Modify: `.claude-plugin/plugin.json` (list `./skills/game-research`)
+- Modify: `tests/test_skills.py` (`test_every_phase_has_a_skill` maps phases through `PHASE_SKILLS`)
 - Test: `tests/test_gamestate.py`
 
 **Interfaces:**
 - Produces:
+  - **Phases:** `PHASES = ["setup", "scan", "ideation", "research", "brainstorm", "consolidate", ...]`, with the rest unchanged. `DESIGN_PHASES` includes `scan` and `research`.
   - **Constants:**
-    - `PHASES` with `"research"` between `"setup"` and `"ideation"`; `DESIGN_PHASES` includes it;
-    - `INTENTS = ["sell", "hobby"]`, `REF_WHY = ["comp", "aspect"]`, `HOW_STUDIED = ["played", "watched", "read", "not-assessed"]`;
+    - `PHASE_SKILLS = {"scan": "game-research"}` (phases whose skill isn't `game-<phase>`);
+    - `INTENTS = ["sell", "hobby"]`, `REF_WHY = ["comp", "aspect"]`, `REF_STATUSES = ["candidate", "open", "studied"]`, `HOW_STUDIED = ["played", "watched", "read", "not-assessed"]`;
     - `MAX_HOMEWORK = 10`, `MIN_COMPS = 3`, `MIN_SOURCES = 3`, `IMAGE_ROLES = ["art", "ux", "feel"]`.
   - **`DEFAULT_STATE`** gains `"intent": None` and `"research_sources": None`.
   - **Methods:**
@@ -430,35 +432,46 @@ def test_each_role_with_a_page_has_a_slice_topic(self):
     - `Game.homework() -> list`;
     - `Game.homework_open() -> list` (items whose `status` is `open`);
     - `Game._check_research() -> list` (shapes);
+    - `Game._scan_gate() -> list`;
     - `Game._research_gate() -> list`;
     - `Game._research_action() -> str | None`.
   - **Files:**
-    - `docs/game/research/references.json` — `{"scanned_for": null|"<adr>", "refs": [{"id": "R1", "title", "why", "roles": [...], "sources": [...], "status": "open"|"studied", "how_studied": {role: {"how": ..., "reason": ...}}}]}`;
+    - `docs/game/research/references.json` — `{"scanned_for": null|"<adr>", "refs": [{"id": "R1", "title", "why", "roles": [...], "sources": [...], "status": "candidate"|"open"|"studied", "how_studied": {role: {"how": ..., "reason": ...}}}]}`;
     - dossiers at `docs/game/research/refs/<id>/<role>.md`;
     - the audit at `docs/game/research/refs/<id>/audit.json` (review JSON shape, role `creative`, target `<id>`);
-    - `docs/game/research/homework.json` — `{"reason": "", "items": [{"id": "H1", "what", "why", "questions": [...], "minutes", "roles": [...], "status": "open"|"answered"|"skip", "answer": ""}]}`.
+    - `docs/game/research/homework.json` — `{"reason": "", "items": [{"id": "H1", "what", "why", "questions": [...], "minutes", "roles": [...], "status": "open"|"answered"|"skip", "answer": ""}]}`;
+    - wiki pages `landscape` (written by the scan) and `research` (the brief), both area Vision.
 
 - [ ] **Step 1: Update helpers and write the failing tests**
 
   **Helpers:**
-  - `to_ideation()` sets `intent: "sell"` and `research_sources: {"checked": "2026-11-23", "reachable": [], "unreachable": []}`, completes setup, advances to research, calls a new helper `research()`, then advances to ideation.
-  - `research()` writes:
-    - 3 comps plus one aspect reference per role not covered, all studied;
-    - dossier files for each role;
+  - `to_ideation()` sets `intent: "sell"` and `research_sources: {"checked": "2026-11-23", "reachable": [], "unreachable": []}`, completes setup, and advances to scan. It then calls a new helper `scan()`, which writes the `landscape` page and 3 `comp` candidates, commits and completes. Finally it advances to ideation.
+  - `ideate()` also opens references: it sets the comps to `open` and adds one `aspect` ref per role the comps don't cover.
+  - After ideation, a new helper `research()` writes, for every open ref:
+    - status `studied`;
+    - dossier files for each of its roles;
     - one `.png` per IMAGE_ROLES dossier directory;
-    - 3 sources each;
-    - an audit with no notes;
-    - the `research` wiki page (area Vision);
-    - `homework.json` with one `answered` item.
+    - 3 sources;
+    - an audit with no notes.
 
-    Then it commits and runs `complete`.
+    It also writes the `research` wiki page and `homework.json` with one `answered` item, then commits and completes. `to_plan()` advances through research to brainstorm.
 
 ```python
 def test_setup_needs_intent_and_checked_research_sources(self):
     ...  # missing intent -> "state.intent must be one of ['sell', 'hobby']"; missing sources -> "research sources not checked"
 
-def test_research_runs_scan_then_one_session_per_reference_then_the_brief(self):
-    ...  # next() == "game-research" (no refs); after refs R1..R3 open -> "game-research ref R1";
+def test_the_scan_runs_alone_before_ideation(self):
+    ...  # after setup: next() == "game-research scan", also with --no-user (never "with-user:");
+         # sell with 2 comps -> "scan: 2 comps; needs 3"; no landscape page -> "wiki.json has no page 'landscape'"
+
+def test_hobby_needs_no_comps_but_sell_needs_three(self):
+    ...
+
+def test_ideation_opens_a_reference_per_active_role(self):
+    ...  # no open ref with role art -> "references.json: no reference opened for study for role art"
+
+def test_research_runs_one_session_per_open_reference_then_the_brief(self):
+    ...  # after ideation: next() == "game-research ref R1" (the first open ref; candidates are skipped);
          # all studied, no research page -> "game-research brief"; gate passes -> "advance"; never "with-user:"
 
 def test_research_gate_checks_evidence_per_reference(self):
@@ -466,23 +479,21 @@ def test_research_gate_checks_evidence_per_reference(self):
          # "R1: no image for the art section"; how_studied art {"how": "not-assessed"} without reason ->
          # "R1: art not-assessed needs a reason"; an open audit note -> "R1: audit note N1 is open"
 
-def test_hobby_needs_no_comps_but_sell_needs_three(self):
-    ...
-
-def test_ideation_waits_on_open_homework(self):
-    ...  # homework H1 open -> next() == "with-user: game-research homework";
-         # --no-user -> "stop: waiting for research homework"; status "skip" -> "with-user: game-ideation"
+def test_brainstorm_waits_on_open_homework(self):
+    ...  # homework H1 open -> next() == "with-user: game-research homework" (before any topic);
+         # --no-user -> "stop: waiting for research homework"; status "skip" -> "with-user: game-brainstorm T2 ..."
 
 def test_malformed_research_files_are_reasons_not_crashes(self):
     ...  # references.json "[]" and homework.json {"items": "x"} -> reasons
 
-def test_restart_rescans_then_returns_to_ideation(self):
+def test_restart_rescans_then_ideates_then_studies_only_new_references(self):
     ...  # replaces test_restart_goes_back_to_ideation_and_archives_features_and_queue's first next():
-         # "game-research restart docs/adr/0001-v.md"; after references.json scanned_for == adr and gate
-         # passes -> advance -> "with-user: game-ideation restart docs/adr/0001-v.md"; dossiers untouched
+         # "game-research restart docs/adr/0001-v.md"; once references.json scanned_for == adr -> advance ->
+         # "with-user: game-ideation restart docs/adr/0001-v.md"; studied dossiers untouched; a newly opened ref is
+         # the only "game-research ref" step
 ```
 
-  Write each `...` as a complete test with these exact reason strings. Update `test_setup_and_ideation_without_a_task_are_conversations` and every helper so the existing suite passes through research.
+  Write each `...` as a complete test with these exact reason strings. Update `test_setup_and_ideation_without_a_task_are_conversations` and every helper so the existing suite passes through scan and research.
 
 - [ ] **Step 2: Run them to see them fail.** Expected: FAIL.
 
@@ -490,10 +501,12 @@ def test_restart_rescans_then_returns_to_ideation(self):
 
   **Setup gate:** add `"state.intent must be one of ['sell', 'hobby']"` and `"research sources not checked (game-setup records research_sources)"`.
 
-  **Advancing:**
-  - setup → research sets `task="game-research"`;
-  - research → ideation sets `task=f"game-ideation restart {adr}"` when `restart_adr` is set, else `"game-ideation"`;
-  - `_restart` now sets `phase="research"` and `task=f"game-research restart {adr}"`; everything else is unchanged, and the dossiers stay.
+  **Advancing and restarts:**
+  - setup → scan sets `task="game-research scan"`;
+  - scan → ideation sets `task=f"game-ideation restart {adr}"` when `restart_adr` is set, else `"game-ideation"`;
+  - ideation → research sets `task=None`;
+  - research → brainstorm sets `task=None`;
+  - `_restart` now sets `phase="scan"` and `task=f"game-research restart {adr}"`; everything else is unchanged, and the dossiers stay.
 
   **`_check_research()`** reports shape problems as reasons:
   - references and homework that aren't objects or lists;
@@ -504,35 +517,43 @@ def test_restart_rescans_then_returns_to_ideation(self):
 
   It runs inside `check()` and validates each audit with `_review_shape`.
 
+  **`_scan_gate()`:**
+  - the `landscape` page is in `wiki.json`;
+  - for `sell`, at least MIN_COMPS refs with `why: comp` (`"scan: <n> comps; needs 3"`);
+  - with `restart_adr` set, `scanned_for` equals it.
+
+  **The ideation gate** adds `"references.json: no reference opened for study for role <r>"` for each active role not in the `roles` of any ref with status `open` or `studied`.
+
   **`_research_gate()`:**
-  - intent minimums: `sell` needs at least MIN_COMPS refs with `why: comp`, and every active role in some aspect ref's `roles`; `hobby` needs only the latter;
-  - every ref is `studied`, and for each of its roles has the dossier file plus a `how_studied` entry; `not-assessed` needs a `reason`;
+  - every `open` ref is `studied`;
+  - for each studied ref and each of its roles, the dossier file and a `how_studied` entry exist; `not-assessed` needs a `reason`;
   - at least MIN_SOURCES sources;
   - an image file (`.png`, `.jpg`, `.jpeg` or `.webp`) in the ref's directory for each IMAGE_ROLES role unless its how is `not-assessed`;
   - no audit note without a decision, or with a blocking note not `fixed`;
   - a wiki page with id `research`;
   - `homework.json` exists.
 
-  `gate()` calls it in phase research.
+  `gate()` calls `_scan_gate` in phase scan and `_research_gate` in phase research.
 
-  **`_research_action()`**, in this order:
-  1. a restart task while `scanned_for != restart_adr` → that task;
-  2. no refs → `"game-research"`;
-  3. the first open ref → `f"game-research ref {id}"`;
-  4. no `research` page or no `homework.json` → `"game-research brief"`;
-  5. else `None`.
+  **Actions in `_work`:**
+  - **Phase scan:** returns the task (`game-research scan`, or the restart task) while `_scan_gate()` fails. It is never `with-user:`.
+  - **Phase research:** returns `_research_action()`, which gives, in order:
+    1. the first `open` ref → `f"game-research ref {id}"`;
+    2. no `research` page or no `homework.json` → `"game-research brief"`;
+    3. else `None`, falling through to the gate and `advance`.
 
-  In `_work`, phase research returns `_research_action()` or falls through to the gate and `advance`. It is never `with-user:`.
+    It is never `with-user:`.
+  - **Phase brainstorm:** before `_topic_action`, `homework_open()` returns `"with-user: game-research homework"`. With `no_user` it returns `"stop: waiting for research homework: a person answers or skips each open item in docs/game/research/homework.json (or the homework page), then run /game-next"`.
 
-  **Ideation:** in `_work`, phase ideation with `homework_open()` returns `"with-user: game-research homework"`. With `no_user` it returns `"stop: waiting for research homework: a person answers or skips each open item in docs/game/research/homework.json (or the homework page), then run /game-next"`. Only after that does the existing ideation task logic run.
+  **`tick`** counts `game-research homework` as a brainstorm-phase session but not toward `brainstorm_sessions`.
 
   **`write_missing_files`** does not create research files. The research skill does.
 
-  **Homework lives only in `homework.json`.** The spec also mentions human-queue entries of kind `homework`; they're dropped. Ideation's start waits on the homework, not the awaiting-human phase, so a second copy in `human_queue` would only drift. Record this as a ruling in the ledger.
+  **Homework lives only in `homework.json`.** Brainstorm's start waits on it directly (the spec's call 17).
 
-- [ ] **Step 4: Run the whole suite.** Expected: OK (`test_every_phase_has_a_skill` finds the stub; the mode words appear in the stub's table).
+- [ ] **Step 4: Run the whole suite.** Expected: OK. `test_every_phase_has_a_skill` maps `scan` to `game-research` through `PHASE_SKILLS` and finds the stub; the mode words appear in the stub's table.
 
-- [ ] **Step 5: Commit** `gamestate: a research phase before ideation, thorough by structure`
+- [ ] **Step 5: Commit** `gamestate: a landscape scan before ideation and a research phase after it`
 
 ---
 
@@ -844,8 +865,8 @@ maxTurns: 40
 - [ ] **Step 1: Write `game-research`** from the spec's "Research phase" section and `docs/research/2026-11-23-game-market-research.md`.
 
   **Modes:**
-  - **`game-research` (scan):** comps with dated, sourced ranges by launch year (sell only; never from memory), anchors, the player profile (Quantic Foundry motivations and SDT/PENS), and the reference list.
-  - **`ref <id>`:**
+  - **`scan`** (phase scan, alone): the `landscape` page with comps (dated, sourced ranges by launch year for `sell`; never from memory), anchors, the genre default and what's overdone, complaint themes, the player profile (Quantic Foundry motivations and SDT/PENS), norms, hook candidates and risks; candidate references in `references.json`.
+  - **`ref <id>`** (phase research, one per `open` reference):
     - gather material once: store page, screenshots, reviews in all languages with negative ones first, wikis and guides;
     - play browser-playable games with Playwright and capture them;
     - downscale images to at most 1280 px;
@@ -862,6 +883,8 @@ maxTurns: 40
     - fold answers into the dossiers (`played` by the person) and the brief;
     - after ideation, an answer that contradicts a decided north star or page becomes a topic.
   - **`restart <adr>`:** re-scan comps and references in light of the ADR, keeping studied dossiers, and set `scanned_for`.
+
+  The `research` mode of each role studies a reference against this game's vision and that role's north star. The brief synthesizes what the studied references teach the chosen direction.
 
   **`sources.md`** covers:
   - the Steam `GetAppReviews` API (all languages) and the store `appdetails` endpoint (about 200 requests per 5 minutes);
@@ -915,13 +938,17 @@ maxTurns: 40
   - `n/a` rules.
 
 - [ ] **Step 3: game-ideation:**
-  - open by going through the research brief and homework answers; the person picks the comps that count as "us", the anchors to break, the hook and the references;
+  - open by going through the `landscape` page; the person picks the comps that count as "us", the anchors to break, the hook and the references (adding their own);
+  - at the end, set every reference the vision and north stars name to `open` in `references.json` (at least one per active role);
   - a new step "Set the roles' north stars" between the vision and the slice, using each role skill's `north-star` mode in the main session; art compares 2–3 directions; creative goes last and writes the invariants;
   - the slice quality-bar recommendation from the spec;
   - seed a slice topic per role page (topic-map), with `roles` on every topic;
   - the vision template gains "Direction per role".
 
-- [ ] **Step 4: game-brainstorm.** Step 1 runs `game-review topic <id>` before asking anything, then attributes challenges to roles in the conversation. Follow-up topics get `roles`.
+- [ ] **Step 4: game-brainstorm.**
+  - Step 1 runs `game-review topic <id>` before asking anything. The roles' challenges read the research dossiers of the references their north stars name, and the conversation attributes each challenge to its role.
+  - Follow-up topics get `roles`.
+  - A homework answer the person gives mid-topic goes to `homework.json`.
 
 - [ ] **Step 5: game-consolidate:**
   - cross-role consistency:
@@ -974,11 +1001,11 @@ maxTurns: 40
   - taste features use verify `human` with a `compare` entry, and picks go to `keep.json` and role memory.
 
 - [ ] **Step 5: game-gdd:**
-  - a "Research" page from the brief and homework;
+  - a "Landscape and research" page from the `landscape` and `research` pages and the homework;
   - a "Direction" page from the north stars, invariants and references;
   - the Status page shows review decisions.
 
-- [ ] **Step 6: game-next.** Its phase list and unattended notes name `research` (which runs unattended) and the new stops: research homework and calibration.
+- [ ] **Step 6: game-next.** Its phase list and unattended notes name `scan` and `research` (both run unattended) and the new stops: research homework before brainstorm, and calibration.
 
 - [ ] **Step 7: Run the whole suite.** Expected: OK.
 
@@ -989,7 +1016,7 @@ maxTurns: 40
 ### Task 15: Release 0.7.0
 
 **Files:**
-- Modify: `README.md` (phases with research; roles; review flow; the person's moments; required research hosts; Known limits: audio unheard, taste provisional until calibration, agents are Claude Code-only)
+- Modify: `README.md` (phases with the scan and research; roles; review flow; the person's moments; required research hosts; Known limits: audio unheard, taste provisional until calibration, agents are Claude Code-only)
 - Modify: `.claude-plugin/plugin.json` (`"version": "0.7.0"`; description mentions roles and research; keywords add `roles`, `reviews`, `research`)
 
 - [ ] **Step 1:** Update both files.

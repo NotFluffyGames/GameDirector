@@ -24,13 +24,17 @@ Studios avoid this with roles: a creative director, a game designer, an art dire
    - **calibration:** labelling about ten screenshots "our game / not our game" once the first in-game visual target exists;
    - **A/B picks in polish:** choosing between before-and-after captures.
 6. **A role's judgment can fail a verdict only when it is anchored to the person.** It must point to something the person set that the build contradicts: a calibration label, a reference they chose, or a page rule. A judgment without an anchor stays a note that becomes work.
-7. **Research is its own phase, between setup and ideation** (see "Research phase"). It is thorough by structure:
+7. **Research has two parts** (see "Research"):
+   - a landscape scan before ideation, so the direction isn't chosen from memory;
+   - a deep study after ideation and before brainstorm, of the references chosen for the vision.
+
+   The deep study is thorough by structure:
    - one session per reference;
    - each relevant role studies it from its own angle, in parallel;
    - evidence the gate checks;
    - an audit that blocks shallow work.
 
-   The agent does what it can, including playing browser games. What it can't do becomes a homework list for the person, and **ideation waits until each item is answered or skipped**.
+   The agent does what it can, including playing browser games. What it can't do becomes a homework list for the person, and **brainstorm waits until each item is answered or skipped**.
 8. **Structure: one skill per role, one agent per role, and one review skill.**
    - The **role skill** holds the role's process for every phase and its page template. The main session uses it with the person.
    - The **role agent** is thin: limited tools, its own model, and its role skill preloaded. It runs challenges and reviews in parallel.
@@ -148,37 +152,52 @@ The table fixes each role's ownership, page and the kind of checks it runs. The 
 - The home page template gets the new sections.
 - Consolidate's "one page per area this stage needs" gate skips areas whose role is in `roles_off`.
 
-### Research phase (before ideation)
+### Research: a landscape scan before ideation, deep study after it
 
-A new phase, `research`, sits between setup and ideation, with a new skill `game-research`. Its findings come from [docs/research/2026-11-23-game-market-research.md](../../research/2026-11-23-game-market-research.md).
+Research comes in two parts, both handled by a new skill, `game-research`:
 
-**What it is for.** It produces a short positioning package, not a market report.
-- **Comparable games** ("comps"), with dated, sourced ranges.
-- **The genre's anchors** (what players expect), plus two or three hook candidates (departures).
-- **The player**, described by motivations: Quantic Foundry's motivations for who the game is for; Self-Determination Theory and PENS for what any satisfying game must give.
-- **The platform, price and session-length norms** the comps set.
-- **What players complain about in the comps.** 57% of negative Steam reviews are about design, so this is the richest design input.
-- **References per aspect**, each with what to take and what to avoid.
-- **Risks.**
+| Part | When | Done by | What it gives |
+|---|---|---|---|
+| **The landscape scan** | a new phase `scan`, between setup and ideation | the agent alone, in one session | what ideation needs to choose a direction that isn't generic |
+| **The deep study** | a new phase `research`, between ideation and brainstorm | the agent, one session per reference, then the person's homework | dossiers on the references chosen for this vision; brainstorm grills topics with them |
 
-Sales numbers and saturation only change scope and the go/no-go call, so they're done only when the game is meant to sell.
+The deep study only pays off once the direction is chosen: a dossier on a game that informed a rejected direction is wasted. The landscape is what keeps ideation from choosing from memory. The findings behind both are in [docs/research/2026-11-23-game-market-research.md](../../research/2026-11-23-game-market-research.md).
 
-**How it runs.** The agent works to the best of its abilities, without the person. What it can't do becomes the person's homework, and ideation waits for it.
-
-**Intent comes from setup.** Setup asks one question: `sell` or `hobby`, stored in `state.json` `intent`. `hobby` drops the sales and saturation work and keeps comps, anchors, the player, references and complaints.
+**Intent comes from setup.** Setup asks one question: `sell` or `hobby`, stored in `state.json` `intent`. `hobby` drops the sales and saturation work and keeps comps, anchors, the player, references and complaints. Sales numbers and saturation only change scope and the go/no-go call.
 
 **Sources are checked in setup** the way the docs place is. Setup records which research hosts this machine reaches, for example `store.steampowered.com` and `api.steampowered.com`, optionally SteamSpy and itch.io RSS. It respects their terms: SteamDB forbids scraping, and Steam's review API needs all languages passed. An unreachable source turns its work into homework.
 
-**Steps, one session each:**
+**Market numbers never come from memory.**
 
-1. **Scan** (`game-research`). From the seed, find:
-   - the comps (`sell`: at least three, each with a dated, sourced range from a review-count method, stated as a range by launch year);
-   - the anchors;
-   - the player profile;
-   - the reference list in `docs/game/research/references.json`: comps, plus at least one aspect reference per active role. Each entry has `id`, `title`, `why` (`comp` or `aspect`), `roles`, `sources`, `status` and `how_studied`.
+#### The landscape scan (phase `scan`, task `game-research scan`)
 
-   Market numbers never come from memory.
-2. **Study one reference** (`game-research ref R3`), once per reference:
+One session, without the person, from the seed (`docs/game/seed.md`). It writes the `landscape` wiki page (area Vision) and starts `docs/game/research/references.json`:
+
+- **Comparable games ("comps")**: for `sell`, at least three, each with a dated, sourced range from a review-count method, stated as a range by launch year. For `hobby`, the closest games, without numbers.
+- **The genre's anchors**: what players expect.
+- **The genre default**: what most games of this kind do, and what's overdone. The `creative` role asks the person to depart from it.
+- **What players complain about** in the comps. 57% of negative Steam reviews are about design, so this is the richest design input.
+- **The player**, described by motivations: Quantic Foundry's motivations for who the game is for; Self-Determination Theory and PENS for what any satisfying game must give.
+- **The platform, price and session-length norms** the comps set.
+- **Hook candidates**: two or three departures. None is chosen yet.
+- **Candidate references** per aspect (play, look, sound, tone), as `references.json` entries with status `candidate`. Each entry has `id`, `title`, `why` (`comp` or `aspect`), `roles`, `sources`, `status` and `how_studied`.
+- **Risks.**
+
+#### Ideation chooses what to study
+
+Ideation opens by going through the landscape with the person. They pick:
+- which comps count as "us";
+- which anchors to break;
+- the hook;
+- the references the roles' north stars start from.
+
+The person can add their own references. At ideation's end, every reference the vision and the north stars name gets status `open` in `references.json`: these are the references to study. The candidates nobody picked stay `candidate` and are never studied.
+
+#### The deep study (phase `research`, after ideation)
+
+The agent works to the best of its abilities, without the person. What it can't do becomes the person's homework, and **brainstorm waits for it**.
+
+1. **Study one reference** (`game-research ref R3`), once per `open` reference:
    - **Shared material, once.** The main session gathers the store page, screenshots, negative and positive reviews (all languages), wikis and guides. When the game is playable in a browser, the agent **plays it** with Playwright and records its own captures and frame strips. Images are downscaled and saved under `docs/game/research/refs/R3/`.
    - **The roles, in parallel.** The reference's roles each run their role skill's `research` mode on the material and write their section of the reference's dossier (`docs/game/research/refs/R3/<role>.md`). The research report lists what each role records:
      - design: the loop, verbs, systems and numbers;
@@ -188,39 +207,40 @@ Sales numbers and saturation only change scope and the go/no-go call, so they're
      - narrative: premise, tone and writing samples;
      - ux: the first minute and the HUD;
      - creative: the hook and what's overdone.
+
+     Each role studies the reference against this game's vision and its own north star: what to take, what to avoid.
    - **How studied.** Each section records it per role: `played`, `watched` (frames), `read`, or `not-assessed` with the reason. It names its sources: at least three across the dossier.
    - **Audit.** A `creative` pass audits the dossier against the role skills' dossier requirements: claims without sources, generic lines ("great art style"), missing numbers or images. Its findings are anchored to those requirements, so they block. They're fixed in the session, at most two rounds; what still can't be done becomes homework.
-3. **Brief** (`game-research brief`).
-   - **The brief page:** the `research` wiki page (area Vision), synthesized from the dossiers. It holds the comps table, anchors and hook candidates, the player, norms, complaint themes, references per aspect with take and avoid, risks, and what's still unknown.
-   - **The homework list:** at most ten items, ranked by how much each changes a decision. Each item has:
+2. **Brief** (`game-research brief`).
+   - **The brief page:** the `research` wiki page (area Vision), synthesized from the dossiers. It holds, per aspect, what the studied references teach this game (take and avoid), the complaint themes that matter for the chosen direction, risks, and what's still unknown.
+   - **The homework list:** `docs/game/research/homework.json`, at most ten items, ranked by how much each changes a decision. Each item has:
      - what to do ("play R3 for 20 minutes", "find three screenshots of how X shows damage", "check the X community for what players miss");
      - why: the decision or role it feeds;
      - the questions to answer;
      - a time estimate.
 
-     It's published as a page next to the tasks and as `ready-for-human` tickets, and added to the human queue as entries of kind `homework`.
-   - **No hook is chosen yet.** The person chooses in ideation.
+     It's published as a page next to the tasks and as `ready-for-human` tickets.
 
-**The person's answers** come back through `game-research answers <file>`. Answers fill the dossiers: `played` by the person is the strongest evidence. They update the brief, and anything that contradicts a decided north star or page later becomes a topic.
+**The person's answers.** With a person present, `game-research homework` goes through the open items with them, recording answers or skips. Answers fill the dossiers (`played` by the person is the strongest evidence) and update the brief. Anything that contradicts a decided north star or page becomes a topic.
 
-- **Ideation waits** until every homework item is answered or the person marks it `skip`. They may not own a game, for example.
-- **Ideation opens** by going through the brief and the answers with the person. They pick:
-  - which comps count as "us";
-  - which anchors to break;
-  - the hook;
-  - the references the roles' north stars start from.
+- **Brainstorm waits** until every homework item is answered or the person marks it `skip`. They may not own a game, for example.
+- **Brainstorm uses the dossiers**: the roles' challenges for a topic read the dossiers of the references their north stars name.
 
-**Gate.** `research` completes when:
-- `references.json` meets the minimums for the intent;
-- every reference is `studied`, with a dossier section for each of its roles. Each section's required fields are filled and its `how_studied` is set;
-- every dossier has at least three sources, and images for the art, ux and feel sections (or `not-assessed` with a reason);
-- no audit finding is open;
-- the `research` page is in `wiki.json`;
-- the homework list exists (it may be empty, with a reason).
+**Gates.**
+- **`scan` completes when:**
+  - the `landscape` page is in `wiki.json`;
+  - for `sell`, `references.json` has at least three comps.
+- **`research` completes when:**
+  - every active role is covered by an `open` or studied reference;
+  - every such reference is `studied`, with a dossier section for each of its roles. Each section's required fields are filled and its `how_studied` is set;
+  - every dossier has at least three sources, and images for the art, ux and feel sections (or `not-assessed` with a reason);
+  - no audit finding is open;
+  - the `research` page is in `wiki.json`;
+  - the homework list exists (it may be empty, with a reason).
 
-Ideation's start then waits on the homework as above.
+  Brainstorm's start then waits on the homework as above.
 
-**Restart.** A restart re-runs the scan, because a changed direction changes which games are comparable. Existing dossiers are kept.
+**Restart.** A restart re-runs the scan, because a changed direction changes which games are comparable. Ideation then picks again, and the deep study covers only the newly opened references; existing dossiers are kept.
 
 ### Ideation: north stars with the person
 
@@ -246,7 +266,7 @@ Step 1 (Prepare) gains a parallel dispatch, before anything is asked:
 1. One agent for each role in the topic's `roles` gets the topic and its parent chain, the vision and `vision.json`, the topic's pages and its own role page, and runs its role skill's `challenge` mode.
 2. Each returns at most five challenges and the questions it would ask, as text, in its own fresh context.
 
-The main session merges and orders them, then grills the person as today, attributing each challenge to its role ("the art role asks…"). The role pages the topic touches are drafted from the person's answers. The rest of brainstorm is unchanged, including that only the person answers.
+The challenges read the research dossiers of the references the role's north star names. The main session merges and orders them, then grills the person as today, attributing each challenge to its role ("the art role asks…"). The role pages the topic touches are drafted from the person's answers. The rest of brainstorm is unchanged, including that only the person answers.
 
 ### Plan: captures, the visual target first, roles on features
 
@@ -412,7 +432,9 @@ Every polish feature names its role and is reviewed by it plus `creative` agains
 
 - `ROLES = ["creative", "design", "feel", "art", "audio", "narrative", "ux"]`.
 - The new `AREAS`, with `SLICE_AREAS` excluding Modes and sessions as before.
-- Phase `research` between `setup` and `ideation`, with the gate above. `state.json` gets `intent` (`sell` or `hobby`) and the research sources setup verified. The human queue gets kind `homework`, and ideation waits on it.
+- Phases `scan` (between setup and ideation) and `research` (between ideation and brainstorm), with the gates above.
+- `state.json` gets `intent` (`sell` or `hobby`) and the research sources setup verified.
+- Brainstorm waits on open homework in `docs/game/research/homework.json`. Homework is not copied into the human queue.
 - `roles` on topics and features, validated as above.
 - `reviews` on features, and the review JSON shape (with `anchor`, `item` and `decision`) and its pass rule.
 - Fun item kind `review`, with `roles`, scoring and the `not-assessed` rule.
@@ -423,7 +445,7 @@ Every polish feature names its role and is reviewed by it plus `creative` agains
 ### Skills and files touched
 
 **New:**
-- `skills/game-research/`: SKILL.md with scan, ref, brief and answers modes;
+- `skills/game-research/`: SKILL.md with `scan`, `ref`, `brief`, `homework` and `restart` modes. It handles both the `scan` and the `research` phase;
 - `skills/game-review/`: SKILL.md and `scripts/measure.py`;
 - `skills/game-role-{creative,design,feel,art,audio,narrative,ux}/`: SKILL.md with `north-star`, `research`, `challenge` and `review` modes (`creative` also has `decide` and the research audit), plus reference files for its questions, page template and checklist;
 - `agents/{creative,design,feel,art,audio,narrative,ux}.md`.
@@ -464,7 +486,8 @@ Every polish feature names its role and is reviewed by it plus `creative` agains
 14. **What calibration anchors:** stills anchor art, ux and creative; frame strips anchor feel. Audio taste stays with the person. Narrative and design are anchored by their pages and bot traces.
 15. **`review` items don't count toward the fun checklist's 10-item cap.**
 16. **Reference images are committed to the game repo, downscaled.** Cloud containers are fresh each session, so git-ignored files would be lost. Setup warns when the repo is public.
-17. **Homework is capped at ten items, ranked by impact**, so it stays a short list rather than a chore.
-18. **The research audit blocks, and so do the gate's minimums:**
-    - `sell`: at least three comps and one aspect reference per active role;
-    - `hobby`: one reference per active role.
+17. **Homework is capped at ten items, ranked by impact**, so it stays a short list rather than a chore. It lives only in `homework.json`, not also in the human queue: brainstorm's start waits on it directly.
+18. **The research audit blocks, and so do the gates' minimums:**
+    - `sell`: at least three comps in the scan;
+    - both intents: every active role covered by a studied reference.
+19. **One skill, `game-research`, handles both research phases.** The state tool maps phase `scan` to it.
