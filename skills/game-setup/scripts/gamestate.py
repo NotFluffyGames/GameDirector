@@ -157,9 +157,53 @@ class UpgradeError(Exception):
     pass
 
 
-class Game:
+class GitHistory:
+    """The game's git history: the only code that runs git. Paths are relative to the root, which is the repo's top."""
+
     def __init__(self, root: Path):
         self.root = root
+
+    def _git(self, *args):
+        return subprocess.run(["git", *args], cwd=self.root, capture_output=True, text=True)
+
+    def in_repo(self):
+        try:
+            return self._git("rev-parse", "--is-inside-work-tree").stdout.strip() == "true"
+        except FileNotFoundError:  # git isn't installed
+            return False
+
+    def tracked(self, rel):
+        return self._git("ls-files", "--error-unmatch", "--", rel).returncode == 0
+
+    def commit(self, message, rels):
+        """Stage and commit these paths only, a tracked one that was removed included; other staged work stays."""
+        if rels:
+            self._git("add", "--", *rels)
+            self._git("commit", "-q", "-m", message, "--", *rels)
+
+    def head(self):
+        """The current commit, or None before the first one."""
+        r = self._git("rev-parse", "--verify", "-q", "HEAD")
+        return r.stdout.strip() if r.returncode == 0 else None
+
+    def show(self, commit, rel):
+        """The file's text at that commit; None when the commit is unknown or the file isn't in it."""
+        r = self._git("show", f"{commit}:{rel}")
+        return r.stdout if r.returncode == 0 else None
+
+    def changed(self, a, b, rels):
+        """The paths that differ between commits a and b; all of them when either commit is unknown."""
+        r = self._git("diff", "--name-only", a, b, "--", *rels)
+        return r.stdout.splitlines() if r.returncode == 0 else list(rels)
+
+    def is_ancestor(self, a, b):
+        return self._git("merge-base", "--is-ancestor", a, b).returncode == 0
+
+
+class Game:
+    def __init__(self, root: Path, history=None):
+        self.root = root
+        self.history = history or GitHistory(root)  # the tests pass an in-memory stand-in
         self.dir = root / "docs" / "game"
         self.state_path = self.dir / "state.json"
         self.features_path = self.dir / "features.json"
@@ -224,24 +268,16 @@ class Game:
         path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
         self.written.append(path)
 
-    def _git(self, *args):
-        return subprocess.run(["git", *args], cwd=self.root, capture_output=True, text=True)
-
     def in_git(self):
-        try:
-            return self._git("rev-parse", "--is-inside-work-tree").stdout.strip() == "true"
-        except FileNotFoundError:
-            return False
+        return self.history.in_repo()
 
     def commit(self, message, *paths):
         """Commit only the given paths, a tracked one that was removed included; leaves any other staged work alone."""
         if not self.in_git():
             return
         rel = [p.relative_to(self.root).as_posix() for p in paths]
-        rel = [r for r in rel if (self.root / r).exists()
-               or self._git("ls-files", "--error-unmatch", "--", r).returncode == 0]
-        self._git("add", "--", *rel)
-        self._git("commit", "-q", "-m", f"game-state: {message}", "--", *rel)
+        self.history.commit(f"game-state: {message}",
+                            [r for r in rel if (self.root / r).exists() or self.history.tracked(r)])
 
     def write_missing_files(self):
         """Create every state file that doesn't exist yet; returns the paths created, relative to the root."""
@@ -529,8 +565,7 @@ class Game:
         if not synced or not self.in_git():
             return True
         sources = [p.relative_to(self.root).as_posix() for p in (self.wiki_index_path, self.dir / "own-calls.md")]
-        r = self._git("diff", "--name-only", synced, "HEAD", "--", *sources)
-        return r.returncode != 0 or bool(r.stdout.strip())
+        return bool(self.history.changed(synced, "HEAD", sources))
 
     def read_pin(self, file, key):
         """The current value of a pinned tuning knob: a dotted path in JSON, or a `key = value` / `key: value` line."""
@@ -969,18 +1004,18 @@ class Game:
                 r = self.review(reviews[role]) if isinstance(reviews.get(role), str) else None
                 if r is None:
                     continue  # _check_reviews reports the missing review
-                if self._git("merge-base", "--is-ancestor", since, str(r.get("commit"))).returncode != 0:
+                if not self.history.is_ancestor(since, str(r.get("commit"))):
                     errs.append(f"{fid}: the {role} review predates this session's work; review again")
         return errs
 
     def _old(self, since, path):
         if not self.in_git():
             return None
-        r = self._git("show", f"{since}:{path.relative_to(self.root).as_posix()}")
-        if r.returncode != 0:
+        text = self.history.show(since, path.relative_to(self.root).as_posix())
+        if text is None:
             return None
         try:
-            return json.loads(r.stdout)
+            return json.loads(text)
         except json.JSONDecodeError:
             return None
 
@@ -1719,9 +1754,10 @@ def find_root(argv):
     return Path.cwd()
 
 
-def main(argv):
+def main(argv, history=None):
+    """history: the game's git history, a GitHistory of the root unless given (the tests give a stand-in)."""
     cmd = argv[0] if argv and not argv[0].startswith("--") else "status"
-    game = Game(find_root(argv))
+    game = Game(find_root(argv), history)
     st = game.state
     if cmd == "init":
         for path in game.write_missing_files():
@@ -1767,7 +1803,7 @@ def main(argv):
         print(f"complete: {done}\nnext: {game.next_action()}")
         return 0
     if cmd == "gdd-synced":
-        head = game._git("rev-parse", "HEAD").stdout.strip() if game.in_git() else None
+        head = game.history.head() if game.in_git() else None
         if not head:
             print("cannot record the sync: commit the wiki first")
             return 1
