@@ -1,0 +1,5 @@
+interface:
+  display_name: "Creative Role"
+  short_description: "Creative director: identity, challenges, review and decisions"
+policy:
+  allow_implicit_invocation: true

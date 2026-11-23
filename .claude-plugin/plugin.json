@@ -27,6 +27,10 @@
     "./skills/game-plan",
     "./skills/game-build",
     "./skills/game-verdict",
-    "./skills/game-polish"
+    "./skills/game-polish",
+    "./skills/game-role-creative"
+  ],
+  "agents": [
+    "./agents/creative.md"
   ]
 }

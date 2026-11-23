@@ -26,6 +26,12 @@ def frontmatter(text):
     return dict(re.findall(r"^([a-z-]+): (.*)$", m.group(1), re.M)) if m else {}
 
 
+def agent_frontmatter(text):
+    """Agent frontmatter keys carry capitals (disallowedTools, maxTurns) that the skill parser drops."""
+    m = re.match(r"---\n(.*?)\n---\n", text, re.S)
+    return dict(re.findall(r"^([A-Za-z-]+): (.*)$", m.group(1), re.M)) if m else {}
+
+
 def outside_code(text):
     """The text with fenced code blocks blanked out, so templates inside them aren't read as live markdown."""
     return re.sub(r"```.*?```", "", text, flags=re.S)
@@ -33,6 +39,10 @@ def outside_code(text):
 
 def skill_dirs():
     return sorted(p for p in SKILLS.iterdir() if (p / "SKILL.md").is_file())
+
+
+def role_skill_dirs():
+    return [d for d in skill_dirs() if d.name.startswith("game-role-")]
 
 
 def markdown_files():
@@ -52,8 +62,43 @@ class Packaging(unittest.TestCase):
                 self.assertTrue(re.fullmatch(r"[a-z0-9-]{1,64}", d.name))
                 self.assertTrue(0 < len(fm.get("description", "")) <= 1024)
                 self.assertNotRegex(fm["description"], r"[<>]")
-                self.assertEqual(fm.get("disable-model-invocation"), "true")
                 self.assertTrue((d / "agents" / "openai.yaml").is_file())
+
+    def test_other_skills_stay_user_invoked(self):
+        for d in skill_dirs():
+            if d in role_skill_dirs():
+                continue
+            with self.subTest(skill=d.name):
+                self.assertEqual(frontmatter((d / "SKILL.md").read_text()).get("disable-model-invocation"), "true")
+
+    def test_role_skills_can_be_preloaded(self):
+        roles = role_skill_dirs()
+        self.assertTrue(roles, "no game-role-* skill")
+        for d in roles:
+            with self.subTest(skill=d.name):
+                text = (d / "SKILL.md").read_text()
+                fm = frontmatter(text)
+                self.assertNotIn("disable-model-invocation", fm)
+                self.assertTrue(fm["description"].startswith("Use only when"))
+                for ref in ("questions.md", "page-template.md", "checklist.md", "dossier.md"):
+                    self.assertTrue((d / ref).is_file(), ref)
+                for mode in ("north-star", "research", "challenge", "review"):
+                    self.assertIn(mode, text)
+
+    def test_every_role_has_one_agent(self):
+        for role in load_tool().ROLES:
+            with self.subTest(role=role):
+                if not (SKILLS / f"game-role-{role}" / "SKILL.md").is_file():
+                    self.skipTest("no role skill yet")  # Task 10 removes this skip
+                path = ROOT / "agents" / f"{role}.md"
+                self.assertTrue(path.is_file())
+                fm = agent_frontmatter(path.read_text())
+                self.assertEqual(fm.get("name"), role)
+                self.assertEqual(fm.get("skills"), f"game-role-{role}")
+                self.assertIn("Edit", fm.get("disallowedTools", ""))
+                self.assertIn("Agent", fm.get("disallowedTools", ""))
+                self.assertNotIn("Edit", fm.get("tools", ""))
+                self.assertEqual(fm.get("model"), "inherit")
 
 
 class Writing(unittest.TestCase):
