@@ -17,6 +17,20 @@ Metrics a bot run, replay or headless simulation can measure in place of a fun s
 | The core verb feels responsive | input-to-feedback latency in ticks; feedback events per core action | feedback within 100 ms; ≥ 1 visual and 1 audio cue |
 | Nothing breaks | crashes, softlocks (no state change for N seconds while input arrives), errors during random-input fuzzing | zero over 30 minutes of fuzzing |
 
+## What the roles review
+
+A `review` item is judged by named roles from this build's captures, strips, event logs and bot traces, and fails only through a note anchored to something the person set: a calibration label, a reference they chose, a page rule. Write its statement so an anchor can decide it:
+
+| Role | Example review item | `taste` |
+| --- | --- | --- |
+| `creative` | a fresh capture reads as this game, not its genre default; every identity invariant holds | true |
+| `design` | no strategy dominates the bot traces; the difficulty curve follows the Systems pages | false |
+| `feel` | every core action meets its feel sheet beside its reference clips | true |
+| `art` | captures match the visual target; every colour role keeps to its use | true |
+| `audio` | every gameplay event has its sound, with the variation and loudness the `audio` page sets | false |
+| `narrative` | every player-facing string keeps the tone page's words, names and lengths | false |
+| `ux` | a new player reaches the core verb in the first minute as the `onboarding` page lays out | true |
+
 ## What needs a human
 
-Keep as `human` items: delight, humour, beauty, theme and emotional beats, "one more round", whether the controls feel good in the hands, and anything about a real audience's taste. A vision model looking at captures can flag readability and art-direction drift, but it cannot score these.
+Keep as `human` items: delight, humour, beauty, theme and emotional beats, "one more round", whether the controls feel good in the hands, whether the game sounds right, and anything about a real audience's taste. The roles' review items flag drift from the person's anchors; they don't score these.
