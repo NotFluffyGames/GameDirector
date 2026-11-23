@@ -1,0 +1,5 @@
+interface:
+  display_name: "Design Role"
+  short_description: "Game designer: rules, systems, content, bot-trace verdict reviews"
+policy:
+  allow_implicit_invocation: false

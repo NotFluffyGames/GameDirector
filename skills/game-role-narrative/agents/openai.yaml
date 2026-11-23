@@ -1,0 +1,5 @@
+interface:
+  display_name: "Narrative Role"
+  short_description: "Narrative designer: tone, world, naming and every player-facing word"
+policy:
+  allow_implicit_invocation: false

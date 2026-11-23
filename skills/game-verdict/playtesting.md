@@ -8,7 +8,7 @@ How an agent measures a game, and how it hands the rest to people.
 - Runs and sample sizes
 - Metrics format
 - Fuzzing
-- Captures and visual review
+- Captures and the role review
 - Human playtest kit
 
 ## Bot policies
@@ -29,6 +29,7 @@ Comparing two policies (stronger vs weaker, option A vs option B) is how skill, 
 ## Runs and sample sizes
 
 - Seed every run; record seed, knob-file hash and build commit with the metrics.
+- Keep each run's event log (`bot --events DIR`): the design role reads the traces in the verdict's review.
 - At least 30 runs per measured configuration; 100+ when comparing win rates that should differ by under 10 points.
 - Report median, p10 and p90, plus the pass/fail against the threshold. A rate near its threshold (within its sampling error) counts as inconclusive: run more.
 
@@ -47,9 +48,9 @@ The `bot` command writes one line per run plus a summary; verdict evidence is th
 
 Random-policy runs with random knob perturbation within each knob's declared range: 30 minutes of game time for a real-time game, or 2,000 turns for a turn-based one, or more. Fail on: crash, exception in logs, NaN or out-of-range state, or a softlock (state hash unchanged for 10 seconds of game time, or 20 consecutive turns, while legal inputs arrive and the game is not paused or over). Save the replay of every failure.
 
-## Captures and visual review
+## Captures and the role review
 
-Capture through the adapter's `capture` command at fixed seeds and ticks so captures are comparable across builds. Review each against the art pages in the wiki: palette, silhouettes readable at the smallest target screen size, UI text legible, the player's focus obvious. A vision-capable model can do this review; record it as notes, never as a score for a human item.
+game-review makes the captures and strips from the named states in `docs/game/engine-notes.md`, at fixed seeds and ticks, so they compare across builds; the roles review them with the event logs and bot traces against their own pages, references and calibration labels. A role's note scores only a `review` item, and only through an anchor; it never stands in for a human item.
 
 ## Human playtest kit
 

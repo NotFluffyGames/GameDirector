@@ -6,13 +6,15 @@ game-setup copies this file to docs/game/gamestate.py in the game's repo.
 Commands:
   init               create any missing state files under docs/game/
   upgrade            bring an older game's state to this tool's version: a game
-                     still at setup is reset (limits, counters, human_queue and
-                     adapter_verified kept; milestones refreshed); later phases
-                     apply MIGRATIONS. Refuses, changing nothing, a missing,
-                     newer or malformed state, or a phase with no migration
+                     still at setup is reset (limits, counters, human_queue,
+                     adapter_verified and docs_verified kept; milestones
+                     refreshed); later phases apply MIGRATIONS. Refuses,
+                     changing nothing, a missing, newer or malformed state, or
+                     a phase with no migration
   status [--no-user] one-screen summary, ending with the `next:` action.
                      --no-user: nobody is there to talk to, so skip `with-user:`
-                     work (ideation, brainstorm topics) and do what else can be done
+                     work (ideation, research homework, brainstorm topics) and do
+                     what else can be done
   check [--since C]  invariants; exit 1 on violations. --since: the commit the
                      session started from (default HEAD), for the edit guard
   gate               does the current task or phase gate pass? exit 1 if not
@@ -34,9 +36,10 @@ import subprocess
 import sys
 from pathlib import Path
 
-PHASES = ["setup", "ideation", "brainstorm", "consolidate", "plan", "build", "verdict", "polish",
+PHASES = ["setup", "scan", "ideation", "research", "brainstorm", "consolidate", "plan", "build", "verdict", "polish",
           "awaiting-human", "done"]
-DESIGN_PHASES = ["setup", "ideation", "brainstorm", "consolidate"]  # the bar (fun checklist, richness) is set here
+DESIGN_PHASES = ["setup", "scan", "ideation", "research", "brainstorm", "consolidate"]  # the bar is set here
+PHASE_SKILLS = {"scan": "game-research"}  # phases whose skill isn't game-<phase>
 PLANNING_PHASES = DESIGN_PHASES + ["plan"]                          # the definition of done is rewritten here
 TOPIC_PHASES = ["consolidate", "plan", "build", "verdict", "polish"]  # topics interrupt these when work needs them
 REOPENABLE = ["build", "polish", "awaiting-human", "done"]
@@ -54,18 +57,42 @@ SCORE_RESULTS = ["pass", "fail", "not-assessed", "pending-human"]
 ASPECTS = ["depth", "breadth", "variety"]
 TOPIC_STATUSES = ["open", "resolved", "deferred"]
 PRIORITIES = ["core", "support", "later"]
+ROLES = ["creative", "design", "feel", "art", "audio", "narrative", "ux"]
+TASTE_AREAS = ["Screens and onboarding", "Feel", "Art", "Audio", "Narrative and world"]
 AREAS = ["Vision", "Mechanics", "Controls", "Systems", "Content", "Modes and sessions",
-         "Screens and onboarding", "Feel", "Tone, art and world"]
+         "Screens and onboarding", "Feel", "Art", "Audio", "Narrative and world"]
+AREA_ROLES = {"Art": "art", "Audio": "audio", "Narrative and world": "narrative"}  # areas that vanish with their role
 SLICE_AREAS = [a for a in AREAS if a != "Modes and sessions"]
 REQUIRED_PAGES = ["vision", "slice", "concepts"]
 QUALITY_ASPECTS = ["code", "feel", "art", "audio", "ui", "onboarding"]
 QUALITY_BARS = ["placeholder", "representative", "production", "final"]
 FUN_FIELDS = ["statement", "scope", "kind", "metric", "threshold", "how"]
 RICH_FIELDS = ["aspect", "scope", "statement", "metric", "threshold", "how"]
+REVIEW_RESULTS = ["ok", "notes", "not-assessed"]
+SEVERITIES = ["blocking", "advisory"]
+ANCHOR_KINDS = ["label", "reference", "rule"]
+FUN_KINDS = ["proxy", "human", "review"]
+CALIBRATED_ROLES = ["creative", "feel", "art", "ux"]  # roles whose taste judgments need the person's labels first
+LABELS = "docs/game/calibration/labels.json"
+DECISION_RE = r"^(fixed [0-9a-f]{7,40}|feature F\d+|topic T\d+|wontfix: \S.*)$"
 MIN_SEED_TOPICS = 5
+INTENTS = ["sell", "hobby"]
+REF_WHY = ["comp", "aspect"]
+REF_STATUSES = ["candidate", "open", "studied"]
+HOW_STUDIED = ["played", "watched", "read", "not-assessed"]
+HOMEWORK_STATUSES = ["open", "answered", "skip"]
+MAX_HOMEWORK = 10
+MIN_COMPS = 3
+MIN_SOURCES = 3
+IMAGE_ROLES = ["art", "ux", "feel"]  # dossier sections that need an image in refs/<id>/<role>/ unless not assessed
+IMAGE_TYPES = (".png", ".jpg", ".jpeg", ".webp")
+PAGE_ROLES = ("feel", "art", "audio", "narrative", "ux")  # roles whose page ideation seeds a slice topic for
 NICE_RESERVE = 10  # sessions kept back for verdicts and polish before nice features are built
 
-CURRENT_VERSION = 6
+QUEUE_KINDS = ["playtest", "calibrate", "compare"]
+TARGETS = ["visual", "feel"]  # a feature's target: the visual look or the feel the slice is built to fix
+
+CURRENT_VERSION = 7
 # from_version -> migrate(game) -> notes; brings game.state to from_version + 1. Write files with
 # game._write, so `upgrade` commits them.
 # Empty so far: a game past setup can't be upgraded until a release adds entries.
@@ -82,8 +109,11 @@ DEFAULT_STATE = {
     "passed_verdicts": [],
     "slice_sessions": None,
     "checkpoint_due": False,
+    "polish_planned": False,
     "adapter_verified": False,
     "docs_verified": None,
+    "intent": None,
+    "research_sources": None,
     "gdd_synced": None,
     "restart_adr": None,
     "resume": None,
@@ -103,6 +133,8 @@ DEFAULT_TOPICS = {"topics": []}
 DEFAULT_KEEP = {"keep": []}
 DEFAULT_WIKI = {"pages": []}
 DEFAULT_VISION = {}
+DEFAULT_REFERENCES = {"scanned_for": None, "refs": []}  # research files: the research skill writes them, init doesn't
+DEFAULT_HOMEWORK = {"reason": "", "items": []}
 MISSING = object()
 DEFAULT_TEXT = {
     "progress.md": "# Progress\n\nAppend-only session log. One entry per session, newest last, at most 10 lines each.\n",
@@ -127,9 +159,53 @@ class UpgradeError(Exception):
     pass
 
 
-class Game:
+class GitHistory:
+    """The game's git history: the only code that runs git. Paths are relative to the root, which is the repo's top."""
+
     def __init__(self, root: Path):
         self.root = root
+
+    def _git(self, *args):
+        return subprocess.run(["git", *args], cwd=self.root, capture_output=True, text=True)
+
+    def in_repo(self):
+        try:
+            return self._git("rev-parse", "--is-inside-work-tree").stdout.strip() == "true"
+        except FileNotFoundError:  # git isn't installed
+            return False
+
+    def tracked(self, rel):
+        return self._git("ls-files", "--error-unmatch", "--", rel).returncode == 0
+
+    def commit(self, message, rels):
+        """Stage and commit these paths only, a tracked one that was removed included; other staged work stays."""
+        if rels:
+            self._git("add", "--", *rels)
+            self._git("commit", "-q", "-m", message, "--", *rels)
+
+    def head(self):
+        """The current commit, or None before the first one."""
+        r = self._git("rev-parse", "--verify", "-q", "HEAD")
+        return r.stdout.strip() if r.returncode == 0 else None
+
+    def show(self, commit, rel):
+        """The file's text at that commit; None when the commit is unknown or the file isn't in it."""
+        r = self._git("show", f"{commit}:{rel}")
+        return r.stdout if r.returncode == 0 else None
+
+    def changed(self, a, b, rels):
+        """The paths that differ between commits a and b; all of them when either commit is unknown."""
+        r = self._git("diff", "--name-only", a, b, "--", *rels)
+        return r.stdout.splitlines() if r.returncode == 0 else list(rels)
+
+    def is_ancestor(self, a, b):
+        return self._git("merge-base", "--is-ancestor", a, b).returncode == 0
+
+
+class Game:
+    def __init__(self, root: Path, history=None):
+        self.root = root
+        self.history = history or GitHistory(root)  # the tests pass an in-memory stand-in
         self.dir = root / "docs" / "game"
         self.state_path = self.dir / "state.json"
         self.features_path = self.dir / "features.json"
@@ -139,6 +215,9 @@ class Game:
         self.keep_path = self.dir / "keep.json"
         self.wiki_index_path = self.dir / "wiki.json"
         self.vision_path = self.dir / "vision.json"
+        self.research_dir = self.dir / "research"
+        self.references_path = self.research_dir / "references.json"
+        self.homework_path = self.research_dir / "homework.json"
         self.written = []  # every file this run wrote, so the command that wrote them can commit them
         self.state = self._load(self.state_path, DEFAULT_STATE)
         self.found_version = self._found_version()
@@ -149,6 +228,8 @@ class Game:
         self.keep = self._load(self.keep_path, DEFAULT_KEEP)
         self.wiki_index = self._load(self.wiki_index_path, DEFAULT_WIKI, shape_checked=True)
         self.vision_data = self._load(self.vision_path, DEFAULT_VISION, shape_checked=True)
+        self.references_data = self._load(self.references_path, DEFAULT_REFERENCES, shape_checked=True)
+        self.homework_data = self._load(self.homework_path, DEFAULT_HOMEWORK, shape_checked=True)
 
     def _read(self, path):
         try:
@@ -189,22 +270,16 @@ class Game:
         path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
         self.written.append(path)
 
-    def _git(self, *args):
-        return subprocess.run(["git", *args], cwd=self.root, capture_output=True, text=True)
-
     def in_git(self):
-        try:
-            return self._git("rev-parse", "--is-inside-work-tree").stdout.strip() == "true"
-        except FileNotFoundError:
-            return False
+        return self.history.in_repo()
 
     def commit(self, message, *paths):
-        """Commit only the given paths; leaves any other staged work alone."""
+        """Commit only the given paths, a tracked one that was removed included; leaves any other staged work alone."""
         if not self.in_git():
             return
-        rel = [p.relative_to(self.root).as_posix() for p in paths if p.exists()]
-        self._git("add", "--", *rel)
-        self._git("commit", "-q", "-m", f"game-state: {message}", "--", *rel)
+        rel = [p.relative_to(self.root).as_posix() for p in paths]
+        self.history.commit(f"game-state: {message}",
+                            [r for r in rel if (self.root / r).exists() or self.history.tracked(r)])
 
     def write_missing_files(self):
         """Create every state file that doesn't exist yet; returns the paths created, relative to the root."""
@@ -239,7 +314,7 @@ class Game:
             return [f"already at version {CURRENT_VERSION}"]
         if self.state.get("phase") == "setup":
             fresh = copy(DEFAULT_STATE)
-            for key in ("limits", "counters", "human_queue", "adapter_verified"):
+            for key in ("limits", "counters", "human_queue", "adapter_verified", "docs_verified"):
                 fresh[key] = self.state.get(key, fresh[key])
             fresh["task"] = "game-setup upgrade"
             self.state.clear()
@@ -307,6 +382,25 @@ class Game:
     def vision(self):
         return self.vision_data if isinstance(self.vision_data, dict) else {}
 
+    def active_roles(self):
+        off = self.vision().get("roles_off")
+        off = off if isinstance(off, dict) else {}
+        return [r for r in ROLES if r not in off]
+
+    def _check_roles(self, owner, roles, on_feature=False):
+        """Reasons a topic's or feature's `roles` isn't a list of active role ids."""
+        if not isinstance(roles, list):
+            return [f"{owner}: roles must be a list"]
+        errs, active = [], self.active_roles()
+        for r in roles:
+            if r not in ROLES:
+                errs.append(f"{owner}: role '{r}' is not one of {ROLES}")
+            elif r not in active:
+                errs.append(f"{owner}: role '{r}' is switched off in vision.json roles_off")
+            elif r == "design" and on_feature:
+                errs.append(f"{owner}: design judges at verdicts, not on features")
+        return errs
+
     def pillars(self):
         pillars = self.vision().get("pillars")
         if not isinstance(pillars, list):
@@ -332,7 +426,46 @@ class Game:
         sl = v.get("slice")
         if isinstance(sl, dict) and not isinstance(sl.get("quality_bar", {}), dict):
             why.append("vision.json slice quality_bar is not an object")
+        if not isinstance(v.get("north_stars", {}), dict):
+            why.append("vision.json north_stars is not an object")
+        if not isinstance(v.get("invariants", []), list):
+            why.append("vision.json invariants is not a list")
+        off = v.get("roles_off", {})
+        if not isinstance(off, dict):
+            why.append("vision.json roles_off is not an object")
+        else:
+            why += [f"vision.json roles_off: {r} has no reason" for r, reason in off.items()
+                    if not str(reason or "").strip()]
+            if "creative" in off:
+                why.append("vision.json roles_off: creative can't be switched off (it decides every review note)")
         return why
+
+    def references(self):
+        """The well-formed reference entries in references.json; _check_research reports the rest."""
+        refs = self.references_data.get("refs") if isinstance(self.references_data, dict) else None
+        if not isinstance(refs, list):
+            return []
+        return [r for r in refs if isinstance(r, dict) and isinstance(r.get("id"), str) and r["id"]]
+
+    def homework(self):
+        items = self.homework_data.get("items") if isinstance(self.homework_data, dict) else None
+        return [i for i in items if isinstance(i, dict)] if isinstance(items, list) else []
+
+    def homework_open(self):
+        return [i for i in self.homework() if i.get("status") == "open"]
+
+    @staticmethod
+    def ref_roles(entry):
+        roles = entry.get("roles")
+        return [r for r in roles if isinstance(r, str)] if isinstance(roles, list) else []
+
+    @staticmethod
+    def ref_homework(entry):
+        """The candidate homework a reference names for what the agent couldn't reach; [] when malformed."""
+        hw = entry.get("homework", [])
+        if not isinstance(hw, list) or not all(isinstance(h, str) and h.strip() for h in hw):
+            return []
+        return hw
 
     def items(self):
         return self.features.get("features", [])
@@ -365,6 +498,24 @@ class Game:
             return q
         return [e for e in q if (e.get("kind") == "playtest") == playtests]
 
+    def labelled(self):
+        """The person's calibration labels exist."""
+        return (self.root / LABELS).is_file()
+
+    def answered(self, entry):
+        return bool(entry.get("answers")) and (self.root / str(entry["answers"])).is_file()
+
+    def compares(self):
+        """The A/B-pick entries: (answered, still waiting for the person's picks)."""
+        entries = [e for e in self.queue() if e.get("kind") == "compare"]
+        return [e for e in entries if self.answered(e)], [e for e in entries if not self.answered(e)]
+
+    def owed(self):
+        """The queue entries a person still owes: not playtests (they never stop the run), nor answered picks or
+        labelled kits (a build session applies the picks; a verdict consumes the labels)."""
+        return [e for e in self.queue(playtests=False)
+                if not (e.get("kind") in ("compare", "calibrate") and self.answered(e))]
+
     def queued_ids(self):
         ids = set()
         for entry in self.queue():
@@ -392,7 +543,8 @@ class Game:
         return fs[0]["milestone"] if fs else None
 
     def has_polish_features(self):
-        return any(f.get("tier") != "cut" and f.get("milestone") == POLISH for f in self.items())
+        """game-polish's plan: must features in polish (a review decision adds nice ones)."""
+        return any(f.get("tier") == "must" and f.get("milestone") == POLISH for f in self.items())
 
     def green_pool(self):
         """Milestones whose must features have to pass in the current phase."""
@@ -420,11 +572,7 @@ class Game:
         return next((e for e in self.queue(playtests=True) if e.get("scope") == scope), None)
 
     def pending_playtest(self):
-        for entry in self.queue(playtests=True):
-            answers = entry.get("answers")
-            if answers and (self.root / answers).exists():
-                return entry
-        return None
+        return next((e for e in self.queue(playtests=True) if self.answered(e)), None)
 
     def open_topics(self, priorities=PRIORITIES):
         rank = {p: i for i, p in enumerate(PRIORITIES)}
@@ -444,8 +592,7 @@ class Game:
         if not synced or not self.in_git():
             return True
         sources = [p.relative_to(self.root).as_posix() for p in (self.wiki_index_path, self.dir / "own-calls.md")]
-        r = self._git("diff", "--name-only", synced, "HEAD", "--", *sources)
-        return r.returncode != 0 or bool(r.stdout.strip())
+        return bool(self.history.changed(synced, "HEAD", sources))
 
     def read_pin(self, file, key):
         """The current value of a pinned tuning knob: a dotted path in JSON, or a `key = value` / `key: value` line."""
@@ -491,6 +638,11 @@ class Game:
         errs += self._check_wiki()
         errs += self._vision_shape()
         errs += self._check_keep()
+        errs += self._check_reviews()
+        errs += self._check_labels()
+        errs += self._check_research()
+        if st.get("phase") == "research":  # a role that lost its reference is a fix: step
+            errs += self._reference_coverage()
         if self.stage() not in STAGES:
             errs.append(f"state.stage must be one of {STAGES}")
         for e in self.queue():
@@ -498,11 +650,16 @@ class Game:
                 errs.append("human_queue entries need id and what")
             if e.get("kind") == "playtest" and not (e.get("scope") in SCOPES and e.get("answers")):
                 errs.append(f"human_queue {e.get('id')}: a playtest entry needs scope in {SCOPES} and answers")
+            if e.get("kind") == "calibrate" and not (e.get("how") and e.get("answers")):
+                errs.append(f"human_queue {e.get('id')}: a calibrate entry needs how and answers")
+            if e.get("kind") == "compare" and not (e.get("how") and e.get("answers") and e.get("unblocks")):
+                errs.append(f"human_queue {e.get('id')}: a compare entry needs how, answers and unblocks")
         for v in st.get("verdicts", []):
             if v.get("outcome") not in OUTCOMES or not v.get("adr") or v.get("scope") not in SCOPES:
                 errs.append(f"verdict {v.get('scope')}: needs scope in {SCOPES}, outcome in {OUTCOMES} and an adr path")
         if st.get("phase") not in PLANNING_PHASES:
             errs += self._feature_guard(since)
+            errs += self._review_guard(since)
         if not (self.stage() == "slice" and st.get("phase") in DESIGN_PHASES):
             errs += self._target_guard(since, self.fun_path, "items", FUN_FIELDS, "fun", self.fun)
             errs += self._target_guard(since, self.richness_path, "targets", RICH_FIELDS, "richness", self.richness)
@@ -541,8 +698,54 @@ class Game:
             if f.get("tier") == "cut" and not f.get("cut_reason"):
                 errs.append(f"{fid}: cut without cut_reason")
             pages = f.get("pages", [])
-            errs += self.page_list(fid, pages) or [f"{fid}: page '{p}' is not in wiki.json"
-                                                    for p in pages if p not in page_ids]
+            bad = self.page_list(fid, pages)
+            errs += bad or [f"{fid}: page '{p}' is not in wiki.json" for p in pages if p not in page_ids]
+            if "target" in f and f["target"] not in TARGETS:
+                errs.append(f"{fid}: target must be one of {TARGETS}")
+            roles = f.get("roles", [])
+            errs += self._check_roles(fid, roles, on_feature=True)
+            if not roles:
+                taste = {p["id"] for p in self.wiki_pages() if p.get("area") in TASTE_AREAS}
+                if verify.get("kind") == "capture" or (not bad and taste & set(pages)):
+                    errs.append(f"{fid}: visible work needs roles (pages in {TASTE_AREAS} or verify kind capture)")
+        trigger = self._calibration_trigger()
+        if trigger and not self.labelled() and not any(e.get("kind") == "calibrate" for e in self.queue()):
+            errs.append(f"{trigger}: queue a calibrate entry for a person (kind calibrate)")
+        return errs
+
+    def _calibration_trigger(self):
+        """'<what> passes' once the trigger of the calibration kit passes (game-build's kits.md), else None: the
+        visual target; with art off, the feel target; with feel off too, the first slice feature with roles."""
+        active, passing = self.active_roles(), [f for f in self.items() if f.get("passes")]
+        if "art" in active:
+            return "the visual target passes" if any(f.get("target") == "visual" for f in passing) else None
+        if "feel" in active:
+            return "the feel target passes (art is off)" if any(f.get("target") == "feel" for f in passing) else None
+        f = next((f for f in passing if f.get("milestone") == SLICE_MS[1]
+                  and isinstance(f.get("roles"), list) and f["roles"]), None)
+        return f"slice feature {f.get('id')} passes (art and feel are off)" if f else None
+
+    def _check_labels(self):
+        path = self.root / LABELS
+        if not path.is_file():
+            return []
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except ValueError:
+            return ["calibration labels: not valid JSON"]
+        if not isinstance(data, dict) or not isinstance(data.get("labels"), list):
+            return ["calibration labels: must be an object with a labels list"]
+        errs = []
+        for n, label in enumerate(data["labels"]):
+            if not isinstance(label, dict):
+                errs.append(f"calibration labels: entry {n} must be an object")
+                continue
+            if not label.get("capture"):
+                errs.append(f"calibration labels: entry {n} needs a capture")
+            if not isinstance(label.get("ours"), bool):
+                errs.append(f"calibration labels: entry {n} needs ours true or false")
+            if not (isinstance(label.get("why"), str) and label["why"].strip()):
+                errs.append(f"calibration labels: entry {n} needs a why")
         return errs
 
     def _check_targets(self):
@@ -556,10 +759,20 @@ class Game:
                 errs.append(f"fun {iid}: missing statement")
             if i.get("scope") not in FUN_SCOPES:
                 errs.append(f"fun {iid}: scope must be one of {FUN_SCOPES}")
-            if i.get("kind") not in ("proxy", "human"):
-                errs.append(f"fun {iid}: kind must be proxy or human")
+            if i.get("kind") not in FUN_KINDS:
+                errs.append(f"fun {iid}: kind must be one of {FUN_KINDS}")
             if i.get("kind") == "proxy" and not all(i.get(k) for k in ("metric", "threshold", "how")):
                 errs.append(f"fun {iid}: a proxy item needs metric, threshold and how")
+            if i.get("kind") == "review":
+                if not i.get("roles"):
+                    errs.append(f"fun {iid}: a review item needs roles")
+                if "roles" in i:
+                    errs += self._check_roles(f"fun {iid}", i["roles"])
+                if not isinstance(i.get("taste"), bool):
+                    errs.append(f"fun {iid}: taste must be true or false")
+                elif i["taste"] and i.get("scope") == "core-loop":  # it would wait for labels the core loop never gets
+                    errs.append(f"fun {iid}: a taste review item has scope slice or full "
+                                "(the core-loop verdict runs on bots, before calibration)")
         for t in self.richness.get("targets", []):
             tid = t.get("id") or "<no id>"
             if tid in seen:
@@ -593,6 +806,10 @@ class Game:
                 errs.append(f"topic {tid}: parent '{t.get('parent')}' is not a topic")
             if t.get("status") in ("resolved", "deferred") and not t.get("resolution"):
                 errs.append(f"topic {tid}: a {t.get('status')} topic needs a resolution (the answer, or why it waits)")
+            roles = t.get("roles", [])
+            errs += self._check_roles(f"topic {tid}", roles)
+            if t.get("status") == "open" and not roles:
+                errs.append(f"topic {tid}: open without roles (who prepares its challenges?)")
             pages, bad = t.get("pages", []), self.page_list(f"topic {tid}", t.get("pages", []))
             errs += bad
             if not bad and t.get("status") == "resolved":
@@ -666,14 +883,192 @@ class Game:
                 pass
         return ids
 
+    # ---------- research ----------
+    @staticmethod
+    def _entries(label, data, key):
+        """The object entries of data[key] that have an id, and the reasons data falls short of that shape."""
+        if not isinstance(data, dict):
+            return [], [f"{label} is not an object"]
+        entries = data.get(key, [])
+        if not isinstance(entries, list):
+            return [], [f"{label} {key} is not a list"]
+        good, why, seen = [], [], set()
+        for n, e in enumerate(entries, 1):
+            if not isinstance(e, dict):
+                why.append(f"{label} {key}: entry {n} is not an object")
+            elif not (isinstance(e.get("id"), str) and e["id"]):
+                why.append(f"{label} {key}: entry {n} has no id")
+            else:
+                if e["id"] in seen:
+                    why.append(f"{label} {e['id']}: duplicate id")
+                seen.add(e["id"])
+                good.append(e)
+        return good, why
+
+    @staticmethod
+    def _known_roles(owner, roles):
+        """Reasons a research entry's roles aren't role ids. Research outlives roles_off, so only unknown ids count."""
+        if not isinstance(roles, list):
+            return [f"{owner}: roles must be a list"]
+        return [f"{owner}: role '{r}' is not one of {ROLES}" for r in roles if r not in ROLES]
+
+    def _check_research(self):
+        """Reasons references.json, homework.json or a reference's audit is malformed; the gates read around them."""
+        refs, errs = self._entries("references.json", self.references_data, "refs")
+        for r in refs:
+            owner = f"references.json {r['id']}"
+            if r.get("why") not in REF_WHY:
+                errs.append(f"{owner}: why must be one of {REF_WHY}")
+            if r.get("status") not in REF_STATUSES:
+                errs.append(f"{owner}: status must be one of {REF_STATUSES}")
+            errs += self._known_roles(owner, r.get("roles", []))
+            if not isinstance(r.get("sources", []), list):
+                errs.append(f"{owner}: sources must be a list")
+            if "homework" in r and r["homework"] != [] and not self.ref_homework(r):
+                errs.append(f"{owner}: homework must be a list of non-empty strings")
+            how = r.get("how_studied", {})
+            if not isinstance(how, dict):
+                errs.append(f"{owner}: how_studied must be an object")
+                continue
+            for role, h in how.items():
+                if role not in ROLES:
+                    errs.append(f"{owner}: how_studied role '{role}' is not one of {ROLES}")
+                elif not (isinstance(h, dict) and h.get("how") in HOW_STUDIED):
+                    errs.append(f"{owner}: how_studied {role}: how must be one of {HOW_STUDIED}")
+        if self.homework_path.exists():  # its default is empty without a reason, so only a written list is checked
+            items, why = self._entries("homework.json", self.homework_data, "items")
+            errs += why
+            for i in items:
+                if i.get("status") not in HOMEWORK_STATUSES:
+                    errs.append(f"homework.json {i['id']}: status must be one of {HOMEWORK_STATUSES}")
+                errs += self._known_roles(f"homework.json {i['id']}", i.get("roles", []))
+            listed = self.homework_data.get("items") if isinstance(self.homework_data, dict) else None
+            if isinstance(listed, list) and len(listed) > MAX_HOMEWORK:
+                errs.append(f"homework.json has {len(listed)} items; keep it to {MAX_HOMEWORK} or fewer")
+            if listed == [] and not str(self.homework_data.get("reason") or "").strip():
+                errs.append("homework.json has no items and no reason")
+        for p in sorted((self.research_dir / "refs").glob("*/audit.json")):
+            errs += self._review_shape(p.relative_to(self.root).as_posix())
+        return errs
+
+    # ---------- reviews ----------
+    def review(self, path):
+        """The review file at path (relative to the game root) as a dict; None when missing, unreadable or not an object."""
+        try:
+            data = json.loads((self.root / path).read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return None
+        return data if isinstance(data, dict) else None
+
+    def _review_shape(self, path):
+        """Reasons the review file at path is malformed."""
+        r = self.review(path)
+        if r is None:
+            return [f"{path}: not a JSON object"]
+        errs = []
+        if r.get("role") not in ROLES:
+            errs.append(f"{path}: role '{r.get('role')}' is not one of {ROLES}")
+        for key in ("target", "commit"):
+            if not r.get(key):
+                errs.append(f"{path}: missing {key}")
+        if r.get("result") not in REVIEW_RESULTS:
+            errs.append(f"{path}: result must be one of {REVIEW_RESULTS}")
+        if r.get("result") == "not-assessed" and not r.get("reason"):
+            errs.append(f"{path}: a not-assessed review needs a reason")
+        notes = r.get("notes", [])
+        if not isinstance(notes, list) or not all(isinstance(n, dict) for n in notes):
+            return errs + [f"{path}: notes must be a list of objects"]
+        # a restart archives the features but keeps the reviews: their decisions may name archived ones.
+        # Topics are never archived.
+        features = {f.get("id") for f in self.items()} | self._archived_ids()
+        topics = {t.get("id") for t in self.topics()}
+        for n in notes:
+            nid = n.get("id") or "<no id>"
+            for key in ("id", "what", "evidence"):
+                if not n.get(key):
+                    errs.append(f"{path}: note {nid} is missing {key}")
+            if n.get("severity") not in SEVERITIES:
+                errs.append(f"{path}: note {nid} severity must be one of {SEVERITIES}")
+            anchor = n.get("anchor")
+            if anchor is not None and not (isinstance(anchor, dict) and anchor.get("kind") in ANCHOR_KINDS
+                                           and anchor.get("ref")):
+                errs.append(f"{path}: note {nid} anchor needs kind in {ANCHOR_KINDS} and a ref")
+            d = n.get("decision") or ""
+            if not d:
+                continue  # reviews are written before the decide pass; the pass gate demands the decision
+            m = re.match(DECISION_RE, str(d))
+            if not m:
+                errs.append(f"{path}: note {nid} decision '{d}' is not one of "
+                            "fixed <commit> | feature F.. | topic T.. | wontfix: <reason>")
+            elif d.startswith(("feature ", "topic ")):
+                kind, ref = d.split(" ", 1)
+                if ref not in (features if kind == "feature" else topics):
+                    errs.append(f"{path}: note {nid} decision names {ref}, which does not exist")
+        return errs
+
+    def _check_reviews(self):
+        errs = []
+        for p in sorted((self.dir / "reviews").glob("*/*.json")):
+            errs += self._review_shape(p.relative_to(self.root).as_posix())
+        for f in self.items():
+            fid, roles = f.get("id") or "<no id>", f.get("roles")
+            if not f.get("passes") or not roles or not isinstance(roles, list):
+                continue
+            reviews = f.get("reviews") if isinstance(f.get("reviews"), dict) else {}
+            for role in roles:
+                if not isinstance(role, str):
+                    continue  # _check_roles reports it
+                path = reviews.get(role)
+                r = self.review(path) if isinstance(path, str) else None
+                if r is None:
+                    errs.append(f"{fid}: passes without a review by {role}")
+                    continue
+                if r.get("role") != role:
+                    errs.append(f"{fid}: reviews.{role} ({path}) is a review by {r.get('role')}, not {role}")
+                    continue
+                if r.get("target") != fid:
+                    errs.append(f"{fid}: reviews.{role} ({path}) is a review of {r.get('target')}, not {fid}")
+                    continue
+                for n in r.get("notes", []) if isinstance(r.get("notes"), list) else []:
+                    if not isinstance(n, dict):
+                        continue
+                    d = str(n.get("decision") or "")
+                    if n.get("severity") == "blocking" and not d.startswith("fixed"):
+                        errs.append(f"{fid}: {role} review note {n.get('id')} is blocking and not fixed")
+                    if not d:
+                        errs.append(f"{fid}: {role} review note {n.get('id')} has no decision")
+        return errs
+
+    def _review_guard(self, since):
+        """A feature that passes in this session needs reviews made on this session's work, not before it."""
+        old_data = self._old(since, self.features_path)
+        if old_data is None:
+            return []
+        old = {f.get("id"): f for f in old_data.get("features", [])}
+        errs = []
+        for f in self.items():
+            fid = f.get("id")
+            if fid not in old or old[fid].get("passes") or not f.get("passes"):
+                continue
+            reviews = f.get("reviews") if isinstance(f.get("reviews"), dict) else {}
+            for role in f.get("roles") if isinstance(f.get("roles"), list) else []:
+                if not isinstance(role, str):
+                    continue  # _check_roles reports it
+                r = self.review(reviews[role]) if isinstance(reviews.get(role), str) else None
+                if r is None:
+                    continue  # _check_reviews reports the missing review
+                if not self.history.is_ancestor(since, str(r.get("commit"))):
+                    errs.append(f"{fid}: the {role} review predates this session's work; review again")
+        return errs
+
     def _old(self, since, path):
         if not self.in_git():
             return None
-        r = self._git("show", f"{since}:{path.relative_to(self.root).as_posix()}")
-        if r.returncode != 0:
+        text = self.history.show(since, path.relative_to(self.root).as_posix())
+        if text is None:
             return None
         try:
-            return json.loads(r.stdout)
+            return json.loads(text)
         except json.JSONDecodeError:
             return None
 
@@ -731,8 +1126,17 @@ class Game:
             dv = st.get("docs_verified")
             if not (isinstance(dv, dict) and dv.get("place") and dv.get("date")):
                 why.append("docs not verified: run the docs smoke test (game-setup)")
+            if st.get("intent") not in INTENTS:
+                why.append(f"state.intent must be one of {INTENTS}")
+            sources = st.get("research_sources")
+            if not (isinstance(sources, dict) and sources.get("checked")):
+                why.append("research sources not checked (game-setup records research_sources)")
+        elif phase == "scan":
+            why += self._scan_gate()
         elif phase == "ideation":
             why += self._ideation_gate()
+        elif phase == "research":
+            why += self._research_gate()
         elif phase == "brainstorm":
             open_now = ["core"] if self.brainstorm_share_spent() else ["core", "support"]
             why += [f"topic {t['id']}: open ({t.get('priority')})" for t in self.open_topics(open_now) if self.in_stage(t)]
@@ -741,8 +1145,9 @@ class Game:
         elif phase == "plan":
             why += self._plan_gate()
         elif phase == "awaiting-human":
-            if self.queue(playtests=False):
-                why.append(f"{len(self.queue(playtests=False))} human queue entries open")
+            waiting = self.owed()
+            if waiting:  # answered picks and labelled kits never hold the run, whatever stopped it
+                why.append(f"{len(waiting)} human queue entries open")
             if st.get("stop_reason"):
                 why.append(f"stopped: {st['stop_reason']} (a human decides, then sets stop_reason to null)")
         if phase in ("build", "verdict", "polish", "done"):
@@ -750,8 +1155,8 @@ class Game:
                     for f in self.failing(self.green_pool())]
         if phase == "verdict":
             why += self._verdict_gate()
-        if phase == "polish" and not self.has_polish_features():
-            why.append("no polish features yet (game-polish)")
+        if phase == "polish" and not st.get("polish_planned"):
+            why.append("polish not planned yet (game-polish)")
         return why
 
     def _ideation_gate(self):
@@ -781,6 +1186,7 @@ class Game:
                 why.append(f"vision.json slice quality bar: {aspect} missing")
             elif level not in QUALITY_BARS:
                 why.append(f"vision.json slice quality bar: {aspect} is '{level}'; needs one of {QUALITY_BARS}")
+        why += self._north_star_reasons(v)
         ids = self.page_ids()
         why += [f"wiki.json has no page '{i}'" for i in REQUIRED_PAGES if i not in ids]
         seeded = [t for t in self.topics() if t.get("parent") is not None]
@@ -790,17 +1196,142 @@ class Game:
             why.append(f"topics.json has {len(seeded)} follow-up topics; seed at least {MIN_SEED_TOPICS}")
         if not any(t.get("priority") == "core" for t in seeded):
             why.append("no core topic seeded")
+        for r in self.active_roles():
+            if r in PAGE_ROLES and not any(t.get("stage") == "slice" and isinstance(t.get("roles"), list)
+                                           and r in t["roles"] for t in seeded):
+                why.append(f"no slice topic for role {r} (its page)")
+        return why + self._reference_coverage()
+
+    def _scan_gate(self):
+        why = [] if "landscape" in self.page_ids() else ["wiki.json has no page 'landscape'"]
+        if self.state.get("intent") != "hobby":  # only a hobby game goes without comps
+            n = sum(r.get("why") == "comp" for r in self.references())
+            if n < MIN_COMPS:
+                why.append(f"scan: {n} comps; needs {MIN_COMPS}")
+        adr = self.state.get("restart_adr")
+        scanned = self.references_data.get("scanned_for") if isinstance(self.references_data, dict) else None
+        if adr and scanned != adr:
+            why.append(f"references.json scanned_for is not {adr}: re-scan for the restart, then set it")
+        return why
+
+    def _reference_coverage(self):
+        """Reasons an active role has no reference opened for study (open now, or studied before a restart)."""
+        covered = {role for r in self.references() if r.get("status") in ("open", "studied")
+                   for role in self.ref_roles(r)}
+        return [f"references.json: no reference opened for study for role {r}"
+                for r in self.active_roles() if r not in covered]
+
+    def _research_gate(self):
+        """Coverage is also a check() reason in this phase and each other reason has a _research_action step,
+        so the phase never stalls on a bare game-research."""
+        why = self._reference_coverage()
+        for r in self.references():
+            if r.get("status") == "open":
+                why.append(f"{r['id']}: open, not studied yet")
+            elif r.get("status") == "studied":
+                why += self._dossier_reasons(r)
+        if "research" not in self.page_ids():
+            why.append("wiki.json has no page 'research'")
+        if not self.homework_path.exists():
+            why.append("docs/game/research/homework.json is missing (it may be empty, with a reason)")
+        return why
+
+    def _dossier_reasons(self, r):
+        """Reasons a studied reference's dossier falls short: its sections, how each was studied, images, sources
+        (fewer, but at least one, pass when its homework names how a person fills the gap) and the creative audit."""
+        rid, why = r["id"], []
+        base = f"docs/game/research/refs/{rid}"
+        how = r.get("how_studied") if isinstance(r.get("how_studied"), dict) else {}
+        for role in self.ref_roles(r):
+            if not (self.root / base / f"{role}.md").is_file():
+                why.append(f"{rid}: no {role} dossier ({base}/{role}.md)")
+            h = how.get(role)
+            if not (isinstance(h, dict) and h.get("how") in HOW_STUDIED):
+                why.append(f"{rid}: {role} how_studied not set")
+            elif h["how"] == "not-assessed":
+                if not str(h.get("reason") or "").strip():
+                    why.append(f"{rid}: {role} not-assessed needs a reason")
+            elif role in IMAGE_ROLES and not self._has_image(self.root / base / role):
+                why.append(f"{rid}: no image for the {role} section")
+        sources = r.get("sources") if isinstance(r.get("sources"), list) else []
+        n = len([s for s in sources if s])
+        homework = self.ref_homework(r)  # past the first source, the sources it couldn't reach are the person's
+        if n < MIN_SOURCES and not (n and homework):
+            why.append(f"{rid}: {n} sources; needs {MIN_SOURCES}"
+                       + (", or at least 1 when homework names the gap" if homework else ""))
+        audit = self.review(f"{base}/audit.json")
+        if audit is None:
+            why.append(f"{rid}: no audit ({base}/audit.json)")
+        for note in audit.get("notes") if audit and isinstance(audit.get("notes"), list) else []:
+            if not isinstance(note, dict):
+                continue  # _review_shape reports it
+            d = str(note.get("decision") or "")
+            if not d:
+                why.append(f"{rid}: audit note {note.get('id')} is open")
+            elif note.get("severity") == "blocking" and not d.startswith("fixed"):
+                why.append(f"{rid}: audit note {note.get('id')} is blocking and not fixed")
+        return why
+
+    @staticmethod
+    def _has_image(folder):
+        return folder.is_dir() and any(p.is_file() and p.suffix.lower() in IMAGE_TYPES for p in folder.rglob("*"))
+
+    def _research_action(self):
+        """The research phase's next session: each open reference in turn, then a studied one whose dossier falls
+        short, then the brief; None once all are done."""
+        refs = self.references()
+        ref = next((r for r in refs if r.get("status") == "open"), None)
+        ref = ref or next((r for r in refs if r.get("status") == "studied" and self._dossier_reasons(r)), None)
+        if ref:
+            return f"game-research ref {ref['id']}"
+        if "research" not in self.page_ids() or not self.homework_path.exists():
+            return "game-research brief"
+        return None
+
+    def _north_star_reasons(self, v):
+        """Reasons the north stars and invariants ideation sets are missing or thin."""
+        stars = v.get("north_stars") if isinstance(v.get("north_stars"), dict) else {}
+        why = []
+        for r in self.active_roles():
+            star = stars.get(r)
+            if not isinstance(star, dict):
+                why.append(f"vision.json north_stars: {r} missing")
+                continue
+            if not str(star.get("statement") or "").strip():
+                why.append(f"north_stars.{r}: no statement")
+            refs = star.get("references")
+            n = len([x for x in refs if str(x).strip()]) if isinstance(refs, list) else 0
+            if n < 2:
+                why.append(f"north_stars.{r}: {n} references; needs 2")
+            if r == "art":
+                d = star.get("directions")
+                if not isinstance(d, int) or isinstance(d, bool) or not 2 <= d <= 3:
+                    why.append(f"north_stars.art: directions {d if isinstance(d, int) else 0}; needs 2-3")
+                if not str(star.get("choice") or "").strip():
+                    why.append("north_stars.art: no choice")
+            if r == "feel" and not (isinstance(star.get("actions"), dict) and star["actions"]):
+                why.append("north_stars.feel: no core action")
+        inv = v.get("invariants") if isinstance(v.get("invariants"), list) else []
+        n = len([x for x in inv if str(x).strip()])
+        if not 2 <= n <= 5:
+            why.append(f"vision.json invariants: {n}; needs 2-5")
         return why
 
     def _consolidate_gate(self):
         slice_stage = self.stage() == "slice"
         have = {p.get("area") for p in self.wiki_pages()}
-        why = [f"wiki.json has no page in area '{a}'" for a in (SLICE_AREAS if slice_stage else AREAS) if a not in have]
+        active = self.active_roles()
+        areas = [a for a in (SLICE_AREAS if slice_stage else AREAS) if AREA_ROLES.get(a, "") in active + [""]]
+        why = [f"wiki.json has no page in area '{a}'" for a in areas if a not in have]
         why += [f"topic {t['id']}: open ({t.get('priority')})"
                 for t in self.open_topics(["core", "support"]) if self.in_stage(t)]
         items = self.fun.get("items", [])
+        counted = [i for i in items if i.get("kind") != "review"]
         if slice_stage:
-            early = [i for i in items if i.get("scope") in ("core-loop", "slice")]
+            early = [i for i in counted if i.get("scope") in ("core-loop", "slice")]
+            why += [f"fun checklist has no slice review item for {r}" for r in ("creative", "art", "feel")
+                    if r in active and not any(i.get("kind") == "review" and i.get("scope") == "slice"
+                                               and r in (i.get("roles") or []) for i in items)]
             if not 3 <= len(early) <= 6:
                 why.append(f"fun checklist has {len(early)} core-loop and slice items; needs 3-6")
             if not any(i.get("scope") == "core-loop" and i.get("kind") == "proxy" for i in items):
@@ -810,8 +1341,11 @@ class Game:
         else:
             if not any(i.get("scope") == "full" for i in items):
                 why.append("fun checklist has no item for the full game (scope full)")
-            if len(items) > 10:
-                why.append(f"fun checklist has {len(items)} items; keep it to 10 or fewer")
+            why += [f"fun checklist has no full review item for {r}" for r in active
+                    if not any(i.get("kind") == "review" and i.get("scope") == "full"
+                               and r in (i.get("roles") or []) for i in items)]
+            if len(counted) > 10:
+                why.append(f"fun checklist has {len(counted)} items; keep it to 10 or fewer")
             aspects = {t.get("aspect") for t in self.richness.get("targets", []) if t.get("scope", "full") == "full"}
             why += [f"richness.json has no full-game {a} target" for a in ASPECTS if a not in aspects]
         return why
@@ -829,6 +1363,12 @@ class Game:
             why.append(f"no must feature in milestone '{SLICE_MS[0]}'")
         if not slice_stage and not any(f.get("tier") == "must" for f in build):
             why.append("no must feature in the production milestones")
+        if slice_stage:
+            for target, role, ms in (("visual", "art", SLICE_MS[1]), ("feel", "feel", SLICE_MS[0])):
+                if role in self.active_roles() and not any(
+                        f.get("tier") == "must" and f.get("milestone") == ms and f.get("target") == target
+                        for f in build):
+                    why.append(f"no must feature with target {target} in milestone {ms}")
         why += [f"{f['id']}: no tickets" for f in build if not f.get("tickets")]
         why += [f"{f['id']}: no wiki pages it implements" for f in build if f.get("tier") == "must" and not f.get("pages")]
         measuring = SLICE_MS if slice_stage else self.build_ms()
@@ -836,7 +1376,7 @@ class Game:
                     for m in f.get("measures", [])}
         scope = "slice" if slice_stage else "full"
         kinds = self.kinds()
-        targets = [i for i in self.scored_ids(scope) if kinds.get(i) != "human"]
+        targets = [i for i in self.scored_ids(scope) if kinds.get(i) not in ("human", "review")]
         why += [f"{t}: no must feature lists it in measures" for t in targets if t not in measured]
         return why
 
@@ -859,11 +1399,56 @@ class Game:
                 why.append(f"{iid}: not-assessed needs the reason it could not be measured")
             if result == "pending-human" and kinds.get(iid) != "human":
                 why.append(f"{iid}: only human items can wait for a person")
+            if kinds.get(iid) == "review":
+                why += self._review_item_gate(iid, score)
             if v.get("outcome") == "ship":
                 if result in ("fail", "not-assessed"):
                     why.append(f"{iid}: {result}; a ship needs every item to pass")
                 if result == "pending-human" and scope == "slice":
                     why.append(f"{iid}: the slice ships only after a person has played it")
+        return why + self._undecided(f"verdict-{scope}")
+
+    def _undecided(self, target):
+        """Reasons a note in the target's review records has no decision yet (the verdict depends on its review)."""
+        why = []
+        for p in sorted((self.dir / "reviews" / target).glob("*.json")):
+            rel = p.relative_to(self.root).as_posix()
+            r = self.review(rel)
+            notes = r.get("notes") if r is not None and isinstance(r.get("notes"), list) else []
+            why += [f"{rel}: note {n.get('id')} has no decision" for n in notes
+                    if isinstance(n, dict) and not n.get("decision")]
+        return why
+
+    def review_result(self, item, paths):
+        """pass, fail or not-assessed for a review item, from its reviews: only anchored notes fail it."""
+        reviews = [r for r in (self.review(p) for p in paths) if r is not None]
+        for r in reviews:
+            for n in r.get("notes", []) if isinstance(r.get("notes"), list) else []:
+                a = n.get("anchor") if isinstance(n, dict) else None
+                if (isinstance(n, dict) and n.get("item") == item.get("id") and isinstance(a, dict)
+                        and a.get("kind") in ANCHOR_KINDS and a.get("ref")):
+                    return "fail"
+        roles = item.get("roles") if isinstance(item.get("roles"), list) else []
+        if item.get("taste") and any(r in CALIBRATED_ROLES for r in roles) and not self.labelled():
+            return "not-assessed"
+        if any(r.get("result") == "not-assessed" or r.get("independent") is not True for r in reviews):
+            return "not-assessed"
+        return "pass"
+
+    def _review_item_gate(self, iid, score):
+        item = next(i for i in self.fun.get("items", []) if i.get("id") == iid)
+        paths = score.get("reviews") if isinstance(score.get("reviews"), list) else []
+        by_role = {}
+        for p in paths:
+            r = self.review(p) if isinstance(p, str) else None
+            if r is not None and isinstance(r.get("role"), str) and not self._review_shape(p):
+                by_role[r["role"]] = p
+        roles = [r for r in item.get("roles", []) if isinstance(r, str)] if isinstance(item.get("roles"), list) else []
+        why = [f"{iid}: needs a review by {role}" for role in roles if role not in by_role]
+        if not why and score.get("result") in ("pass", "fail", "not-assessed"):
+            said = self.review_result(item, [by_role[r] for r in roles])
+            if score["result"] != said:
+                why.append(f"{iid}: scored {score['result']} but its reviews say {said}")
         return why
 
     def task_gate(self):
@@ -872,7 +1457,7 @@ class Game:
         if phase == "verdict":
             return self._verdict_gate()
         if phase == "polish":
-            return [] if self.has_polish_features() else ["no polish features yet"]
+            return [] if self.has_polish_features() else ["no must polish features yet"]
         return self.gate()
 
     # ---------- transitions ----------
@@ -885,8 +1470,13 @@ class Game:
             return [f"playtest answers for {entry['scope']}: verdict reopened"]
         production = " production" if self.stage() == "production" else ""
         if phase == "setup":
-            st.update(phase="ideation", task="game-ideation")
+            st.update(phase="scan", task="game-research scan")
+        elif phase == "scan":
+            adr = st.get("restart_adr")
+            st.update(phase="ideation", task=f"game-ideation restart {adr}" if adr else "game-ideation")
         elif phase == "ideation":
+            st.update(phase="research", task=None)
+        elif phase == "research":
             st.update(phase="brainstorm", task=None)
         elif phase == "brainstorm":
             st.update(phase="consolidate", task="game-consolidate" + production)
@@ -909,6 +1499,7 @@ class Game:
     def _route(self):
         """Send the run to whatever comes next: failing work first, then the verdict it has earned."""
         st, passed = self.state, self.state.get("passed_verdicts", [])
+        answered, waiting = self.compares()
         if self.stage() == "slice":
             m = self.earliest_failing_ms(SLICE_MS)
             if m == SLICE_MS[0]:
@@ -925,13 +1516,13 @@ class Game:
             st.update(phase="build", milestone=m, task=None)
         elif "full" not in passed:
             self._enter_verdict("full")
-        elif not self.has_polish_features():
+        elif not st.get("polish_planned"):  # features review decisions put in polish don't plan it
             st.update(phase="polish", milestone=POLISH, task="game-polish")
-        elif self.failing([POLISH]):
-            st.update(phase="polish", milestone=POLISH, task=None)
+        elif self.failing([POLISH]) or answered or ("final" not in passed and waiting):
+            st.update(phase="polish", milestone=POLISH, task=None)  # answered picks are always applied next
         elif "final" not in passed:
             self._enter_verdict("final")
-        elif self.queue(playtests=False):
+        elif self.owed():
             self._stop(None, {"phase": "done"})
         else:
             st.update(phase="done", milestone=None, task=None)
@@ -1002,12 +1593,16 @@ class Game:
         self._write(archive / "human-queue.json", st.get("human_queue", []))
         self.features["features"] = []
         self._write(self.features_path, self.features)
-        st.update(phase="ideation", stage="slice", milestone=None, task=f"game-ideation restart {adr}",
+        if self.homework_path.exists():  # the brief is redone for the new direction
+            shutil.move(str(self.homework_path), str(archive / "homework.json"))
+            self.homework_data = copy(DEFAULT_HOMEWORK)
+        st.update(phase="scan", stage="slice", milestone=None, task=f"game-research restart {adr}",
                   restart_adr=adr, passed_verdicts=[], slice_sessions=None, adapter_verified=False,
-                  checkpoint_due=False, human_queue=[], attempts={})
-        self.commit(f"restart {n}", self.features_path, archive / "features.json", archive / "human-queue.json")
-        return [f"restart {n}: definition of done and human queue archived to {archive.relative_to(self.root)}; "
-                "close their open tickets"]
+                  checkpoint_due=False, polish_planned=False, human_queue=[], attempts={})
+        self.commit(f"restart {n}", self.features_path, archive / "features.json", archive / "human-queue.json",
+                    self.homework_path, archive / "homework.json")
+        return [f"restart {n}: definition of done, human queue and research homework archived to "
+                f"{archive.relative_to(self.root)}; close their open tickets"]
 
     def _checkpoint(self):
         st = self.state
@@ -1023,7 +1618,7 @@ class Game:
     def tick(self, action):
         st = self.state
         st["counters"]["sessions"] += 1
-        if "game-brainstorm" in action:
+        if "game-brainstorm" in action:  # a research homework session isn't a topic: it spends no share
             st["counters"]["brainstorm_sessions"] += 1
         last = st["last_dispatch"]
         last["repeats"] = last["repeats"] + 1 if last.get("action") == action else 1
@@ -1064,11 +1659,23 @@ class Game:
         return action
 
     def _work(self, no_user=False):
-        """The next action. Ideation and brainstorm topics happen with a person (`with-user:`); without one,
-        the run does whatever else it can and stops only when nothing else is left."""
+        """The next action. Ideation, research homework and brainstorm topics happen with a person (`with-user:`);
+        without one, the run does whatever else it can and stops only when nothing else is left."""
         st, phase, m = self.state, self.state["phase"], self.state.get("milestone")
         if phase in ("build", "polish") and st.get("checkpoint_due"):
             return "game-plan checkpoint"
+        if phase == "scan" and self._scan_gate():  # the agent alone, from the seed
+            adr = st.get("restart_adr")
+            return st.get("task") or (f"game-research restart {adr}" if adr else "game-research scan")
+        if phase == "research":
+            action = self._research_action()  # the agent alone; what it can't do becomes homework
+            if action:
+                return action
+        if phase == "brainstorm" and self.homework_open():  # topics are grilled with the homework's answers
+            if no_user:
+                return ("stop: waiting for research homework: a person answers or skips each open item in "
+                        "docs/game/research/homework.json (or the homework page), then run /game-next")
+            return f"with-user: game-research homework ({len(self.homework_open())} open)"  # an answer is a new step
         waiting = None
         topic = self._topic_action()  # design questions the work depends on come first
         if topic:
@@ -1080,11 +1687,24 @@ class Game:
             action = self._build_action(pool)  # judge and polish only a green build
             if action:
                 return action
+        if phase == "polish":
+            action = self._picks_action()
+            if action:
+                return action
         if phase == "verdict":
-            entry = self.playtest_entry(st.get("verdict_scope"))
-            if entry and (self.root / entry["answers"]).exists():
-                return f"game-verdict {st['verdict_scope']} answers {entry['answers']}"
-            if entry and st.get("verdict_scope") == "slice":
+            scope = st.get("verdict_scope")
+            if scope == "final":  # polish isn't finished while a person's picks are pending
+                action = self._picks_action() or self._picks_stop()
+                if action:
+                    return action
+            entry = self.playtest_entry(scope)
+            calibrate = next((e for e in self.queue() if e.get("kind") == "calibrate"), None)
+            if calibrate and scope != "core-loop" and not self.labelled():  # core-loop: on bots
+                return (f"stop: waiting for calibration: a person labels the kit ({calibrate['how']}) "
+                        f"into {LABELS}; then run /game-next")
+            if entry and self.answered(entry):
+                return f"game-verdict {scope} answers {entry['answers']}"
+            if entry and scope == "slice":
                 return (f"stop: waiting for the slice playtest: a person plays the build with the kit "
                         f"({entry.get('how', 'see the human queue')}) and writes {entry['answers']}; then run /game-next")
         task = st.get("task")
@@ -1108,12 +1728,16 @@ class Game:
                 return action
         if waiting:
             return f"stop: waiting for a person: start a session with someone present and run /game-next to do '{waiting}' together"
+        if phase == "polish":  # nothing else to build: the final verdict waits for the person's A/B picks
+            action = self._picks_stop()
+            if action:
+                return action
         if self.gate():
             if phase == "verdict":
                 return f"game-verdict {st.get('verdict_scope')}"
             if phase == "brainstorm":
                 return "with-user: game-brainstorm"
-            return f"game-{phase}"
+            return PHASE_SKILLS.get(phase, f"game-{phase}")
         if phase != "setup" and self.gdd_stale():
             return "game-gdd"  # the human GDD catches up before every phase or milestone change
         return "advance"
@@ -1144,6 +1768,27 @@ class Game:
         alts = ", ".join(f["id"] for f in ready[1:3])
         return f"game-build {ready[0]['id']} \"{ready[0]['title']}\"" + (
             f" (if its tickets are blocked: {alts})" if alts else "")
+
+    def _picks_action(self):
+        """The build session that applies a person's A/B picks to the feature their compare entry unblocks."""
+        answered = self.compares()[0]
+        if not answered:
+            return None
+        e = answered[0]
+        unblocks = e.get("unblocks")
+        fid = unblocks if isinstance(unblocks, str) else (unblocks[0] if isinstance(unblocks, list) and unblocks else "")
+        f = next((f for f in self.items() if f.get("id") == fid), {})
+        if f and self.is_blocked(f):
+            return f"game-plan unblock {fid}"
+        return f"game-build {fid} \"{f.get('title', '')}\" picks {e['answers']}"
+
+    def _picks_stop(self):
+        waiting = self.compares()[1]
+        if not waiting:
+            return None
+        kits = " and ".join(f"the kit ({e.get('how')}) into {e.get('answers')}" for e in waiting)
+        entries = "entry" if len(waiting) == 1 else "entries"
+        return f"stop: waiting for A/B picks: a person picks from {kits}, leaving the queue {entries}; then run /game-next"
 
     def _nice_action(self, milestone):
         st = self.state
@@ -1211,9 +1856,10 @@ def find_root(argv):
     return Path.cwd()
 
 
-def main(argv):
+def main(argv, history=None):
+    """history: the game's git history, a GitHistory of the root unless given (the tests give a stand-in)."""
     cmd = argv[0] if argv and not argv[0].startswith("--") else "status"
-    game = Game(find_root(argv))
+    game = Game(find_root(argv), history)
     st = game.state
     if cmd == "init":
         for path in game.write_missing_files():
@@ -1250,15 +1896,17 @@ def main(argv):
             return 1
         done = st.get("task")
         st["task"] = None
+        if str(done).startswith("game-polish"):
+            st["polish_planned"] = True  # from now on routing builds polish instead of planning it again
         if st["phase"] == "verdict":  # answers read by this verdict are consumed with it
             st["human_queue"] = [e for e in st["human_queue"] if not (
-                e.get("kind") == "playtest" and e.get("scope") == st.get("verdict_scope")
-                and (game.root / e.get("answers", "")).is_file())]
+                (e.get("kind") == "playtest" and e.get("scope") == st.get("verdict_scope") and game.answered(e))
+                or (e.get("kind") == "calibrate" and game.labelled()))]
         game.save_state(f"complete {done}")
         print(f"complete: {done}\nnext: {game.next_action()}")
         return 0
     if cmd == "gdd-synced":
-        head = game._git("rev-parse", "HEAD").stdout.strip() if game.in_git() else None
+        head = game.history.head() if game.in_git() else None
         if not head:
             print("cannot record the sync: commit the wiki first")
             return 1

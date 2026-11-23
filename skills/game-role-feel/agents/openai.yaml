@@ -1,0 +1,5 @@
+interface:
+  display_name: "Feel Role"
+  short_description: "Game feel: feel sheets, response timing, feedback layers"
+policy:
+  allow_implicit_invocation: false

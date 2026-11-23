@@ -1,7 +1,7 @@
 {
   "name": "game-director",
-  "version": "0.6.0",
-  "description": "Make a fun, playable, rich, working and tested game over many sessions, one step per session with /game-next: ideation and topic-by-topic brainstorming with you, a vertical slice gated by your playtest before production, a living agent-facing wiki and a human GDD next to your tasks, and verdicts backed by evidence. Engine-, genre-, platform- and tracker-agnostic.",
+  "version": "0.7.0",
+  "description": "Make a fun, playable, rich, working and tested game over many sessions, one step per session with /game-next: a research phase that studies comparable games before design, seven studio roles (creative, design, feel, art, audio, narrative, ux) that challenge and review as parallel agents, ideation and topic-by-topic brainstorming with you, a vertical slice gated by your playtest before production, a living agent-facing wiki and a human GDD next to your tasks, and verdicts backed by evidence. Engine-, genre-, platform- and tracker-agnostic.",
   "author": {
     "name": "NotFluffyGames",
     "url": "https://github.com/NotFluffyGames"
@@ -14,11 +14,15 @@
     "skills",
     "autonomous",
     "definition-of-done",
-    "playtesting"
+    "playtesting",
+    "roles",
+    "reviews",
+    "research"
   ],
   "skills": [
     "./skills/game-next",
     "./skills/game-setup",
+    "./skills/game-research",
     "./skills/game-ideation",
     "./skills/game-brainstorm",
     "./skills/game-consolidate",
@@ -26,6 +30,14 @@
     "./skills/game-plan",
     "./skills/game-build",
     "./skills/game-verdict",
-    "./skills/game-polish"
+    "./skills/game-polish",
+    "./skills/game-review",
+    "./skills/game-role-creative",
+    "./skills/game-role-design",
+    "./skills/game-role-feel",
+    "./skills/game-role-art",
+    "./skills/game-role-audio",
+    "./skills/game-role-narrative",
+    "./skills/game-role-ux"
   ]
 }

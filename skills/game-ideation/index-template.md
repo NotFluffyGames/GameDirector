@@ -27,5 +27,9 @@ The agent-facing description of the game: current truth only. Why things changed
 
 ## Feel
 
-## Tone, art and world
+## Art
+
+## Audio
+
+## Narrative and world
 ```

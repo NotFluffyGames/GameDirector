@@ -1,0 +1,5 @@
+interface:
+  display_name: "Game Review"
+  short_description: "Review the build by its roles, in parallel"
+policy:
+  allow_implicit_invocation: false

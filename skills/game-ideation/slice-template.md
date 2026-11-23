@@ -24,13 +24,13 @@ What the full game has that the slice leaves out, by name, so nobody builds it e
 | Aspect | Bar | Means |
 | --- | --- | --- |
 | Code and architecture | production | the real simulation core and shell; nothing hard-coded that tuning knobs should hold |
-| Game feel | representative | <feedback, timing> |
-| Art | representative | placeholder art already in the target style |
-| Audio | representative | |
+| Game feel | production | every core action at its feel sheet's targets |
+| Art | production | the visual target's area (<the scene built first>) at production; the rest of the slice representative: placeholder art already in the target style |
+| Audio | representative | the signature sounds (<names>) near final; the rest representative |
 | UI | representative | |
 | Onboarding | representative | a new player gets going without help |
 
-Each bar is `placeholder`, `representative` or `final`, chosen by the user. Representative is the default; final is for an aspect the slice must prove (an art direction that is itself the risk).
+Each bar is `placeholder`, `representative`, `production` or `final`, chosen by the user; the bars above are the recommendation. A slice that leaves art or audio at placeholder can't show whether the game will look and sound right. The roles review against these bars as `vision.json` holds them: art reads Art, feel Game feel, audio Audio, ux UI and Onboarding, narrative UI. The Means column narrows a bar to an area, as the Art row does, and game-plan's acceptance per feature carries the narrowing.
 
 ## Playtest
 

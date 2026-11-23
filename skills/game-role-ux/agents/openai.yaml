@@ -1,0 +1,5 @@
+interface:
+  display_name: "UX Role"
+  short_description: "UX designer: screens, HUD, onboarding, input and accessibility"
+policy:
+  allow_implicit_invocation: false

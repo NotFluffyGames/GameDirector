@@ -26,13 +26,33 @@ def frontmatter(text):
     return dict(re.findall(r"^([a-z-]+): (.*)$", m.group(1), re.M)) if m else {}
 
 
+def agent_frontmatter(text):
+    """Agent frontmatter keys carry capitals (disallowedTools, maxTurns) that the skill parser drops; a key may
+    hold a YAML list ('  - item' lines), returned as a list."""
+    m = re.match(r"---\n(.*?)\n---\n", text, re.S)
+    fm, key = {}, None
+    for line in (m.group(1).splitlines() if m else []):
+        kv = re.match(r"^([A-Za-z-]+):[ ]*(.*)$", line)
+        item = re.match(r"^\s+- (.*)$", line)
+        if kv:
+            key = kv.group(1)
+            fm[key] = kv.group(2) if kv.group(2) else []
+        elif item and isinstance(fm.get(key), list):
+            fm[key].append(item.group(1).strip())
+    return fm
+
+
 def outside_code(text):
     """The text with fenced code blocks blanked out, so templates inside them aren't read as live markdown."""
     return re.sub(r"```.*?```", "", text, flags=re.S)
 
 
 def skill_dirs():
-    return sorted(p for p in SKILLS.iterdir() if p.is_dir())
+    return sorted(p for p in SKILLS.iterdir() if (p / "SKILL.md").is_file())
+
+
+def role_skill_dirs():
+    return [d for d in skill_dirs() if d.name.startswith("game-role-")]
 
 
 def markdown_files():
@@ -44,6 +64,10 @@ class Packaging(unittest.TestCase):
         listed = json.loads((ROOT / ".claude-plugin" / "plugin.json").read_text())["skills"]
         self.assertEqual(sorted(listed), [f"./skills/{p.name}" for p in skill_dirs()])
 
+    def test_plugin_has_no_agents_key(self):
+        # an "agents" key replaces the default agents/ scan, so agents added later would silently not ship
+        self.assertNotIn("agents", json.loads((ROOT / ".claude-plugin" / "plugin.json").read_text()))
+
     def test_every_skill_has_valid_frontmatter_and_agent_metadata(self):
         for d in skill_dirs():
             with self.subTest(skill=d.name):
@@ -52,8 +76,43 @@ class Packaging(unittest.TestCase):
                 self.assertTrue(re.fullmatch(r"[a-z0-9-]{1,64}", d.name))
                 self.assertTrue(0 < len(fm.get("description", "")) <= 1024)
                 self.assertNotRegex(fm["description"], r"[<>]")
-                self.assertEqual(fm.get("disable-model-invocation"), "true")
                 self.assertTrue((d / "agents" / "openai.yaml").is_file())
+
+    def test_other_skills_stay_user_invoked(self):
+        for d in skill_dirs():
+            if d in role_skill_dirs():
+                continue
+            with self.subTest(skill=d.name):
+                self.assertEqual(frontmatter((d / "SKILL.md").read_text()).get("disable-model-invocation"), "true")
+
+    def test_role_skills_can_be_preloaded(self):
+        roles = role_skill_dirs()
+        self.assertTrue(roles, "no game-role-* skill")
+        for d in roles:
+            with self.subTest(skill=d.name):
+                text = (d / "SKILL.md").read_text()
+                fm = frontmatter(text)
+                self.assertNotIn("disable-model-invocation", fm)
+                self.assertTrue(fm["description"].startswith("Use only when"))
+                for ref in ("questions.md", "page-template.md", "checklist.md", "dossier.md"):
+                    self.assertTrue((d / ref).is_file(), ref)
+                for mode in ("north-star", "research", "challenge", "review"):
+                    self.assertRegex(text, rf"(?m)^## \d+\. {mode}\b")
+
+    def test_every_role_has_one_agent(self):
+        for role in load_tool().ROLES:
+            with self.subTest(role=role):
+                path = ROOT / "agents" / f"{role}.md"
+                self.assertTrue(path.is_file())
+                fm = agent_frontmatter(path.read_text())
+                self.assertEqual(fm.get("name"), role)
+                self.assertTrue(fm.get("description"))
+                self.assertEqual(fm.get("skills"), [f"game-director:game-role-{role}"])
+                disallowed = [t.strip() for t in fm.get("disallowedTools", "").split(",")]
+                self.assertIn("Edit", disallowed)
+                self.assertIn("Agent", disallowed)
+                self.assertNotIn("Edit", [t.strip() for t in fm.get("tools", "").split(",")])
+                self.assertEqual(fm.get("model"), "inherit")
 
 
 class Writing(unittest.TestCase):
@@ -90,8 +149,9 @@ class Steps(unittest.TestCase):
         for phase in tool.PHASES:
             if phase in ("awaiting-human", "done"):
                 continue
-            with self.subTest(phase=phase):
-                self.assertTrue((SKILLS / f"game-{phase}" / "SKILL.md").is_file())
+            skill = tool.PHASE_SKILLS.get(phase, f"game-{phase}")
+            with self.subTest(phase=phase, skill=skill):
+                self.assertTrue((SKILLS / skill / "SKILL.md").is_file())
 
     def test_every_scheduled_step_and_mode_is_handled_by_its_skill(self):
         tool = load_tool()
