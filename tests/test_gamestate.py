@@ -131,6 +131,8 @@ RICHNESS = {"targets": [
 
 EVIDENCE = "docs/game/playtests/evidence.md"
 ANSWERS = "docs/game/playtests/slice/answers.md"
+CALIBRATE = {"id": "H0", "what": "label the calibration kit", "kind": "calibrate",
+             "how": "docs/game/calibration/kit.md", "answers": "docs/game/calibration/labels.json"}
 
 # EveLikeBrawl's real files: a game set up with release 0.3.0 (state version 3), still at setup, no task.
 EVE_STATE = """{
@@ -181,11 +183,14 @@ EVE_FEATURES = """{
 MILESTONES = ["core-loop", "slice", "systems", "content", "verdict-build", "polish"]
 
 
-def feature(fid, milestone, tier="must", kind="test", measures=(), roles=()):
-    return {"id": fid, "title": f"feature {fid}", "pillar": "P1", "tier": tier, "milestone": milestone,
+def feature(fid, milestone, tier="must", kind="test", measures=(), roles=(), target=None):
+    f = {"id": fid, "title": f"feature {fid}", "pillar": "P1", "tier": tier, "milestone": milestone,
             "acceptance": ["it works"], "verify": {"kind": kind, "how": "run the test"},
             "measures": list(measures), "tickets": [f"#{fid}"], "pages": ["mechanics"],
             "roles": list(roles), "passes": False, "evidence": "", "blocked": ""}
+    if target:
+        f["target"] = target
+    return f
 
 
 class GameRun(unittest.TestCase):
@@ -518,6 +523,93 @@ class GameRun(unittest.TestCase):
         self.edit("features.json", lambda d: d["features"][0].update(roles=["art"]))
         self.tool("check")  # passes
 
+    def test_slice_plan_needs_a_visual_target_and_a_feel_target(self):
+        self.to_plan()
+        self.edit("features.json", lambda d: d.update(features=[
+            feature("F1", "core-loop", measures=["FC1"]), feature("F3", "slice", measures=["FC4"])]))
+        self.edit("state.json", lambda s: s.update(adapter_verified=True))
+        self.commit()
+        out = self.tool("complete", ok=False)
+        self.assertIn("no must feature with target visual in milestone slice", out)
+        self.assertIn("no must feature with target feel in milestone core-loop", out)
+        self.edit("vision.json", lambda v: v.update(roles_off={"art": "text game"}))
+        self.commit()
+        out = self.tool("complete", ok=False)
+        self.assertNotIn("target visual", out)
+        self.assertIn("no must feature with target feel in milestone core-loop", out)
+
+    def test_a_feature_target_must_be_known(self):
+        self.to_plan()
+        self.plan()
+        self.edit("features.json", lambda d: d["features"][0].update(target="shiny"))
+        self.assertIn("F1: target must be one of ['visual', 'feel']", self.tool("check", ok=False))
+
+    def test_a_passing_visual_target_queues_calibration(self):
+        self.to_plan()
+        self.plan()
+        self.write_review("F5", "art", "HEAD")
+        self.set_passes("F5")
+        self.assertIn("the visual target passes: queue a calibrate entry for a person (kind calibrate)",
+                      self.tool("check", ok=False))
+        self.edit("state.json", lambda s: s["human_queue"].append(CALIBRATE))
+        self.commit()
+        self.tool("check")
+
+    def test_labels_end_the_calibration_demand(self):
+        self.to_plan()
+        self.plan()
+        self.write_review("F5", "art", "HEAD")
+        self.set_passes("F5")
+        self.calibrate()
+        self.tool("check")
+
+    def test_the_slice_verdict_waits_for_calibration(self):
+        self.to_slice_verdict()
+        self.assertEqual(self.next(), "stop: waiting for calibration: a person labels the kit "
+                                      "(docs/game/calibration/kit.md) into docs/game/calibration/labels.json; "
+                                      "then run /game-next")
+        self.calibrate()
+        self.assertEqual(self.next(), "game-verdict slice")
+        self.record_verdict("ship")
+        self.assertEqual(self.load("state.json")["human_queue"], [])  # the labelled calibrate entry was consumed
+
+    def test_queue_entries_of_known_kinds_are_complete(self):
+        self.to_plan()
+        self.edit("state.json", lambda s: s["human_queue"].extend([
+            {"id": "H1", "what": "label", "kind": "calibrate"},
+            {"id": "H2", "what": "compare", "kind": "compare", "how": "kit.md", "answers": "a.md"}]))
+        self.commit()
+        out = self.tool("check", ok=False)
+        self.assertIn("human_queue H1: a calibrate entry needs how and answers", out)
+        self.assertIn("human_queue H2: a compare entry needs how, answers and unblocks", out)
+        self.edit("state.json", lambda s: s["human_queue"].__setitem__(1, dict(s["human_queue"][1], unblocks=["F1"])))
+        self.assertNotIn("H2", self.tool("check", ok=False))
+
+    def test_labels_file_shape_is_checked(self):
+        self.to_plan()
+        for text, why in (("[]", "calibration labels: must be an object with a labels list"),
+                          ('{"labels": [{"ours": "yes"}]}', "calibration labels: entry 0 needs a capture"),
+                          ('{"labels": [{"capture": "x.png", "ours": "yes", "why": "palette"}]}',
+                           "calibration labels: entry 0 needs ours true or false"),
+                          ('{"labels": [{"capture": "x.png", "ours": true, "why": ""}]}',
+                           "calibration labels: entry 0 needs a why"),
+                          ("not json", "calibration labels: not valid JSON")):
+            self.write("docs/game/calibration/labels.json", text)
+            self.commit()
+            self.assertIn(why, self.tool("check", ok=False))
+
+    def test_upgrade_brings_a_version_6_game_at_setup_to_7(self):
+        self.tool("init")
+        self.edit("state.json", lambda s: s.update(version=6, phase="setup", task=None))
+        self.commit()
+        s = self.load("state.json")
+        self.assertEqual(s["version"], 6)
+        self.assertIn("version 6 -> 7", self.tool("upgrade"))
+        s = self.load("state.json")
+        self.assertEqual((s["version"], s["phase"], s["task"]), (7, "setup", "game-setup upgrade"))
+        self.assertIsNone(s["intent"])
+        self.assertIsNone(s["research_sources"])
+
     def test_a_page_in_a_taste_area_makes_a_feature_visible(self):
         self.to_plan()
         self.edit("features.json", lambda d: d.update(features=[feature("F1", "core-loop")]))
@@ -544,8 +636,9 @@ class GameRun(unittest.TestCase):
 
     def plan(self, extra=()):
         self.edit("features.json", lambda d: d.update(features=[
-            feature("F1", "core-loop", measures=["FC1"]), feature("F2", "core-loop"),
-            feature("F3", "slice", measures=["FC4"]), *extra]))
+            feature("F1", "core-loop", measures=["FC1"], target="feel"), feature("F2", "core-loop"),
+            feature("F3", "slice", measures=["FC4"]),
+            feature("F5", "slice", kind="capture", roles=("art",), target="visual"), *extra]))
         self.edit("state.json", lambda s: s.update(adapter_verified=True))
         self.commit()
         self.tool("complete")
@@ -563,9 +656,11 @@ class GameRun(unittest.TestCase):
         self.record_verdict("ship")
         self.tool("advance")
         self.assertEqual(self.phase(), ("build", "slice"))
-        self.set_passes("F3")
+        self.write_review("F5", "art", "HEAD")
+        self.edit("state.json", lambda s: s["human_queue"].append(CALIBRATE))  # the visual target passes
+        self.set_passes("F3", "F5")
         self.tool("advance")
-        self.assertEqual(self.next(), "game-verdict slice")
+        self.assertEqual(self.load("state.json")["phase"], "verdict")
 
     def ship_slice(self):
         self.calibrate()
@@ -602,8 +697,8 @@ class GameRun(unittest.TestCase):
         self.tool("advance")
         self.assertEqual(self.next(), "game-plan production")
         self.edit("features.json", lambda d: d["features"].extend([
-            feature("F4", "systems", measures=["FC3", "R1", "R2", "R3"]), feature("F5", "content", tier="nice"),
-            feature("F6", "verdict-build", kind="human")]))
+            feature("F4", "systems", measures=["FC3", "R1", "R2", "R3"]), feature("F6", "content", tier="nice"),
+            feature("F7", "verdict-build", kind="human")]))
         self.commit()
         self.tool("complete")
         self.tool("advance")
@@ -616,17 +711,17 @@ class GameRun(unittest.TestCase):
         self.tool("advance")
         self.assertEqual(self.phase(), ("build", "verdict-build"))  # content has only a nice feature
         self.edit("state.json", lambda s: s["human_queue"].append(
-            {"id": "H2", "what": "check F6 by hand", "unblocks": ["F6"]}))
+            {"id": "H2", "what": "check F7 by hand", "unblocks": ["F7"]}))
         self.commit()
         self.tool("advance")
         self.assertEqual(self.next(), "game-verdict full")
         self.record_verdict("ship", {"FC2": "pending-human"})  # full and final don't wait for a person
         self.tool("advance")
         self.assertEqual(self.next(), "game-polish")
-        self.edit("features.json", lambda d: d["features"].append(feature("F7", "polish")))
+        self.edit("features.json", lambda d: d["features"].append(feature("F8", "polish")))
         self.commit()
         self.tool("complete")
-        self.set_passes("F7")
+        self.set_passes("F8")
         self.tool("advance")
         self.assertEqual(self.next(), "game-verdict final")
         self.record_verdict("ship")
@@ -635,8 +730,8 @@ class GameRun(unittest.TestCase):
         self.edit("state.json", lambda s: s.update(human_queue=[]))
         self.commit()
         self.tool("advance")
-        self.assertEqual(self.phase(), ("build", "verdict-build"))  # F6 was never marked passing
-        self.set_passes("F6", evidence="human: checked by hand")
+        self.assertEqual(self.phase(), ("build", "verdict-build"))  # F7 was never marked passing
+        self.set_passes("F7", evidence="human: checked by hand")
         self.tool("advance")
         self.assertEqual(self.phase()[0], "done")
         self.assertEqual(self.next(), "stop: done")
@@ -1239,7 +1334,7 @@ class GameRun(unittest.TestCase):
     def test_playtest_answers_reopen_a_finished_verdict(self):
         self.to_production_plan()
         self.set_passes("F4")
-        self.set_passes("F6", evidence="human: checked")
+        self.set_passes("F7", evidence="human: checked")
         answers = "docs/game/playtests/full/answers.md"
         self.edit("state.json", lambda s: s["human_queue"].append(
             {"id": "H3", "what": "playtest", "kind": "playtest", "scope": "full", "answers": answers}))
@@ -1475,15 +1570,15 @@ class GameRun(unittest.TestCase):
         (self.game / "vision.json").unlink()
         self.commit()
         out = self.tool("upgrade")
-        self.assertIn("version 3 -> 6", out)
+        self.assertIn("version 3 -> 7", out)
         s = self.load("state.json")
-        self.assertEqual((s["version"], s["phase"], s["task"], s["stage"]), (6, "setup", "game-setup upgrade", "slice"))
+        self.assertEqual((s["version"], s["phase"], s["task"], s["stage"]), (7, "setup", "game-setup upgrade", "slice"))
         self.assertEqual({k: s[k] for k in kept}, kept)
         self.assertEqual(self.load("features.json")["milestones"], MILESTONES)
         self.assertTrue((self.game / "vision.json").exists())
         self.assertTrue(self.clean(), self.git("status", "--porcelain"))
         self.assertEqual(self.next(), "with-user: game-setup upgrade")
-        self.assertIn("already at version 6", self.tool("upgrade"))
+        self.assertIn("already at version 7", self.tool("upgrade"))
 
     def test_upgrade_brings_eve_like_brawl_up_to_date(self):
         """The real 0.3.0 game: the plugin's tool upgrades it before its old copy is replaced."""
@@ -1496,9 +1591,9 @@ class GameRun(unittest.TestCase):
         self.commit()
         self.assertEqual(self.plugin("status").split("next: ", 1)[1].strip(), "with-user: game-setup upgrade")
         self.assertIn("to do 'game-setup upgrade' together", self.plugin("status", "--no-user"))
-        self.assertIn("version 3 -> 6", self.plugin("upgrade"))
+        self.assertIn("version 3 -> 7", self.plugin("upgrade"))
         s, old = self.load("state.json"), json.loads(EVE_STATE)
-        self.assertEqual((s["version"], s["phase"], s["task"]), (6, "setup", "game-setup upgrade"))
+        self.assertEqual((s["version"], s["phase"], s["task"]), (7, "setup", "game-setup upgrade"))
         self.assertEqual(s["human_queue"], old["human_queue"])
         self.assertEqual(s["adapter_verified"], old["adapter_verified"])
         self.assertEqual({k: s["limits"][k] for k in old["limits"]}, old["limits"])
@@ -1515,10 +1610,10 @@ class GameRun(unittest.TestCase):
         self.assertIn("init", out)
         self.assertFalse((self.game / "state.json").exists())
         self.tool("init")
-        self.edit("state.json", lambda s: s.update(version=7))
+        self.edit("state.json", lambda s: s.update(version=8))
         self.commit()
         before = (self.game / "state.json").read_text()
-        self.assertIn("version 7, newer than this tool (6)", self.tool("upgrade", ok=False))
+        self.assertIn("version 8, newer than this tool (7)", self.tool("upgrade", ok=False))
         self.assertEqual((self.game / "state.json").read_text(), before)
         self.assertTrue(self.clean())
         self.edit("state.json", lambda s: s.update(version="3"))
@@ -1541,7 +1636,7 @@ class GameRun(unittest.TestCase):
         self.assertEqual(self.next(), "with-user: game-setup upgrade")
         self.assertIn("stop: waiting for a person", self.next("--no-user"))
         self.assertIn("to do 'game-setup upgrade' together", self.next("--no-user"))
-        self.edit("state.json", lambda s: s.update(version=6))
+        self.edit("state.json", lambda s: s.update(version=7))
         self.agent_docs()
         self.edit("state.json", lambda s: s.update(docs_verified={"place": "ClickUp doc", "date": "2026-11-22"},
                                                    intent="sell", research_sources=SOURCES))
@@ -1565,7 +1660,7 @@ class GameRun(unittest.TestCase):
         self.tool("init")
         self.edit("state.json", lambda s: s.pop("version"))
         self.commit()
-        self.assertIn("version 1 -> 6", self.tool("upgrade"))
+        self.assertIn("version 1 -> 7", self.tool("upgrade"))
 
 
 class Loop(unittest.TestCase):
