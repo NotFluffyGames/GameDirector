@@ -18,7 +18,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from memory_history import ISOLATED_GIT, MemoryHistory
+from memory_history import MemoryHistory, isolated_git_env
 
 SCRIPT = Path(__file__).resolve().parents[1] / "skills" / "game-setup" / "scripts" / "gamestate.py"
 LOOP = Path(__file__).resolve().parents[1] / "skills" / "game-next" / "scripts" / "loop.sh"
@@ -1569,6 +1569,13 @@ class GameRun(unittest.TestCase):
         if "human GDD: stale" in self.tool("status"):
             self.sync()
 
+    def test_gdd_synced_before_any_commit_records_nothing(self):
+        self.tool("init")
+        before = (self.game / "state.json").read_text()
+        self.assertIn("cannot record the sync: commit the wiki first", self.tool("gdd-synced", ok=False))
+        self.assertEqual((self.game / "state.json").read_text(), before)
+        self.assertIsNone(self.history.head())
+
     def test_the_gdd_is_never_stale_while_the_index_has_no_pages(self):
         self.tool("init")  # an empty wiki.json, and the GDD never synced
         self.commit()
@@ -1725,7 +1732,7 @@ class Loop(unittest.TestCase):
         (self.root / "says.txt").write_text(says)
         (self.root / "calls.txt").unlink(missing_ok=True)
         r = subprocess.run(["bash", str(LOOP), sessions], cwd=self.root, capture_output=True, text=True,
-                           env=dict(os.environ, AGENT_CMD=f"{sys.executable} agent.py", **ISOLATED_GIT))
+                           env=dict(isolated_git_env(), AGENT_CMD=f"{sys.executable} agent.py"))
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         calls = self.root / "calls.txt"
         return r.stdout, len(calls.read_text().splitlines()) if calls.exists() else 0

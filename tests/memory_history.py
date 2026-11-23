@@ -5,11 +5,19 @@ commit, so a game run in the tests makes no git calls and no commits. test_memor
 same script of edits.
 """
 import hashlib
+import os
 from pathlib import Path
 
-# The environment of the few tests that still run real git: without global or system config their commits are
-# local and unsigned, so the machine's commit-signing service is never called.
-ISOLATED_GIT = {"GIT_CONFIG_GLOBAL": "/dev/null", "GIT_CONFIG_NOSYSTEM": "1"}
+
+def isolated_git_env(env=None):
+    """A copy of env (default os.environ) for the few tests that still run real git. It cuts every config source
+    but the repo's own: the global and system files, and the config set in the environment (GIT_CONFIG_COUNT with
+    its GIT_CONFIG_KEY_n/VALUE_n, and GIT_CONFIG_PARAMETERS). Their commits are local and unsigned, so the
+    machine's commit-signing service is never called."""
+    env = dict(os.environ if env is None else env)
+    env.pop("GIT_CONFIG_PARAMETERS", None)
+    env.update(GIT_CONFIG_GLOBAL="/dev/null", GIT_CONFIG_NOSYSTEM="1", GIT_CONFIG_COUNT="0")
+    return env
 
 
 class MemoryHistory:
@@ -25,13 +33,14 @@ class MemoryHistory:
         return True
 
     def tracked(self, rel):
-        return rel in self._at("HEAD", {})
+        files = self._at("HEAD", {})
+        return self._file(rel, files) in files
 
     def commit(self, message, rels):
         """Commit these paths only, a removed one included; no commit when none of them changed, as with git."""
         before = self._at("HEAD", {})
         files = dict(before)
-        for rel in rels:
+        for rel in [self._file(r, before) for r in rels]:
             path = self.root / rel
             if path.is_file():
                 files[rel] = path.read_bytes()
@@ -44,13 +53,15 @@ class MemoryHistory:
         return self.chain[-1] if self.chain else None
 
     def show(self, commit, rel):
-        data = self._at(commit, {}).get(rel)
+        files = self._at(commit, {})
+        data = files.get(self._file(rel, files))
         return None if data is None else data.decode("utf-8")
 
     def changed(self, a, b, rels):
         old, new = self._at(a), self._at(b)
+        rels = [self._file(r, old or {}, new or {}) for r in rels]
         if old is None or new is None:
-            return list(rels)
+            return rels
         return sorted(r for r in rels if old.get(r) != new.get(r))
 
     def is_ancestor(self, a, b):
@@ -73,6 +84,14 @@ class MemoryHistory:
         return commit
 
     # ---------- internals ----------
+    def _file(self, rel, *snapshots):
+        """rel, refused when it names a directory in the working tree or in these snapshots: git would take the
+        directory's files, and the double holds files only."""
+        inside = rel.rstrip("/") + "/"
+        if (self.root / rel).is_dir() or any(p.startswith(inside) for files in snapshots for p in files):
+            raise ValueError(f"MemoryHistory takes file paths only: {rel!r} is a directory")
+        return rel
+
     def _id(self, ref):
         if ref == "HEAD":
             return self.head()
