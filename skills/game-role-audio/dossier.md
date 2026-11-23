@@ -4,7 +4,7 @@ File: `docs/game/research/refs/<id>/audio.md`. Short; facts and sources. Audio i
 
 ## Required
 
-- `how_studied`: `read`, `watched` (a description or transcript, not heard) or `not-assessed` with the reason. State "unheard".
+- `how_studied`: `played` (the person's homework, the strongest evidence), `watched` (frames), `read` (descriptions, reviews, transcripts) or `not-assessed` with the reason. State "unheard" for anything the model worked from.
 - **Events and sound**: which gameplay events carry a sound, and which information is audio-first.
 - **Music**: its role, its scheme (loops, layers, state changes) and where it is silent.
 - **Voice and UI**: the voice scope (full, barks, gibberish, none) and what the UI sounds are described as.

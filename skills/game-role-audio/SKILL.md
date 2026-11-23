@@ -14,7 +14,7 @@ The audio director owns the sonic identity: what the player does by ear, the pal
 **Rules for the agent modes:**
 
 - Every judgment names its anchor: a reference the person chose or a rule on the `audio` page (a pillar, a tier, a family rule). With none, `anchor` is `null`; the note never fails a verdict item.
-- In a feature review, a note is `blocking` only for a measured failure of a check written into the feature's frozen acceptance at its milestone's quality bar (event coverage, a variation count, a loudness target). A measured check against a page rule that isn't in the acceptance, and every judgment, is `advisory`. In a verdict or polish-scope review every note is `advisory`: blocking applies only to feature reviews, and the verdict scores proxy items itself. The anchor decides whether a note can fail an item through its `item`, never the severity. A `placeholder` bar gets no judgment of how a sound is made or sounds, and no loudness check; event coverage still counts.
+- In a feature review, a note is `blocking` only for a measured failure of a check written into the feature's frozen acceptance at the quality bar in `vision.json` `slice.quality_bar` (event coverage, a variation count, a loudness target). A measured check against a page rule that isn't in the acceptance, and every judgment, is `advisory`. In a verdict or polish-scope review every note is `advisory`: blocking applies only to feature reviews, and the verdict scores proxy items itself. The anchor decides whether a note can fail an item through its `item`, never the severity. A `placeholder` bar gets no judgment of how a sound is made or sounds, and no loudness check; event coverage still counts.
 - A note says the problem, the evidence (a quoted event-log line, a sound-list row or a measured number) and the rule. A suggested fix is optional and marked as a suggestion.
 - Never write that a sound is good, bad, harsh or fitting. Write what the list, the log or the number shows against a pillar or a tier.
 - You see only the artifacts you were given, never the builder's reasoning. A review that finds nothing on a first build has probably not looked: say what you compared before you say `ok`.
@@ -26,10 +26,10 @@ The audio director owns the sonic identity: what the player does by ear, the pal
 Mode for ideation, run in the main session with the person. Read `questions.md`, `vision.json` and the `landscape` page, and the references the person picked in ideation.
 
 1. Ask the "Ideation" questions in `questions.md` one at a time, each with a recommended answer. Push a vague answer until a log or a sound list could contradict it.
-2. Write `north_stars.audio` in `vision.json`: `statement` (the audio pillars, one or two, each in two sentences or fewer with a "this, not that" pair), `references` of at least two (title: the one quality we take), `by_ear` (a list: what the player must be able to do by ear), `anti_references` (a list: each with what we avoid) and `voice` (`full`, `barks`, `gibberish` or `none`).
+2. Write `north_stars.audio` in `vision.json`: `statement` (the audio pillars, one or two, each in two sentences or fewer with a "this, not that" pair), `references` of at least two (title: the one quality we take), `by_ear` (a list: what the player must be able to do by ear), `anti_references` (a list: each with what we avoid) `voice` (`full`, `barks`, `gibberish` or `none`) and `muted` (one line: what must still work when the game is played muted).
 3. Tell the person that listening and the final taste calls stay theirs.
 
-**Done when** `north_stars.audio` has `statement`, at least two `references`, a non-empty `by_ear`, `anti_references` and `voice` set to one of the four values, and the person approved the pillars.
+**Done when** `north_stars.audio` has `statement`, at least two `references`, a non-empty `by_ear`, `anti_references`, `voice` set to one of the four values, `muted`, and the person approved the pillars.
 
 ## 2. research
 
@@ -51,7 +51,7 @@ Mode for a brainstorm topic; the "Brainstorm" half of `questions.md` is your sta
 
 ## 4. review
 
-Mode for a build review or a verdict. Input: the feature's acceptance and its milestone's quality bar (from `features.json`), the event log and the game's event list, the sound list or manifest, any loudness output the adapter gives, the `audio` page, `north_stars` and invariants from `vision.json`, references, `docs/game/roles/audio.md`, and the `review` items that name `audio`. Work through `checklist.md`, measured first, then judged. State "unheard" in the result reason.
+Mode for a build review or a verdict. Input: the feature's acceptance and the quality bar for `audio` (`vision.json` `slice.quality_bar`; production features use the slice's bar too), the event log and the game's event list, the sound list or manifest, any loudness output the adapter gives, the `audio` page, `north_stars` and invariants from `vision.json`, references, `docs/game/roles/audio.md`, and the `review` items that name `audio`. Work through `checklist.md`, measured first, then judged. State "unheard" in the result reason.
 
 - Measured, from the event list, the log and the sound list: event coverage, variation counts, back-to-back repeats, and loudness where the adapter measures it, each against the page's number.
 - Judged: the sound list and the log against the pillars, the tiers and the UI family, from descriptions only. Judge what a page rule settles; mark the rest `not-assessed` with that reason.

@@ -6,10 +6,10 @@ Ask one at a time, with your recommended answer. Push a vague answer until a log
 
 1. What must the player be able to do by ear, with the screen off? (Recorded as `by_ear`.)
 2. One or two pillars, two sentences or fewer each, with a "this, not that" pair. Which game pillar does each serve?
-3. Which five to fifteen references (games, films, music) do we borrow from, and what one quality from each? (Recorded as `references`.)
+3. Which two or three references (games, films, music) do we borrow from, and what one quality from each? (Recorded as `references`; a larger reference vocabulary goes on the `audio` page, not in the north star.)
 4. Which anti-references, and what do we avoid in each? (Recorded as `anti_references`.)
 5. What is the voice scope: full voice, barks, gibberish or none? (Recorded as `voice`.)
-6. Will the game be played muted or on speakers sometimes? What must still work then?
+6. Will the game sometimes be played muted or on speakers? What must still work then? (Recorded as `muted`: one line.)
 
 ## Brainstorm (`challenge`)
 

@@ -49,7 +49,7 @@ Mode for a brainstorm topic; the "Brainstorm" half of `questions.md` is your sta
 
 ## 4. review
 
-Mode for a build review or a verdict. Input: the feature's acceptance and its milestone's quality bar (from `features.json`), frame strips from one build beside the reference clips, the event log, the feel sheets, labels. Work through `checklist.md`, measured first, then judged.
+Mode for a build review or a verdict. Input: the feature's acceptance and the quality bar for `feel` (`vision.json` `slice.quality_bar`; production features use the slice's bar too), frame strips from one build beside the reference clips, the event log, the feel sheets, labels. Work through `checklist.md`, measured first, then judged.
 
 - Measured from the event log: input-to-response frames, buffer and forgiveness windows, channels fired per action, each against the sheet's number.
 - Judged: set each strip beside its reference, frame by frame. Without labels, judge only what a sheet rule settles; mark the rest `not-assessed` with that reason.

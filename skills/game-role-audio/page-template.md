@@ -6,6 +6,9 @@ The page is `audio` (area Audio), and no other page. It grows per topic; keep it
 ## Pillars
 1. <one or two sentences>: this, not that. Serves <game pillar>.
 
+## Reference vocabulary
+<five to fifteen references, each with the one quality borrowed, and the anti-references>
+
 ## What the player does by ear
 <the information that is audio-first, and what the player must be able to do with it>
 

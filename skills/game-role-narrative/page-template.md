@@ -1,6 +1,6 @@
 # Narrative: living page
 
-The page is `tone-and-world` (area Narrative and world), and no other page. It grows per topic and only as deep as play needs; keep it under the wiki's split rule. A story-light game fills only the first six sections.
+The page is `tone-and-world` (area Narrative and world), and no other page. It grows per topic and only as deep as play needs; keep it under the wiki's split rule. A story-light game fills at least the minimum kit: fantasy line, setting, theme phrase, tone, character cards, UI voice, naming rules and the fiction of play.
 
 ```markdown
 ## Fantasy line
@@ -8,6 +8,9 @@ The page is `tone-and-world` (area Narrative and world), and no other page. It g
 
 ## Setting
 <one sentence, with one unexpected detail>
+
+## Theme phrase
+<one phrase>
 
 ## Tone
 Tone words: <three>. Anti-words: <three>.

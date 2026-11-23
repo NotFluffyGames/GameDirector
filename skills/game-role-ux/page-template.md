@@ -19,10 +19,10 @@ Two pages, area Screens and onboarding, and no others: `screens` and `onboarding
 <verb to input per device; hold or tap; conflicts; remapping>
 
 ## Text and contrast
-<minimum text size by screen; the contrast ratios for text and large text; the regions a capture measures>
+<minimum text size by screen; the contrast ratios for text and large text; the regions a capture measures. Recommended defaults the person confirms: 4.5:1 for text, 3:1 for large text, 7:1 for a high-contrast mode>
 
 ## Accessibility minimum
-<remapping, separate volume sliders, subtitles on or offered at first launch, text size, colour-safe palette with redundant cues, shake and flash toggles, assist options, hold-to-toggle alternatives; each as present or planned>
+<follows `north_stars.ux.access`; each entry as present or planned. Recommended defaults the person confirms: remapping, separate volume sliders, subtitles on or offered at first launch, text size, colour-safe palette with redundant cues, shake and flash toggles, assist options, hold-to-toggle alternatives>
 
 ## Invariants it protects
 <the ux-related lines of the identity invariants, as written in vision.json>

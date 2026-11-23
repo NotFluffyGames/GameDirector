@@ -10,7 +10,8 @@ Ask one at a time, with your recommended answer. Push a vague answer until a str
 4. Three words it must never sound like. (Recorded as `anti_words`.)
 5. How does the interface speak: a button, an error, a reward? (Recorded as `ui_voice`.)
 6. Which games, books or films do we borrow tone from, and what do we take? (Recorded as `references`.)
-7. Is this game story-light? If so, which of the kit's parts do we keep: fantasy line, setting, tone, UI voice, naming, what failure and progress mean in the fiction?
+7. Is this game story-light: yes or no? (Recorded as `story_light`.) If yes, it keeps the whole minimum kit; the kit is the floor.
+8. What is the theme phrase, and who are the recurring faces? (A personality card for each goes on the page.)
 
 ## Brainstorm (`challenge`)
 
