@@ -7,10 +7,10 @@ What game-research fetches, on whose terms, and how game-setup checks each host.
 game-setup probes each host once, and game-research re-probes a host before giving up on it:
 
 ```sh
-curl -g -sS -o /dev/null -w '%{http_code}\n' --max-time 15 '<probe>'
+curl -g -sS -o /dev/null -w '%{http_code} %{http_connect}\n' --max-time 15 '<probe>'
 ```
 
-A `2xx` is reachable. Anything else (a proxy refusal, a timeout, a DNS failure) is unreachable, recorded with what it printed. App 1145360 is a known Steam app to probe with.
+Any HTTP status from the host means it is reachable: record the code. An unkeyed GetAppReviews call may answer 429, and a bad parameter 400; both still reach it. Only no response is unreachable: `000` from a timeout or a DNS failure, or a proxy refusal (`000` with a `403` connect code and curl's "CONNECT tunnel failed"), recorded with what curl printed. App 1145360 is a known Steam app to probe with.
 
 | Host | Probe | What research loses without it |
 | --- | --- | --- |
@@ -54,7 +54,7 @@ Unofficial. Since Valve hid game libraries in April 2018 its owner counts are mo
 
 ## itch.io
 
-Any browse page becomes an RSS feed when `.xml` is appended to its URL: `https://itch.io/games/tag-<tag>.xml`, `https://itch.io/games/html5.xml` (browser-playable games), with the filters the site's browse URLs carry. It gives titles, links, prices and platforms. itch.io publishes no sales or review counts, so its comps carry no numbers; its server-side API covers only your own games.
+Any browse page becomes an RSS feed when `.xml` is appended to its URL: `https://itch.io/games/tag-<tag>.xml`, `https://itch.io/games/html5.xml` (browser-playable games), with the filters the site's browse URLs carry. It gives titles, links, prices and platforms. A game's itch.io page shows ratings and comments, which the complaints read, but no sales numbers, so its comps carry no units range; its server-side API covers only your own games.
 
 ## SteamDB
 
@@ -90,7 +90,7 @@ Read a genre by the share of its games that earn above a threshold, not by how m
 
 ## Methods and terms
 
-- **Comps by proximity.** Start from the seed's nearest games, then each close match's "More like this" games, sorted into rings from "most like ours" to "something in common" ([Wagner 2021](https://www.gamedeveloper.com/business/marketing-for-indie-devs-market-research)). Prefer three to five from the last two or three years, mixing a hit, a middling seller and a weak one; a small team's comps are never only giants.
+- **Comps by proximity.** Start from the seed's nearest games, then each close match's "More like this" games, sorted into rings from "most like ours" to "something in common" ([Wagner 2021](https://www.gamedeveloper.com/business/marketing-for-indie-devs-market-research)). Pick three to five (a `sell` scan needs at least three), from the last two or three years, mixing a hit, a middling seller and a weak one; a small team's comps are never only giants.
 - **Complaints.** Pull each comp's negative reviews in all languages, with playtime at review, cluster them into themes, count them, and quote one line per theme with its `recommendationid`. In a study of 11 million Steam reviews, 57% of negative reviews mentioned game design and 17% bugs, and most negative reviews came within the first seven hours of play (Lin et al. 2019, via [PC Gamer](https://www.pcgamer.com/steam-study-finds-users-leave-negative-reviews-more-quickly-than-positive-ones/)). Shoppers read negative reviews for flaws in what they care about and discount rants ([Zukowski 2019](https://www.gamedeveloper.com/business/how-steam-users-see-your-game)).
 - **Anchors and the hook.** Anchors are what make a game familiar to its genre's players (a metroidvania needs a map); the hook is what makes it unique. One phrase pairs them: "a soulslike metroidvania" ([Logan 2020](https://www.gamedeveloper.com/business/indie-insights-hooks-and-anchors)). The **genre default** is what most games of the kind do; the game departs from it on purpose.
 - **The player, by motivation.** Quantic Foundry's twelve motivations in six pairs say who the game is for: Action (Destruction, Excitement), Social (Competition, Community), Mastery (Challenge, Strategy), Achievement (Completion, Power), Immersion (Fantasy, Story), Creativity (Design, Discovery). Name two or three the comps and the loop serve, and those deliberately not served. Self-Determination Theory's needs (autonomy, competence, relatedness), with PENS's presence and intuitive controls, say what any satisfying game must give: a check the loop must pass whatever the audience. Bartle's types describe MUD players: vocabulary only. Write the player as "plays X, Y and Z; wants A and B; leaves at C".

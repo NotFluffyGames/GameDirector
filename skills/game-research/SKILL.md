@@ -22,10 +22,9 @@ Keeps the game from being designed from memory. The **scan** maps the landscape 
 
 - **Market lines.** Every number (reviews, prices, playtimes, units, shares) carries its source link and retrieval date, or reads `not researched: <why>`. None comes from memory; a fact read only in a search engine's summary is marked as such. Units are a range from the review count and the launch-year multiplier in `sources.md`, never a point.
 - **Sources.** Fetch only on the terms in `sources.md`; SteamDB never. `state.json` `research_sources` lists the hosts setup found unreachable: probe one again before giving up on it. Work an unreachable source would have done becomes a homework candidate.
-- **Images** are the evidence for the art, ux and feel sections.
+- **Images** are the evidence for the art, ux and feel sections, committed with the dossier, always downscaled.
   - Save each in `docs/game/research/refs/<id>/<role>/` for the role that uses it (`art`, `ux`, `feel`; in both folders when two use it), named by what it shows (`hud.png`, `dash-strip.png`), with its source in `material/index.md`.
   - Shrink it: `python3 <measure.py> shrink IN.png --out OUT.png` (longest side at most 1280 px). `measure.py` reads only 8-bit, non-interlaced PNG: convert anything else (JPEG, WebP, a 16-bit or interlaced PNG) first with what this machine has (`magick` or `convert`, `ffmpeg`, Python's Pillow, macOS `sips`). With no converter, keep an original PNG, JPEG or WebP as is only when it is at most 1280 px on its longest side and at most 500 KB (`file` prints its dimensions; Steam's `path_thumbnail` qualifies); otherwise save nothing, and the image is `not-assessed: no converter`.
-  - `research_sources.images` is `docs` (setup's offer for a public repo): keep the images out of git with `docs/game/research/refs/.gitignore` (`*.png`, `*.jpg`, `*.jpeg`, `*.webp`), and upload each to the docs place on a reference-images page per reference, as `docs/agents/docs.md` says, its link in `material/index.md`. A later session on a fresh checkout restores them from there. Where the docs tool takes no images, they stay in this checkout only, and the index says so.
 - **Homework candidates.** What the agent can't do goes on a list as it arises: a game it can't play (a person playing it is the strongest evidence for feel, ux and audio), sound it can't hear, an unreachable source, an image no source gives, an audit finding it couldn't fix. In a ref session, into the reference's `homework` list in `references.json`, one line each: what a person does and the gap it fills ("play R3 for 20 minutes and time the dash's recovery: feel"); the gate accepts a reference short of sources whose gap is named there. In a scan, into the landscape page's "Not researched" section. The brief ranks them.
 - **Pages last.** Every page is drafted in `docs/game/drafts/<page-id>.md` and written in the docs place after the state commit, as "Pages are written last" in `docs/agents/game.md` says. A new wiki page gets a `wiki.json` entry (`id`, `title`, area `Vision`, `link`, `version` read back as `docs/agents/docs.md` says, `updated`) and a line under Vision on the home page, whose `index` entry gets its new `version` and `updated` in the same pages commit.
 - **Offer, never choose.** Which comps count as "us", which anchors to break, the hook, the references and the price are the person's picks in ideation. A weak number states the odds; it never drops a direction.
@@ -35,7 +34,7 @@ Keeps the game from being designed from memory. The **scan** maps the landscape 
 `gamestate.py check` validates their shapes; `gamestate.py gate` reads them.
 
 - `docs/game/research/references.json`: `{"scanned_for": null, "refs": [...]}`. `scanned_for` is the restart ADR the last scan ran for, `null` before any restart. Each ref:
-  - `id` (`R1`, `R2`… in order, never reused), `title`;
+  - `id` (`R1`, `R2`… in order, never reused: a new one is the next after the highest any version of the file held, found with `git log -p -- docs/game/research/references.json`, not only in the current file), `title`;
   - `why`: `comp` (a comparable game) or `aspect` (a reference for play, look, feel, sound, tone or identity);
   - `roles`: the role ids it informs; `sources`: links, or `person: <homework id>, <date>`;
   - `status`: `candidate` (from the scan), `open` (ideation picked it), `studied` (its dossier is done);
@@ -59,8 +58,8 @@ Read `docs/game/seed.md`, `state.json` `intent` and `research_sources`, and [sou
 
 Gather comparable games by proximity, as `sources.md` describes.
 
-- **`sell`**: at least three, five to ten where the genre has them. For each: launch year, price, top tags, review count across all languages and score with the date read, the units range from that count and the launch year's multiplier, median playtime at review, each with its source. SteamSpy owners only as a cross-check.
-- **`hobby`**: the closest games, from itch.io as readily as Steam, without sales numbers.
+- **`sell`**: three to five; the gate needs at least three. For each: launch year, price, top tags, review count across all languages and score with the date read, the units range from that count and the launch year's multiplier, median playtime at review, each with its source. SteamSpy owners only as a cross-check.
+- **`hobby`**: the three to five closest games, from itch.io as readily as Steam, without sales numbers.
 
 Write each comp to `references.json`: the next `id`, `title`, `why` `comp`, `roles` (the roles it is evidence for: `creative` for the genre default, `design` for the loop, others where it is also a look, feel, sound, tone or UI reference), `sources`, `status` `candidate`, `how_studied` `{}`.
 
@@ -137,7 +136,7 @@ The reference's image roles need: `art/` a play moment and the UI (at least two)
 - **Playable in a browser** (an itch.io HTML5 build, a web game): play it with Playwright (the Python or Node package, installed or installable, or a browser tool this session has). Screenshot the first minute and the HUD; for each core action, N frames every K ms after the scripted input, stitched with `measure.py sheet`. Note what you played and for how long: the roles' `how_studied` is `played`.
 - **Otherwise**: the store's screenshots, and where `ffmpeg` exists, frames from its trailer around each core action, stitched into strips: `watched`.
 
-Shrink and index every image (Images), then run `measure.py derive` on each art shot into `art/derived/<shot>/`: the art role reads its palette from them, and the role agents write nothing but their sections.
+Shrink and index every image (Images), then run `measure.py derive` on each PNG art shot into `art/derived/<shot>/`: the art role reads its palette from them, and the role agents write nothing but their sections. A JPEG or WebP original kept without a converter gets no derived copies: its index line says so, and the art role reads that shot as it is.
 
 **Done when** every image role of the reference has its images in its folder, shrunk and indexed, or a reason it has none, which is its section's `not-assessed` reason and a homework candidate.
 
@@ -162,7 +161,7 @@ In the reference's entry: `how_studied` per role, from its section (`how`, and t
 
 ### 6. Audit, at most two rounds
 
-1. Dispatch `creative` in `audit` mode, with the most capable model available, as in step 4: the reference id, the section paths, each role's `dossier.md`, `material/index.md`, and the output `docs/game/research/refs/<id>/audit.json`. Check independence as in step 4, then set the record's facts yourself: role `creative`, target `<id>`, `commit` (HEAD at dispatch), `independent: true` (`false` without a subagent tool), `inputs` (the section paths). Its findings are all `blocking` by the audit mode's rule, unlike a review's. Run `check --since <base>` and commit: `game-research: <id> audit round <n>`.
+1. Dispatch `creative` in `audit` mode, with the most capable model available, as in step 4: the reference's `references.json` entry with its `homework` list, the section paths, each role's `dossier.md`, `material/index.md`, and the output `docs/game/research/refs/<id>/audit.json`. A gap the entry's `homework` names (fewer than three sources, a missing number, image or sample) is the person's to fill, so it is no finding. Check independence as in step 4, then set the record's facts yourself: role `creative`, target `<id>`, `commit` (HEAD at dispatch), `independent: true` (`false` without a subagent tool), `inputs` (the section paths). Its findings are all `blocking` by the audit mode's rule, unlike a review's. Run `check --since <base>` and commit: `game-research: <id> audit round <n>`.
 2. `result` `ok`: the audit is done. Otherwise fix every finding:
    - a missing image, number or source: gather it (steps 2–3);
    - send each role with findings back to its section as in step 4, with the audit's path and its note ids, to rewrite what they name;
@@ -218,8 +217,8 @@ With no item, `items` is `[]` and `reason` says why. Draft the homework page, `d
 
 Run `gamestate.py check --since <base>`, commit `homework.json` and `references.json` with the drafts, and append a progress entry. Then the pages:
 
-- the `research` page and the home page, as Pages last says;
-- the homework page in the docs place beside the wiki. It isn't a wiki page, since people write answers on it: record its link as `homework.json` `page`;
+- the `research` page and the home page, as Pages last says. After a restart the `research` page and its `wiki.json` entry already exist: rewrite the page and update the entry's `version` and `updated`, never adding a second entry;
+- the homework page in the docs place beside the wiki (after a restart, rewrite the one the latest `docs/game/archive/*/homework.json` links). It isn't a wiki page, since people write answers on it: record its link as `homework.json` `page`;
 - each item as a `ready-for-human` ticket (`docs/agents/issue-tracker.md`) titled `<id>: <what>`, linking the homework page, recorded as the item's `ticket`.
 
 Delete the drafts and commit: the pages commit. Then `gamestate.py gate` and `gamestate.py complete`.
@@ -271,7 +270,7 @@ Read the ADR (what failed and what changes), the seed, the current `landscape` p
 Redo the scan's steps 2–5 for the parts the ADR changes:
 
 - keep the comps that still fit and add new ones; a `sell` game has at least three that fit;
-- a `candidate` that no longer fits is deleted (its id isn't reused);
+- a `candidate` that no longer fits is deleted, and its id isn't reused: a new reference takes the next id after the highest in the file's git history (`git log -p -- docs/game/research/references.json`), which still holds the ids of deleted entries;
 - a `studied` entry and its dossier stay as they are.
 
 Draft the landscape page from the current one, rewritten wherever the ADR changes it. Set `references.json` `scanned_for` to the ADR's path exactly as `state.json` `restart_adr` holds it.

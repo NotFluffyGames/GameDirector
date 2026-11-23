@@ -83,6 +83,7 @@ Mode for a reference's dossier, after every role's section is written. Read each
 
 - Flag a claim without a source, a generic line ("great art style", "tight controls") that a different game could carry, and a required number or image that is missing.
 - Anchor each finding to the `dossier.md` rule it breaks (`kind` `rule`). Every finding is `blocking`.
-- Check the dossier names at least three sources across its sections and that each `how_studied` is set.
+- Read the reference's `references.json` entry, which the dispatch gives you. Its `homework` list names gaps a person will fill: a gap it names (fewer than three sources, a missing number, image or sample) is no finding.
+- Check that the dossier names at least three sources across its sections, unless the entry's `homework` names the gap, and that each `how_studied` is set.
 
 **Done when** every section was read against its `dossier.md`, and each finding names the rule, the section and the line, or `result` is `ok` with what you checked.

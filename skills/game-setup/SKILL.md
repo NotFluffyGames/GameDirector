@@ -52,12 +52,12 @@ Fill [docs.md](docs.md) as `docs/agents/docs.md`: the tasks home, the docs place
 
 Research reads other games' store pages and reviews from this machine. Probe each host in the Reachability table of the game-research skill's [sources.md](../game-research/sources.md) once, as it says, and note each reachable or not, with what a failure printed.
 
-- **Unreachable hosts**: tell the user which failed and what research loses (its column there); in research, their work becomes homework for a person. Allowing a host in this machine's or environment's network settings fixes it: probe again once they have.
-- **A public repo**: when the remote is public (`gh repo view --json visibility`, or ask the user), tell them that research commits downscaled screenshots of other games under `docs/game/research/refs/`, and offer to keep those images out of git and in the docs place instead. `images` is `docs` when they take the offer, otherwise `repo`.
+- **Unreachable hosts** (no response at all; any HTTP status counts as reached): tell the user which failed and what research loses (its column there); in research, their work becomes homework for a person. Allowing a host in this machine's or environment's network settings fixes it: probe again once they have.
+- **A public repo**: when the remote is public (`gh repo view --json visibility`, or ask the user), tell them that research commits downscaled screenshots of other games under `docs/game/research/refs/`, and ask them to make the repo private or accept that. Accepted: `public_repo_ok` is `true`. Made private: check the visibility again.
 
-Step 6 records `research_sources` in `docs/game/state.json`: `{"checked": "<today>", "reachable": [...], "unreachable": [...], "images": "repo" | "docs"}`, the hosts by name.
+Step 6 records `research_sources` in `docs/game/state.json`: `{"checked": "<today>", "reachable": [...], "unreachable": [...]}`, the hosts by name, plus `"public_repo_ok": true` when the person accepted a public repo.
 
-**Done when** every host in the table has today's result, the user has heard which failed, and the image place is settled.
+**Done when** every host in the table has today's result, the user has heard which failed, and the repo is private or the person accepted committing reference images to a public one.
 
 ### 5. Create the skeletons
 
