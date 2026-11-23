@@ -68,7 +68,7 @@ The wiki is the living description of the game: precise enough to plan, build an
 
 - `id`: unique and stable; topics and features name pages by it.
 - `title`: the page's title.
-- `area`: Vision, Mechanics, Controls, Systems, Content, Modes and sessions, Screens and onboarding, Feel, Tone, art and world. Each area is a section of the wiki's home page, listing its pages with one line each.
+- `area`: Vision, Mechanics, Controls, Systems, Content, Modes and sessions, Screens and onboarding, Feel, Art, Audio, Narrative and world. Each area is a section of the wiki's home page, listing its pages with one line each.
 - `link`: the page's URL, or its repo-relative path for local files.
 - `version`: the page's version as the session that wrote it read it back, the way `docs/agents/docs.md` says (the docs tool's version number, else its last-modified time, else a hash of the text; for local files, a git hash of the page above its comments). A page whose version moved without a session recording it was edited by hand.
 - `updated`: the date and a one-line reason, e.g. `"2026-11-22: stealing needs a free hand"`.

@@ -29,11 +29,12 @@ VISION_JSON = {
 }
 
 AREAS = ["Vision", "Mechanics", "Controls", "Systems", "Content", "Modes and sessions",
-         "Screens and onboarding", "Feel", "Tone, art and world"]
+         "Screens and onboarding", "Feel", "Art", "Audio", "Narrative and world"]
 SLICE_AREAS = [a for a in AREAS if a != "Modes and sessions"]
 PAGE_IDS = {"Vision": ["vision", "slice", "concepts"], "Mechanics": ["mechanics"], "Controls": ["controls"],
             "Systems": ["weapons"], "Content": ["content"], "Modes and sessions": ["modes"],
-            "Screens and onboarding": ["screens"], "Feel": ["feel"], "Tone, art and world": ["art"]}
+            "Screens and onboarding": ["screens"], "Feel": ["feel"],
+            "Art": ["art"], "Audio": ["audio"], "Narrative and world": ["tone"]}
 
 
 def wiki_index(*areas):
@@ -41,9 +42,11 @@ def wiki_index(*areas):
                        "version": "1", "updated": "x"} for a in areas for i in PAGE_IDS[a]]}
 
 
-def topic(tid, parent="T1", priority="support", status="open", stage="slice", pages=(), unblocks=()):
+def topic(tid, parent="T1", priority="support", status="open", stage="slice", pages=(), unblocks=(),
+          roles=("design",)):
     t = {"id": tid, "title": f"topic {tid}", "question": "what?", "parent": parent, "priority": priority,
-         "stage": stage, "status": status, "pages": list(pages), "unblocks": list(unblocks)}
+         "stage": stage, "status": status, "pages": list(pages), "unblocks": list(unblocks),
+         "roles": list(roles)}
     if status != "open":
         t["resolution"] = "answered"
     return t
@@ -126,11 +129,11 @@ EVE_FEATURES = """{
 MILESTONES = ["core-loop", "slice", "systems", "content", "verdict-build", "polish"]
 
 
-def feature(fid, milestone, tier="must", kind="test", measures=()):
+def feature(fid, milestone, tier="must", kind="test", measures=(), roles=()):
     return {"id": fid, "title": f"feature {fid}", "pillar": "P1", "tier": tier, "milestone": milestone,
             "acceptance": ["it works"], "verify": {"kind": kind, "how": "run the test"},
             "measures": list(measures), "tickets": [f"#{fid}"], "pages": ["mechanics"],
-            "passes": False, "evidence": "", "blocked": ""}
+            "roles": list(roles), "passes": False, "evidence": "", "blocked": ""}
 
 
 class GameRun(unittest.TestCase):
@@ -283,6 +286,46 @@ class GameRun(unittest.TestCase):
         self.tool("advance")
         self.assertEqual(self.phase(), ("plan", None))
         self.assertEqual(self.next(), "game-plan")
+
+    def test_topics_and_features_name_known_roles(self):
+        self.to_plan()
+        self.edit("topics.json", lambda d: d["topics"][1].update(roles=["lighting"]))
+        self.assertIn("topic T2: role 'lighting' is not one of", self.tool("check", ok=False))
+        self.edit("topics.json", lambda d: d["topics"][1].update(roles=[], status="open"))
+        self.assertIn("topic T2: open without roles", self.tool("check", ok=False))
+
+    def test_visible_features_need_roles_and_design_reviews_only_at_verdicts(self):
+        self.to_plan()
+        self.edit("features.json", lambda d: d.update(features=[feature("F1", "core-loop", kind="capture")]))
+        self.assertIn("F1: visible work needs roles", self.tool("check", ok=False))
+        self.edit("features.json", lambda d: d["features"][0].update(roles=["design"]))
+        self.assertIn("F1: design judges at verdicts, not on features", self.tool("check", ok=False))
+        self.edit("features.json", lambda d: d["features"][0].update(roles=["art"]))
+        self.tool("check")  # passes
+
+    def test_a_page_in_a_taste_area_makes_a_feature_visible(self):
+        self.to_plan()
+        self.edit("features.json", lambda d: d.update(features=[feature("F1", "core-loop")]))
+        self.tool("check")
+        self.edit("features.json", lambda d: d["features"][0].update(pages=["art"]))
+        self.assertIn("F1: visible work needs roles", self.tool("check", ok=False))
+
+    def test_a_role_switched_off_cannot_be_named(self):
+        self.to_plan()
+        self.edit("vision.json", lambda v: v.update(roles_off={"audio": "played muted in class"}))
+        self.edit("topics.json", lambda d: d["topics"][1].update(roles=["audio"]))
+        self.assertIn("topic T2: role 'audio' is switched off in vision.json roles_off", self.tool("check", ok=False))
+
+    def test_consolidate_gate_skips_areas_of_roles_switched_off(self):
+        self.to_ideation()
+        self.ideate()
+        self.edit("vision.json", lambda v: v.update(roles_off={"audio": "muted"}))
+        self.write_wiki([a for a in SLICE_AREAS if a != "Audio"])
+        self.resolve("T2", "T3")
+        self.sync()
+        self.tool("advance")
+        self.assertEqual(self.next(), "game-consolidate")
+        self.assertNotIn("area 'Audio'", self.tool("complete", ok=False))
 
     def plan(self, extra=()):
         self.edit("features.json", lambda d: d.update(features=[

@@ -54,8 +54,11 @@ SCORE_RESULTS = ["pass", "fail", "not-assessed", "pending-human"]
 ASPECTS = ["depth", "breadth", "variety"]
 TOPIC_STATUSES = ["open", "resolved", "deferred"]
 PRIORITIES = ["core", "support", "later"]
+ROLES = ["creative", "design", "feel", "art", "audio", "narrative", "ux"]
+TASTE_AREAS = ["Screens and onboarding", "Feel", "Art", "Audio", "Narrative and world"]
 AREAS = ["Vision", "Mechanics", "Controls", "Systems", "Content", "Modes and sessions",
-         "Screens and onboarding", "Feel", "Tone, art and world"]
+         "Screens and onboarding", "Feel", "Art", "Audio", "Narrative and world"]
+AREA_ROLES = {"Art": "art", "Audio": "audio", "Narrative and world": "narrative"}  # areas that vanish with their role
 SLICE_AREAS = [a for a in AREAS if a != "Modes and sessions"]
 REQUIRED_PAGES = ["vision", "slice", "concepts"]
 QUALITY_ASPECTS = ["code", "feel", "art", "audio", "ui", "onboarding"]
@@ -307,6 +310,25 @@ class Game:
     def vision(self):
         return self.vision_data if isinstance(self.vision_data, dict) else {}
 
+    def active_roles(self):
+        off = self.vision().get("roles_off")
+        off = off if isinstance(off, dict) else {}
+        return [r for r in ROLES if r not in off]
+
+    def _check_roles(self, owner, roles, on_feature=False):
+        """Reasons a topic's or feature's `roles` isn't a list of active role ids."""
+        if not isinstance(roles, list):
+            return [f"{owner}: roles must be a list"]
+        errs, active = [], self.active_roles()
+        for r in roles:
+            if r not in ROLES:
+                errs.append(f"{owner}: role '{r}' is not one of {ROLES}")
+            elif r not in active:
+                errs.append(f"{owner}: role '{r}' is switched off in vision.json roles_off")
+            elif r == "design" and on_feature:
+                errs.append(f"{owner}: design judges at verdicts, not on features")
+        return errs
+
     def pillars(self):
         pillars = self.vision().get("pillars")
         if not isinstance(pillars, list):
@@ -541,8 +563,14 @@ class Game:
             if f.get("tier") == "cut" and not f.get("cut_reason"):
                 errs.append(f"{fid}: cut without cut_reason")
             pages = f.get("pages", [])
-            errs += self.page_list(fid, pages) or [f"{fid}: page '{p}' is not in wiki.json"
-                                                    for p in pages if p not in page_ids]
+            bad = self.page_list(fid, pages)
+            errs += bad or [f"{fid}: page '{p}' is not in wiki.json" for p in pages if p not in page_ids]
+            roles = f.get("roles", [])
+            errs += self._check_roles(fid, roles, on_feature=True)
+            if not roles:
+                taste = {p["id"] for p in self.wiki_pages() if p.get("area") in TASTE_AREAS}
+                if verify.get("kind") == "capture" or (not bad and taste & set(pages)):
+                    errs.append(f"{fid}: visible work needs roles (pages in {TASTE_AREAS} or verify kind capture)")
         return errs
 
     def _check_targets(self):
@@ -593,6 +621,10 @@ class Game:
                 errs.append(f"topic {tid}: parent '{t.get('parent')}' is not a topic")
             if t.get("status") in ("resolved", "deferred") and not t.get("resolution"):
                 errs.append(f"topic {tid}: a {t.get('status')} topic needs a resolution (the answer, or why it waits)")
+            roles = t.get("roles", [])
+            errs += self._check_roles(f"topic {tid}", roles)
+            if t.get("status") == "open" and not roles:
+                errs.append(f"topic {tid}: open without roles (who prepares its challenges?)")
             pages, bad = t.get("pages", []), self.page_list(f"topic {tid}", t.get("pages", []))
             errs += bad
             if not bad and t.get("status") == "resolved":
@@ -795,7 +827,9 @@ class Game:
     def _consolidate_gate(self):
         slice_stage = self.stage() == "slice"
         have = {p.get("area") for p in self.wiki_pages()}
-        why = [f"wiki.json has no page in area '{a}'" for a in (SLICE_AREAS if slice_stage else AREAS) if a not in have]
+        active = self.active_roles()
+        areas = [a for a in (SLICE_AREAS if slice_stage else AREAS) if AREA_ROLES.get(a, "") in active + [""]]
+        why = [f"wiki.json has no page in area '{a}'" for a in areas if a not in have]
         why += [f"topic {t['id']}: open ({t.get('priority')})"
                 for t in self.open_topics(["core", "support"]) if self.in_stage(t)]
         items = self.fun.get("items", [])
