@@ -5,7 +5,7 @@ Ask one at a time, with your recommended answer. Push a vague answer until a bot
 ## Ideation (`north-star`)
 
 1. What does the player decide, over and over? Name the two or three decisions that make up the core loop.
-2. For each, what does a wrong choice cost, and what makes the right one change from run to run? (What makes runs or matches differ.)
+2. For each, what does a wrong choice cost, and what makes the right one change from run to run? (What makes runs or matches differ: recorded as `variety`.)
 3. Which two or more games have the loop we want, and what do we take from each: a verb, a cost, a pacing?
 4. What would a dominant strategy look like here? Name the one we would refuse to ship.
 

@@ -1,6 +1,6 @@
 # Feel: review checklist
 
-Mark each line passed, a note, or `not-assessed` with the reason. A note is `blocking` only when a measured check written into the feature's frozen acceptance fails; every other note is `advisory`. An anchor (a label, a chosen clip or a sheet rule) decides whether a note can fail an item through its `item`, never its severity. Read the `review` items that name `feel` first.
+Mark each line passed, a note, or `not-assessed` with the reason. In a feature review a note is `blocking` only when a measured check written into the feature's frozen acceptance fails; every other note is `advisory`, and in a verdict or polish-scope review all are. An anchor (a label, a chosen clip or a sheet rule) decides whether a note can fail an item through its `item`, never its severity. Read the `review` items that name `feel` first.
 
 ## Checked first (from the event log)
 

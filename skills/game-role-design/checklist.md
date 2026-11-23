@@ -1,6 +1,6 @@
 # Design: review checklist (verdicts only)
 
-Mark each line passed, a note, or `not-assessed` with the reason. Notes are `advisory` unless a check written into the frozen acceptance fails by measurement. An anchor (a label, a chosen reference or a page rule) decides whether a note can fail a verdict item through its `item`, never its severity. Read the `review` items that name `design` first. Never run on a feature.
+Mark each line passed, a note, or `not-assessed` with the reason. Every note is `advisory`: design never reviews a feature, and the verdict scores proxy items itself. An anchor (a chosen reference or a page rule) decides whether a note can fail a verdict item through its `item`, never its severity. Read the `review` items that name `design` first. Never run on a feature.
 
 ## Checked first (from bot traces and metrics)
 
@@ -19,4 +19,4 @@ Mark each line passed, a note, or `not-assessed` with the reason. Notes are `adv
 ## Needs the person
 
 - Whether it's fun to replay: never a note; `not-assessed` until the person plays.
-- Taste about difficulty: `not-assessed` without labels.
+- How hard is too hard: the person's playtest, never a note.

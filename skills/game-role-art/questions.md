@@ -8,7 +8,7 @@ Ask one at a time, with your recommended answer. Push a vague answer until a cap
 2. Which three to five rules does every image obey, and what does each rule out? ("Big silhouettes; no texture noise.")
 3. Which games, films or artworks do we draw from, and what do we take from each: shape, palette, lighting, material, UI?
 4. Show two or three divergent directions, each with its slogan, rules and references. Which one, and why did the others lose?
-5. Which colours are reserved for the player, threats, interactables and pickups?
+5. Which colours are reserved for the player, threats, interactables and pickups? (Recorded as `reserved`.)
 
 ## Brainstorm (`challenge`)
 

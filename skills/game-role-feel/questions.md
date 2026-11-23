@@ -8,7 +8,7 @@ Ask per core action, the verbs the player repeats most.
 
 1. Which one or two adjectives should this action feel like? ("Heavy and crunchy", not "good".)
 2. Which one to three clips show it, and at what timestamp does the moment happen?
-3. What should it never feel like?
+3. What should it never feel like? (Recorded as `never`.)
 4. Does a bigger version of the action feel bigger, and how: more layers, longer, louder, more shake?
 
 ## Brainstorm (`challenge`)

@@ -11,22 +11,22 @@ The game designer owns the rules, systems, levels, opposition and economy: wheth
 
 **Rules for the agent modes:**
 
-- Every judgment names its anchor: a calibration label, a reference the person chose, or a rule on the Mechanics, Systems or Content page. With none, `anchor` is `null`; the note never fails a verdict item.
-- Severity is `blocking` only for a measured failure of a check written into the frozen acceptance. A measured check against a page rule that isn't in the acceptance, and every judgment, is `advisory`. The anchor decides whether a note can fail an item through its `item`, never the severity.
+- Every judgment names its anchor: a reference the person chose or a rule on the Mechanics, Systems or Content page. With none, `anchor` is `null`; the note never fails a verdict item. Design isn't calibrated by labels.
+- Every design note is `advisory`: design never reviews a feature, and the verdict scores proxy items itself. The anchor decides whether a note can fail an item through its `item`.
 - A note says the problem, the evidence (a path to a trace, a metrics file or a quoted line) and the rule. A suggested fix is optional and marked as a suggestion.
 - You see only the artifacts you were given, never the builder's reasoning. A review that finds nothing on a first build has probably not looked: say what you checked before you say `ok`.
 - Read `docs/game/roles/design.md` first, if it exists: this person's earlier decisions, overruled notes and label reasons. Follow it.
 - You never edit the game. Write only your output file.
-- Fun is the person's: whether it's worth replaying is never a note, only a `not-assessed` line.
+- Fun is the person's: whether it's worth replaying, and how hard is too hard, are never notes, only `not-assessed` lines.
 
 ## 1. north-star
 
 Mode for ideation, run in the main session with the person. Read `questions.md`, `vision.json` and the `landscape` page.
 
 1. Ask the "Ideation" questions in `questions.md` one at a time, each with a recommended answer drawn from the vision and the person's comps.
-2. Write `north_stars.design` in `vision.json`: `statement` (the core loop's decisions in one sentence), `references` of at least two (title: what we take), and one line on what makes runs or matches differ.
+2. Write `north_stars.design` in `vision.json`: `statement` (the core loop's decisions in one sentence), `references` of at least two (title: what we take), and `variety` (one line on what makes runs or matches differ).
 
-**Done when** `north_stars.design` has `statement`, at least two `references` and the run-variance line, and the person approved the statement.
+**Done when** `north_stars.design` has `statement`, at least two `references` and `variety`, and the person approved the statement.
 
 ## 2. research
 
@@ -48,12 +48,12 @@ Mode for a brainstorm topic; the "Brainstorm" half of `questions.md` is your sta
 
 ## 4. review
 
-Mode for a verdict only. **Never review a feature:** if the dispatch names a feature, write `result` `not-assessed` with that reason and stop. Input: bot traces and metrics from whole-game runs, the vision, the three pages, references and labels. Work through `checklist.md`, measured first, then judged.
+Mode for a verdict only. **Never review a feature:** if the dispatch names a feature, write `result` `not-assessed` with that reason and stop. Input: bot traces and metrics from whole-game runs, the vision, the three pages and references. Work through `checklist.md`, measured first, then judged.
 
-- Measured: completability, difficulty curve, decisions per minute, source/sink balance, each against the number its page or the acceptance states.
+- Measured: completability, difficulty curve, decisions per minute, source/sink balance, each against the number its page states.
 - Judged: dominant strategies, boring stretches and role clarity, read from the traces. Quote the trace line or span.
 - A check with no number on its page isn't failed: it is a note asking for the number, `advisory`.
 - Set `item` on each note that bears on a `review` item.
 - Write `docs/game/reviews/<target>/design.json` in the review shape from `game.md`. A failing line is a note; name the lines that passed in the `result` reason.
 
-**Done when** every checklist line is a note or named as passed in the `result` reason, every note has an evidence path, a rule, a severity per the rules above and an anchor or `null`, and every note bearing on a `review` item has its `item`.
+**Done when** every checklist line is a note or named as passed in the `result` reason, every note has an evidence path, a rule, `advisory` severity and an anchor or `null`, and every note bearing on a `review` item has its `item`.
