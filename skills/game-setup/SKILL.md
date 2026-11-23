@@ -46,13 +46,13 @@ The docs place is the tracker's docs feature at the tasks home. When the tracker
 
 Fill [docs.md](docs.md) as `docs/agents/docs.md`: the tasks home, the docs place, and how to read, write and comment there. Run every step of its Smoke test table in the docs place, remove what the test created, and record each result and date. Set page protection where the tool supports it, so people comment and sessions edit.
 
-**Done when** every Smoke test row holds a pass and a date, or the user has picked another place and its table passes.
+**Done when** every Smoke test row holds a pass and a date, or the user has picked another place and `docs/agents/docs.md` is refilled for it (its Docs place section and its Smoke test table) with every row passing.
 
 ### 4. Create the skeletons
 
 1. The wiki home page, from [index-template.md](../game-ideation/index-template.md), in the docs place.
 2. An empty GDD with the pages of [gdd-structure.md](../game-gdd/gdd-structure.md), each holding only its title.
-3. Record the GDD page ids and links in the GDD pages table of `docs/agents/docs.md`, and the home page's id, link and today's date in its Wiki pages table. Step 5 writes the home page into `wiki.json`.
+3. Record the GDD page ids and links in the GDD pages table of `docs/agents/docs.md`, and an `index` row (the home page's link) in its Wiki pages table. Step 5 writes the home page into `wiki.json`.
 
 **Done when** each skeleton page exists in the docs place and its id and link are recorded.
 
@@ -61,7 +61,7 @@ Fill [docs.md](docs.md) as `docs/agents/docs.md`: the tasks home, the docs place
 1. No git repository: `git init` and an initial commit.
 2. `docs/agents/game.md` from [game.md](game.md), with the autonomy mode filled in.
 3. Copy [scripts/gamestate.py](scripts/gamestate.py) to `docs/game/gamestate.py` and run `python3 docs/game/gamestate.py init` (`python` where `python3` doesn't exist). Apply limit overrides to `docs/game/state.json`, and set `docs_verified` to `{"place": "<docs place>", "date": "<today>"}`. Without any Python 3, tell the user the gates become manual and stop.
-4. `docs/game/wiki.json` with the home page as its one page (`id` `index`, `area` Vision, `version` 1).
+4. `docs/game/wiki.json` with the home page as its one page: `id` `index`, `title`, `area` Vision, `link` (from step 4), `version` (the docs tool's version, or 1) and `updated` (today).
 5. `docs/game/seed.md`: the user's prompt, verbatim, with any flags. Ideation reads it, and every restart.
 6. In `CLAUDE.md` or `AGENTS.md` (whichever exists; if neither, the one your harness reads), add under `## Agent skills`:
 
@@ -73,7 +73,7 @@ Fill [docs.md](docs.md) as `docs/agents/docs.md`: the tasks home, the docs place
 
 7. When an engine project already exists, do adapter mode now.
 
-**Done when** `docs/agents/game.md`, `docs/agents/docs.md`, `docs/game/state.json` with `docs_verified`, `wiki.json` and `seed.md` exist.
+**Done when** `docs/agents/game.md`, `docs/agents/docs.md`, `docs/game/state.json` with `docs_verified`, `wiki.json` and `seed.md` exist, the `index` entry in `wiki.json` has a link, and `python3 docs/game/gamestate.py check` passes.
 
 ### 6. Close
 
@@ -119,9 +119,9 @@ Replace every section of `docs/agents/game.md` with the one in [game.md](game.md
 
 ### 3. Verify the docs place
 
-When `docs_verified` in `docs/game/state.json` is set, skip this step. Otherwise run project mode's steps 2 to 4 with the user, then set `docs_verified` as step 5 does.
+When `docs_verified` in `docs/game/state.json` is set, skip this step. Otherwise run project mode's steps 2 to 4 with the user, then register the home page's `index` entry in `docs/game/wiki.json` as project step 5.4 does (when `wiki.json` has none) and set `docs_verified` as step 5.3 does.
 
-**Done when** `docs_verified` is set, or was set already.
+**Done when** `docs_verified` is set and `wiki.json` has an `index` entry with a link, or `docs_verified` was set already.
 
 ### 4. Close
 
