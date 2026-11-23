@@ -10,7 +10,7 @@ Plans the `polish` milestone: the work that makes a game that is already fun on 
 
 ## 1. Gather
 
-Read the wiki's Feel, Screens and onboarding, and Tone, art and world pages, the ADRs for platforms, performance budget and asset sources, `docs/game/assets.md`, the full verdict ADR (its notes on feel and visuals), and [polish-checklist.md](polish-checklist.md).
+Read the wiki's Feel, Screens and onboarding, and Tone, art and world pages (ids in `docs/game/wiki.json`), the ADRs for platforms, performance budget and asset sources, `docs/game/assets.md`, the full verdict ADR (its notes on feel and visuals), and [polish-checklist.md](polish-checklist.md).
 
 **Done when** you know the target platforms, which assets are still placeholders, and which checklist lines apply to this game.
 

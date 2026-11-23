@@ -6,7 +6,7 @@ disable-model-invocation: true
 
 # Game Plan
 
-Derives everything from the wiki (`docs/game/wiki/`), and invents no design: when the wiki is silent on something a feature needs, open a topic for it with that feature in `unblocks`, and plan around it. Engineering choices the wiki doesn't cover (tech, architecture, tooling) are ADRs, not topics. Read `docs/agents/game.md` first and follow its session rules. The mode comes from the task:
+Derives everything from the wiki (pages indexed in `docs/game/wiki.json`, read through the docs place), and invents no design: when the wiki is silent on something a feature needs, open a topic for it with that feature in `unblocks`, and plan around it. Engineering choices the wiki doesn't cover (tech, architecture, tooling) are ADRs, not topics. Read `docs/agents/game.md` first and follow its session rules. The mode comes from the task:
 
 | Task | Mode |
 | --- | --- |
@@ -46,10 +46,10 @@ Then fill and smoke-test the adapter: read the `game-setup` skill's SKILL.md (be
 
 Write `docs/game/features.json` items (schema in `docs/agents/game.md`; after a restart, number ids after the highest id in `docs/game/archive/`), in dependency order within each milestone:
 
-For the **vertical slice** (`game-plan`), only what `wiki/slice.md`'s In list needs:
+For the **vertical slice** (`game-plan`), only what the `slice` page's In list needs:
 
 - **core-loop**: the core loop playable end to end with placeholder art, following the Mechanics and Controls pages, plus metrics for every `core-loop` proxy. The core-loop verdict judges it on bots before anything else is built.
-- **slice**: everything else the slice contains (its systems, content, screens and onboarding), each aspect brought to the quality bar slice.md sets (a `final` art bar means final art features here), metrics for every `slice` proxy and target, and a build a person can play for the slice playtest.
+- **slice**: everything else the slice contains (its systems, content, screens and onboarding), each aspect brought to the quality bar the `slice` page sets (a `final` art bar means final art features here), metrics for every `slice` proxy and target, and a build a person can play for the slice playtest.
 
 For **production** (`game-plan production`), the rest of the game from the full wiki:
 
@@ -57,7 +57,7 @@ For **production** (`game-plan production`), the rest of the game from the full 
 - **content**: every content type at its target count, built from the Content pages' kit pieces at the slice's quality bar. Modes, sessions and the full screen flow land here too.
 - **verdict-build**: what the full verdict needs: a metrics feature for every `full` proxy and richness target (listed in its `measures`), the bot policies those metrics require, and a build that runs on every target platform the agent can build for.
 
-Leave `polish` empty; game-polish fills it. Every item needs a pillar, tier, the wiki `pages` it implements, observable acceptance criteria taken from those pages, and a verify method. Choose verify kinds in this order of preference: `test`, `sim`, `replay`, `bot`, `capture`, `check`, `human`. When the adapter marks `sim`, `replay` or `bot` `n/a`, proxy metrics come from instrumented `test` runs or the item becomes `human`.
+Leave `polish` empty; game-polish fills it. Every item needs a pillar, tier, the wiki `pages` (ids from `wiki.json`) it implements, observable acceptance criteria taken from those pages, and a verify method. Choose verify kinds in this order of preference: `test`, `sim`, `replay`, `bot`, `capture`, `check`, `human`. When the adapter marks `sim`, `replay` or `bot` `n/a`, proxy metrics come from instrumented `test` runs or the item becomes `human`.
 
 **Done when** every `must` feature traces to a pillar, everything this stage covers (the slice's In list, or the full wiki) has features, and `gamestate.py gate` shows no proxy or richness target of this stage missing from `measures`.
 
@@ -84,12 +84,12 @@ Set `limits.budget_sessions` to sessions already used plus the sessions the open
 
 The task names the verdict ADR. Change only the pillars and systems it names:
 
-1. Apply knob-only fixes first: the verdict's suggested knob values go into the knob files, and the pages that state them.
-2. Where the ADR changes the design, update the wiki pages first, linking the ADR. A change that needs a design decision the ADR doesn't make becomes a topic, brainstormed with a person before the features it `unblocks`.
+1. Apply knob-only fixes first: the verdict's suggested knob values go into the knob files, and into drafts of the pages that state them (as in 2).
+2. Where the ADR changes the design, draft the changed wiki pages in `docs/game/drafts/`, linking the ADR (session rule 6: committed with the state, written last at the close, their `wiki.json` entries updated in the pages commit); a change to the vision or slice also updates `docs/game/vision.json`. A change that needs a design decision the ADR doesn't make becomes a topic, brainstormed with a person before the features it `unblocks`.
 3. Rewrite the affected features' acceptance or verify where the design changed and set their `passes` to false; add new features; cut obsolete ones with a `cut_reason`.
 4. Ticket the new and reset features; re-estimate the budget as in step 5.
 
-**Done when** every change the ADR asks for is a knob change, a page change with its features, or an open topic. Close as in step 5, including `complete`.
+**Done when** every change the ADR asks for is a knob change, a page change with its features, or an open topic. Close as in step 5: check, commit with the drafts, progress entry, then write the drafts and make the pages commit, then `complete`.
 
 ## Checkpoint mode
 

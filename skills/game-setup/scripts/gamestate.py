@@ -5,6 +5,11 @@ game-setup copies this file to docs/game/gamestate.py in the game's repo.
 
 Commands:
   init               create any missing state files under docs/game/
+  upgrade            bring an older game's state to this tool's version: a game
+                     still at setup is reset (limits, counters, human_queue and
+                     adapter_verified kept; milestones refreshed); later phases
+                     apply MIGRATIONS. Refuses, changing nothing, a missing,
+                     newer or malformed state, or a phase with no migration
   status [--no-user] one-screen summary, ending with the `next:` action.
                      --no-user: nobody is there to talk to, so skip `with-user:`
                      work (ideation, brainstorm topics) and do what else can be done
@@ -49,20 +54,25 @@ SCORE_RESULTS = ["pass", "fail", "not-assessed", "pending-human"]
 ASPECTS = ["depth", "breadth", "variety"]
 TOPIC_STATUSES = ["open", "resolved", "deferred"]
 PRIORITIES = ["core", "support", "later"]
-VISION_HEADINGS = ["## Pitch", "## Audience and platforms", "## Pillars", "## Anti-pillars", "## Core loop",
-                   "## Target feeling", "## Tone, art and world", "## References", "## Scope", "## Kill condition"]
-SLICE_HEADINGS = ["## What it proves", "## In the slice", "## Out of the slice", "## Quality bar", "## Playtest"]
-CONCEPT_HEADINGS = ["## Concepts", "## Choice"]
-INDEX_SECTIONS = ["## Vision", "## Mechanics", "## Controls", "## Systems", "## Content", "## Modes and sessions",
-                  "## Screens and onboarding", "## Feel", "## Tone, art and world"]
-SLICE_INDEX_SECTIONS = [h for h in INDEX_SECTIONS if h != "## Modes and sessions"]
+AREAS = ["Vision", "Mechanics", "Controls", "Systems", "Content", "Modes and sessions",
+         "Screens and onboarding", "Feel", "Tone, art and world"]
+SLICE_AREAS = [a for a in AREAS if a != "Modes and sessions"]
+REQUIRED_PAGES = ["vision", "slice", "concepts"]
+QUALITY_ASPECTS = ["code", "feel", "art", "audio", "ui", "onboarding"]
+QUALITY_BARS = ["placeholder", "representative", "production", "final"]
 FUN_FIELDS = ["statement", "scope", "kind", "metric", "threshold", "how"]
 RICH_FIELDS = ["aspect", "scope", "statement", "metric", "threshold", "how"]
 MIN_SEED_TOPICS = 5
 NICE_RESERVE = 10  # sessions kept back for verdicts and polish before nice features are built
 
+CURRENT_VERSION = 6
+# from_version -> migrate(game) -> notes; brings game.state to from_version + 1. Write files with
+# game._write, so `upgrade` commits them.
+# Empty so far: a game past setup can't be upgraded until a release adds entries.
+MIGRATIONS = {}
+
 DEFAULT_STATE = {
-    "version": 5,
+    "version": CURRENT_VERSION,
     "phase": "setup",
     "stage": "slice",
     "milestone": None,
@@ -73,6 +83,7 @@ DEFAULT_STATE = {
     "slice_sessions": None,
     "checkpoint_due": False,
     "adapter_verified": False,
+    "docs_verified": None,
     "gdd_synced": None,
     "restart_adr": None,
     "resume": None,
@@ -90,6 +101,8 @@ DEFAULT_FUN = {"items": []}
 DEFAULT_RICHNESS = {"targets": []}
 DEFAULT_TOPICS = {"topics": []}
 DEFAULT_KEEP = {"keep": []}
+DEFAULT_WIKI = {"pages": []}
+DEFAULT_VISION = {}
 MISSING = object()
 DEFAULT_TEXT = {
     "progress.md": "# Progress\n\nAppend-only session log. One entry per session, newest last, at most 10 lines each.\n",
@@ -106,44 +119,54 @@ def copy(data):
     return json.loads(json.dumps(data))
 
 
-def sections(text):
-    """Map each '## ' heading line to the lines under it."""
-    out, current = {}, None
-    for line in text.splitlines():
-        if line.startswith("## "):
-            current = line.strip()
-            out[current] = []
-        elif current:
-            out[current].append(line)
-    return out
+def whole(value):
+    return isinstance(value, int) and not isinstance(value, bool)
+
+
+class UpgradeError(Exception):
+    pass
 
 
 class Game:
     def __init__(self, root: Path):
         self.root = root
         self.dir = root / "docs" / "game"
-        self.wiki = self.dir / "wiki"
         self.state_path = self.dir / "state.json"
         self.features_path = self.dir / "features.json"
         self.fun_path = self.dir / "fun-checklist.json"
         self.richness_path = self.dir / "richness.json"
         self.topics_path = self.dir / "topics.json"
         self.keep_path = self.dir / "keep.json"
+        self.wiki_index_path = self.dir / "wiki.json"
+        self.vision_path = self.dir / "vision.json"
+        self.written = []  # every file this run wrote, so the command that wrote them can commit them
         self.state = self._load(self.state_path, DEFAULT_STATE)
+        self.found_version = self._found_version()
         self.features = self._load(self.features_path, DEFAULT_FEATURES)
         self.fun = self._load(self.fun_path, DEFAULT_FUN)
         self.richness = self._load(self.richness_path, DEFAULT_RICHNESS)
         self.topics_data = self._load(self.topics_path, DEFAULT_TOPICS)
         self.keep = self._load(self.keep_path, DEFAULT_KEEP)
+        self.wiki_index = self._load(self.wiki_index_path, DEFAULT_WIKI, shape_checked=True)
+        self.vision_data = self._load(self.vision_path, DEFAULT_VISION, shape_checked=True)
 
-    def _load(self, path, default):
+    def _read(self, path):
+        try:
+            return json.loads(path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as e:
+            sys.exit(f"error: {path.relative_to(self.root)} is not valid JSON: {e}")
+
+    def _load(self, path, default, shape_checked=False):
+        """The file merged over its defaults. A file that isn't a JSON object stops the tool, unless its
+        shape check reports it (then it is returned as is)."""
         merged = copy(default)
         if not path.exists():
             return merged
-        try:
-            data = json.loads(path.read_text(encoding="utf-8"))
-        except json.JSONDecodeError as e:
-            sys.exit(f"error: {path.relative_to(self.root)} is not valid JSON: {e}")
+        data = self._read(path)
+        if not isinstance(data, dict):
+            if shape_checked:
+                return data
+            sys.exit(f"error: {path.relative_to(self.root)} must hold a JSON object, not {type(data).__name__}")
         for key, value in data.items():
             if isinstance(value, dict) and isinstance(merged.get(key), dict):
                 merged[key].update(value)
@@ -151,9 +174,20 @@ class Game:
                 merged[key] = value
         return merged
 
+    def _found_version(self):
+        """The version written in state.json: 1 when absent, None without a state.json (_load fills in the default)."""
+        if not self.state_path.exists():
+            return None
+        return self._read(self.state_path).get("version", 1)
+
+    def older(self):
+        """The game's state predates this tool."""
+        return whole(self.found_version) and self.found_version < CURRENT_VERSION
+
     # ---------- persistence ----------
     def _write(self, path, data):
         path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+        self.written.append(path)
 
     def _git(self, *args):
         return subprocess.run(["git", *args], cwd=self.root, capture_output=True, text=True)
@@ -172,6 +206,63 @@ class Game:
         self._git("add", "--", *rel)
         self._git("commit", "-q", "-m", f"game-state: {message}", "--", *rel)
 
+    def write_missing_files(self):
+        """Create every state file that doesn't exist yet; returns the paths created, relative to the root."""
+        self.dir.mkdir(parents=True, exist_ok=True)
+        created = []
+        for path, data in ((self.state_path, self.state), (self.features_path, self.features),
+                           (self.fun_path, self.fun), (self.richness_path, self.richness),
+                           (self.topics_path, self.topics_data), (self.keep_path, self.keep),
+                           (self.wiki_index_path, self.wiki_index), (self.vision_path, self.vision_data)):
+            if not path.exists():
+                self._write(path, data)
+                created.append(path.relative_to(self.root).as_posix())
+        for name, text in DEFAULT_TEXT.items():
+            if not (self.dir / name).exists():
+                (self.dir / name).write_text(text, encoding="utf-8")
+                created.append(f"docs/game/{name}")
+        return created
+
+    def upgrade(self):
+        """Bring the state to CURRENT_VERSION; returns notes. Raises UpgradeError, changing nothing, when it can't."""
+        old = self.found_version
+        if old is None:
+            raise UpgradeError("no game state here (docs/game/state.json is missing): nothing to upgrade; "
+                               "set the game up with game-setup, which runs `gamestate.py init`")
+        if not whole(old):
+            raise UpgradeError(f"docs/game/state.json version {old!r} is not a whole number: set it to the "
+                               "version of the tool that wrote the game (a missing version counts as 1)")
+        if old > CURRENT_VERSION:
+            raise UpgradeError(f"this game is at version {old}, newer than this tool ({CURRENT_VERSION}): "
+                               "nothing changed; update the plugin and use its gamestate.py")
+        if old == CURRENT_VERSION:
+            return [f"already at version {CURRENT_VERSION}"]
+        if self.state.get("phase") == "setup":
+            fresh = copy(DEFAULT_STATE)
+            for key in ("limits", "counters", "human_queue", "adapter_verified"):
+                fresh[key] = self.state.get(key, fresh[key])
+            fresh["task"] = "game-setup upgrade"
+            self.state.clear()
+            self.state.update(fresh)
+            self._write(self.state_path, self.state)
+            self.features["milestones"] = list(MILESTONES)  # no features exist yet at setup
+            self._write(self.features_path, self.features)
+            self.found_version = CURRENT_VERSION
+            notes = [f"version {old} -> {CURRENT_VERSION}"]
+            return notes + [f"created {path}" for path in self.write_missing_files()]
+        missing = [v for v in range(old, CURRENT_VERSION) if v not in MIGRATIONS]
+        if missing:
+            raise UpgradeError(f"upgrade from version {old} in phase {self.state.get('phase')} isn't supported "
+                               f"(no migration from version {missing[0]}): nothing changed; finish this game with "
+                               "the plugin release it was made with")
+        notes = []
+        for v in range(old, CURRENT_VERSION):
+            notes += MIGRATIONS[v](self)
+            self.state["version"] = v + 1
+        self._write(self.state_path, self.state)
+        self.found_version = CURRENT_VERSION
+        return [f"version {old} -> {CURRENT_VERSION}"] + notes
+
     def save_state(self, message):
         self._write(self.state_path, self.state)
         self.commit(message, self.state_path)
@@ -181,12 +272,67 @@ class Game:
     def text(path):
         return path.read_text(encoding="utf-8") if path.exists() else ""
 
+    def wiki_pages(self):
+        """The well-formed page entries; _wiki_shape reports the rest."""
+        pages = self.wiki_index.get("pages") if isinstance(self.wiki_index, dict) else None
+        if not isinstance(pages, list):
+            return []
+        return [p for p in pages if isinstance(p, dict) and isinstance(p.get("id"), str) and p["id"]]
+
+    def page_ids(self):
+        return {p["id"] for p in self.wiki_pages()}
+
+    def _wiki_shape(self):
+        """Reasons wiki.json has a value of the wrong type; wiki_pages() leaves those entries out."""
+        if not isinstance(self.wiki_index, dict):
+            return ["wiki.json is not an object"]
+        pages = self.wiki_index.get("pages", [])
+        if not isinstance(pages, list):
+            return ["wiki.json pages is not a list"]
+        why = []
+        for n, p in enumerate(pages, 1):
+            if not isinstance(p, dict):
+                why.append(f"wiki.json pages: entry {n} is not an object")
+            elif not (isinstance(p.get("id"), str) and p["id"]):
+                why.append(f"wiki.json pages: entry {n} has no id")
+        return why
+
+    @staticmethod
+    def page_list(owner, pages):
+        """Reasons a feature's or topic's `pages` isn't a list of page ids."""
+        if isinstance(pages, list) and all(isinstance(p, str) for p in pages):
+            return []
+        return [f"{owner}: pages must be a list of page ids"]
+
+    def vision(self):
+        return self.vision_data if isinstance(self.vision_data, dict) else {}
+
     def pillars(self):
-        vision = self.wiki / "vision.md"
-        if not vision.exists():
+        pillars = self.vision().get("pillars")
+        if not isinstance(pillars, list):
             return None
-        lines = sections(self.text(vision)).get("## Pillars", [])
-        return [m.group(1) for m in (re.match(r"\s*[-*]\s*\*\*(P\d+)\*\*", line) for line in lines) if m]
+        return [p.get("id") for p in pillars if isinstance(p, dict)]
+
+    def _vision_shape(self):
+        """Reasons vision.json has a value of the wrong type, so later reads can trust the shapes."""
+        if not isinstance(self.vision_data, dict):
+            return ["vision.json is not an object"]
+        v, why = self.vision_data, []
+        pillars = v.get("pillars", [])
+        if not isinstance(pillars, list):
+            why.append("vision.json pillars is not a list")
+        else:
+            why += [f"vision.json pillars: entry {n} is not an object"
+                    for n, p in enumerate(pillars, 1) if not isinstance(p, dict)]
+        if not isinstance(v.get("anti_pillars", []), list):
+            why.append("vision.json anti_pillars is not a list")
+        for key in ("slice", "directions"):
+            if not isinstance(v.get(key, {}), dict):
+                why.append(f"vision.json {key} is not an object")
+        sl = v.get("slice")
+        if isinstance(sl, dict) and not isinstance(sl.get("quality_bar", {}), dict):
+            why.append("vision.json slice quality_bar is not an object")
+        return why
 
     def items(self):
         return self.features.get("features", [])
@@ -291,13 +437,13 @@ class Game:
         return bool(budget) and st["counters"]["brainstorm_sessions"] >= st["limits"]["brainstorm_share"] * budget
 
     def gdd_stale(self):
-        """True when wiki pages or the AI's own calls changed since the human GDD was last synced from them."""
-        if not self.wiki.exists() or not any(self.wiki.rglob("*.md")):
+        """True when the wiki index or the AI's own calls changed since the human GDD was last synced from them."""
+        if not self.wiki_pages():
             return False
         synced = self.state.get("gdd_synced")
         if not synced or not self.in_git():
             return True
-        sources = [p.relative_to(self.root).as_posix() for p in (self.wiki, self.dir / "own-calls.md")]
+        sources = [p.relative_to(self.root).as_posix() for p in (self.wiki_index_path, self.dir / "own-calls.md")]
         r = self._git("diff", "--name-only", synced, "HEAD", "--", *sources)
         return r.returncode != 0 or bool(r.stdout.strip())
 
@@ -328,6 +474,9 @@ class Game:
         st = self.state
         if st.get("phase") not in PHASES:
             errs.append(f"state.phase '{st.get('phase')}' is not one of {PHASES}")
+        if self.found_version is not None and not whole(self.found_version):
+            errs.append(f"state.json version {self.found_version!r} is not a whole number: set it to the version "
+                        "of the tool that wrote the game")
         for key in ("max_adjusts", "max_restarts", "max_attempts", "max_repeats"):
             if not isinstance(st["limits"].get(key), int):
                 errs.append(f"state.limits.{key} must be an integer")
@@ -338,6 +487,9 @@ class Game:
         errs += self._check_features()
         errs += self._check_targets()
         errs += self._check_topics()
+        errs += self._wiki_shape()
+        errs += self._check_wiki()
+        errs += self._vision_shape()
         errs += self._check_keep()
         if self.stage() not in STAGES:
             errs.append(f"state.stage must be one of {STAGES}")
@@ -358,7 +510,7 @@ class Game:
         return errs
 
     def _check_features(self):
-        errs, seen = [], set()
+        errs, seen, page_ids = [], set(), self.page_ids()
         pillars, archived, milestones = self.pillars(), self._archived_ids(), self.milestones()
         for f in self.items():
             fid = f.get("id") or "<no id>"
@@ -374,7 +526,7 @@ class Game:
             if f.get("milestone") not in milestones:
                 errs.append(f"{fid}: milestone '{f.get('milestone')}' is not in features.milestones")
             if not f.get("pillar") or (pillars is not None and f.get("pillar") not in pillars):
-                errs.append(f"{fid}: pillar '{f.get('pillar')}' is not a pillar in wiki/vision.md")
+                errs.append(f"{fid}: pillar '{f.get('pillar')}' is not a pillar in vision.json")
             if not f.get("acceptance") or not isinstance(f.get("acceptance"), list):
                 errs.append(f"{fid}: acceptance must be a non-empty list")
             verify = f.get("verify") or {}
@@ -388,7 +540,9 @@ class Game:
                 errs.append(f"{fid}: a human-verified feature passes only with evidence starting 'human:'")
             if f.get("tier") == "cut" and not f.get("cut_reason"):
                 errs.append(f"{fid}: cut without cut_reason")
-            errs += [f"{fid}: page '{p}' does not exist" for p in f.get("pages", []) if not (self.dir / p).exists()]
+            pages = f.get("pages", [])
+            errs += self.page_list(fid, pages) or [f"{fid}: page '{p}' is not in wiki.json"
+                                                    for p in pages if p not in page_ids]
         return errs
 
     def _check_targets(self):
@@ -421,7 +575,7 @@ class Game:
 
     def _check_topics(self):
         errs, seen = [], set()
-        ids = {t.get("id") for t in self.topics()}
+        ids, page_ids = {t.get("id") for t in self.topics()}, self.page_ids()
         for t in self.topics():
             tid = t.get("id") or "<no id>"
             if tid in seen:
@@ -439,11 +593,36 @@ class Game:
                 errs.append(f"topic {tid}: parent '{t.get('parent')}' is not a topic")
             if t.get("status") in ("resolved", "deferred") and not t.get("resolution"):
                 errs.append(f"topic {tid}: a {t.get('status')} topic needs a resolution (the answer, or why it waits)")
-            if t.get("status") == "resolved":
-                pages = t.get("pages", [])
+            pages, bad = t.get("pages", []), self.page_list(f"topic {tid}", t.get("pages", []))
+            errs += bad
+            if not bad and t.get("status") == "resolved":
                 if not pages:
                     errs.append(f"topic {tid}: resolved without a wiki page it wrote or updated")
-                errs += [f"topic {tid}: page '{p}' does not exist" for p in pages if not (self.dir / p).exists()]
+                errs += [f"topic {tid}: page '{p}' is not in wiki.json" for p in pages if p not in page_ids]
+        return errs
+
+    def _check_wiki(self):
+        errs, seen = [], set()
+        open_topics = {t.get("id") for t in self.topics() if t.get("status") == "open"}
+        for p in self.wiki_pages():
+            pid = p["id"]
+            if pid in seen:
+                errs.append(f"page {pid}: duplicate id")
+            seen.add(pid)
+            errs += [f"page {pid}: missing {key}" for key in ("title", "version", "updated")
+                     if p.get(key) is None or str(p.get(key)).strip() == ""]
+            if p.get("area") not in AREAS:
+                errs.append(f"page {pid}: area '{p.get('area')}' is not one of {AREAS}")
+            link = p.get("link") or ""
+            if not link:
+                errs.append(f"page {pid}: missing link")
+            elif "://" not in link and not (self.root / link).exists():
+                errs.append(f"page {pid}: local link '{link}' does not exist")
+            flagged = p.get("flagged")
+            if flagged and not isinstance(flagged, dict):
+                errs.append(f"page {pid}: flagged is not an object")
+            elif flagged and flagged.get("topic") not in open_topics:
+                errs.append(f"page {pid}: flagged for topic {flagged.get('topic')}, which is not open")
         return errs
 
     def _check_keep(self):
@@ -547,6 +726,11 @@ class Game:
         if phase == "setup":
             if not (self.root / "docs" / "agents" / "game.md").exists():
                 why.append("docs/agents/game.md is missing")
+            if not (self.root / "docs" / "agents" / "docs.md").exists():
+                why.append("docs/agents/docs.md is missing")
+            dv = st.get("docs_verified")
+            if not (isinstance(dv, dict) and dv.get("place") and dv.get("date")):
+                why.append("docs not verified: run the docs smoke test (game-setup)")
         elif phase == "ideation":
             why += self._ideation_gate()
         elif phase == "brainstorm":
@@ -571,22 +755,34 @@ class Game:
         return why
 
     def _ideation_gate(self):
-        vision = self.text(self.wiki / "vision.md").splitlines()
-        why = [f"wiki/vision.md lacks '{h}'" for h in VISION_HEADINGS if h not in vision]
+        why = self._vision_shape()
+        v = self.vision()
         n = len(self.pillars() or [])
         if not 3 <= n <= 4:
-            why.append(f"wiki/vision.md has {n} pillars; needs 3-4 written as '- **P1**: ...'")
-        sec = sections(self.text(self.wiki / "concepts.md"))
-        why += [f"wiki/concepts.md lacks '{h}'" for h in CONCEPT_HEADINGS if h not in sec]
-        concepts = [line for line in sec.get("## Concepts", []) if re.match(r"### C\d+", line)]
-        if not 3 <= len(concepts) <= 5:
-            why.append(f"wiki/concepts.md has {len(concepts)} directions; needs 3-5 headed '### C1: ...'")
-        if not any(re.search(r"\bC\d+\b", line) for line in sec.get("## Choice", [])):
-            why.append("wiki/concepts.md's Choice names no direction")
-        if not (self.wiki / "index.md").exists():
-            why.append("wiki/index.md is missing")
-        slice_page = self.text(self.wiki / "slice.md").splitlines()
-        why += [f"wiki/slice.md lacks '{h}'" for h in SLICE_HEADINGS if h not in slice_page]
+            why.append(f"vision.json has {n} pillars; needs 3-4")
+        anti = v.get("anti_pillars") if isinstance(v.get("anti_pillars"), list) else []
+        if not any(str(a).strip() for a in anti):  # a blank anti-pillar protects nothing
+            why.append("vision.json has no anti-pillar")
+        if not str(v.get("kill_condition") or "").strip():
+            why.append("vision.json has no kill condition")
+        directions = v.get("directions") if isinstance(v.get("directions"), dict) else {}
+        count = directions.get("count")
+        if not isinstance(count, int) or isinstance(count, bool) or not 3 <= count <= 5:
+            why.append(f"vision.json directions: {count if isinstance(count, int) else 0} compared; needs 3-5")
+        if not re.search(r"\bC\d+\b", str(directions.get("choice") or "")):
+            why.append("vision.json directions: no choice")
+        sl = v.get("slice") if isinstance(v.get("slice"), dict) else {}
+        if not str(sl.get("test_question") or "").strip():
+            why.append("vision.json slice: no test question")
+        bar = sl.get("quality_bar") if isinstance(sl.get("quality_bar"), dict) else {}
+        for aspect in QUALITY_ASPECTS:
+            level = bar.get(aspect)
+            if level is None:
+                why.append(f"vision.json slice quality bar: {aspect} missing")
+            elif level not in QUALITY_BARS:
+                why.append(f"vision.json slice quality bar: {aspect} is '{level}'; needs one of {QUALITY_BARS}")
+        ids = self.page_ids()
+        why += [f"wiki.json has no page '{i}'" for i in REQUIRED_PAGES if i not in ids]
         seeded = [t for t in self.topics() if t.get("parent") is not None]
         if not any(t.get("stage") == "slice" for t in seeded):
             why.append("no topic marked for the vertical slice (stage: slice)")
@@ -598,12 +794,8 @@ class Game:
 
     def _consolidate_gate(self):
         slice_stage = self.stage() == "slice"
-        sec = sections(self.text(self.wiki / "index.md"))
-        why = []
-        for heading in SLICE_INDEX_SECTIONS if slice_stage else INDEX_SECTIONS:
-            links = [m for line in sec.get(heading, []) for m in re.findall(r"\]\(([^)#]+)", line)]
-            if not any((self.wiki / link).exists() for link in links):
-                why.append(f"wiki/index.md '{heading}' links no existing page")
+        have = {p.get("area") for p in self.wiki_pages()}
+        why = [f"wiki.json has no page in area '{a}'" for a in (SLICE_AREAS if slice_stage else AREAS) if a not in have]
         why += [f"topic {t['id']}: open ({t.get('priority')})"
                 for t in self.open_topics(["core", "support"]) if self.in_stage(t)]
         items = self.fun.get("items", [])
@@ -858,7 +1050,7 @@ class Game:
                 return f"stop: {st.get('stop_reason') or 'waiting on the human queue'} ({len(self.queue(False))} open)"
             action = "game-gdd"  # people read the GDD while the run waits
         else:
-            errs = self.check()
+            errs = [] if phase == "setup" and self.older() else self.check()  # an old game is upgraded, then checked
             action = "fix: " + "; ".join(errs[:3]) if errs else self._work(no_user)
             if action == "advance" or action.startswith("stop:"):
                 return action
@@ -896,7 +1088,11 @@ class Game:
                 return (f"stop: waiting for the slice playtest: a person plays the build with the kit "
                         f"({entry.get('how', 'see the human queue')}) and writes {entry['answers']}; then run /game-next")
         task = st.get("task")
-        if task and task.startswith("game-ideation"):
+        if phase == "setup" and self.older():
+            task = "game-setup upgrade"
+        elif phase in ("setup", "ideation") and not task and self.gate():
+            task = f"game-{phase}"  # conversations, even when no task was recorded
+        if task and task.startswith(("game-ideation", "game-setup")):
             if not no_user:
                 return f"with-user: {task}"
             waiting = waiting or task
@@ -1020,17 +1216,20 @@ def main(argv):
     game = Game(find_root(argv))
     st = game.state
     if cmd == "init":
-        game.dir.mkdir(parents=True, exist_ok=True)
-        for path, data in ((game.state_path, game.state), (game.features_path, game.features),
-                           (game.fun_path, game.fun), (game.richness_path, game.richness),
-                           (game.topics_path, game.topics_data), (game.keep_path, game.keep)):
-            if not path.exists():
-                game._write(path, data)
-                print(f"created {path.relative_to(game.root)}")
-        for name, text in DEFAULT_TEXT.items():
-            if not (game.dir / name).exists():
-                (game.dir / name).write_text(text, encoding="utf-8")
-                print(f"created docs/game/{name}")
+        for path in game.write_missing_files():
+            print(f"created {path}")
+        return 0
+    if cmd == "upgrade":
+        try:
+            notes = game.upgrade()
+        except UpgradeError as e:
+            print(e)
+            return 1
+        created = [game.root / n[len("created "):] for n in notes if n.startswith("created ")]
+        if game.written or created:  # everything the upgrade wrote, so a migration's own files are committed too
+            game.commit(f"upgrade to version {CURRENT_VERSION}", *dict.fromkeys(game.written + created))
+        print("\n".join(notes))
+        print(f"next: {game.next_action()}")
         return 0
     if cmd == "status":
         print(game.status(no_user="--no-user" in argv))

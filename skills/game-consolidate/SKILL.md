@@ -11,17 +11,17 @@ Turns a wiki written one topic at a time into one coherent definition, then sets
 - **slice** (task `game-consolidate`): the pages the vertical slice needs, and the bar for the slice.
 - **production** (task `game-consolidate production`): the whole game, and the bar for the full game. The slice's bar stays as it is: after the slice stage it can rise but never drop.
 
-Read `docs/agents/game.md` first and follow its session rules. When the work doesn't fit one session, stop after a finished step; the next session resumes at the first step whose criterion is unmet.
+Read `docs/agents/game.md` first and follow its session rules. When the work doesn't fit one session, stop after a finished step, committing your page drafts (session rule 6); the next session resumes at the first step whose criterion is unmet, and step 6 writes the drafts still in `docs/game/drafts/`.
 
 ## 1. Completeness
 
-Walk `wiki/index.md` area by area; in the slice stage, only what `wiki/slice.md`'s In list needs (Modes and sessions can wait). For each, the pages must answer what planning will ask:
+Walk the areas one by one (the list in "The wiki" in `docs/agents/game.md`, or the home page's sections), reading each area's pages (those in `docs/game/wiki.json` with that `area`) through the docs place; an area with no page is a gap; in the slice stage, only what the `slice` page's In list needs (Modes and sessions can wait). For each, the pages must answer what planning will ask:
 
 - **Mechanics**: every object, action, win and fail condition, and edge case (ties, timeouts, simultaneous actions), precise enough to write tests from.
 - **Controls**: every input action with its binding per device.
 - **Systems**: each system's purpose, state, tuning knobs, and **which other systems it changes and how**.
 - **Content**: each content type's kit pieces, target count, and what makes two pieces play differently.
-- **Modes and sessions**, **Screens and onboarding**, **Feel**, **Tone, art and world**: enough to build and to judge against, at the quality bar slice.md sets.
+- **Modes and sessions**, **Screens and onboarding**, **Feel**, **Tone, art and world**: enough to build and to judge against, at the quality bar the `slice` page sets.
 
 For each gap, open a topic for this stage (`core` when the core loop depends on it, otherwise `support`) with the question that would close it, and stop: the next sessions brainstorm them with a person.
 
@@ -36,13 +36,13 @@ Read the pages along the index and the links between them, and look at the desig
 - resources with sources but no sinks (or the reverse), and feedback loops that run away;
 - three to five scenarios that combine systems (two effects at once, an edge of one system meeting another), walked through step by step.
 
-Fix what has an obvious answer in the page that is wrong, with a `Last changed` line. Anything that needs a design decision becomes a topic. A risk that can be measured becomes a candidate proxy for step 4 (for example, resource growth per run).
+Fix what has an obvious answer in the page that is wrong: draft the fix in `docs/game/drafts/<page-id>.md` with a `Last changed` line (written at step 6). Anything that needs a design decision becomes a topic. A risk that can be measured becomes a candidate proxy for step 4 (for example, resource growth per run).
 
-**Done when** no two pages disagree, every term used is in `CONTEXT.md`, and every holism finding is fixed, a topic, or a candidate proxy.
+**Done when** no two pages disagree, every term used is in `CONTEXT.md`, and every holism finding is a committed page draft, a topic, or a candidate proxy.
 
 ## 3. Settle the tree
 
-Every open topic of this stage must be `core` or `support` work for a person, or wait: mark each `later` topic, and any `support` topic the brainstorm share left unanswered, `deferred` with a one-line reason (what it waits for). A deferred topic can be reopened in any later phase. Production topics stay open through the slice stage.
+Every open topic of this stage must be `core` or `support` work for a person, or wait: mark each `later` topic, and any `support` topic the brainstorm share left unanswered, `deferred` with a one-line reason (what it waits for). When a topic you defer is the review of a flagged page, remove that page's `flagged` entry in `wiki.json` in the same commit as the deferral (check fails while a flag names a topic that isn't open), and draft the page without its note (written at step 6). A deferred topic can be reopened in any later phase. Production topics stay open through the slice stage.
 
 **Done when** `gamestate.py gate` lists no open core or support topic for this stage.
 
@@ -58,7 +58,7 @@ Write items to `docs/game/fun-checklist.json`, drawn from the vision's target fe
   "how": "bot --policy greedy-vs-greedy --runs 50"}]}
 ```
 
-- **Slice stage**: 3–6 items with scope `core-loop` (the core loop alone, judged on bots before the slice is polished) or `slice` (the slice as a whole). At least one core-loop proxy, and at least one `human` item for the slice playtest, matching slice.md's Playtest section and the vision's kill condition.
+- **Slice stage**: 3–6 items with scope `core-loop` (the core loop alone, judged on bots before the slice is polished) or `slice` (the slice as a whole). At least one core-loop proxy, and at least one `human` item for the slice playtest, matching the `slice` page's Playtest section and the vision's kill condition.
 - **Production stage**: add items with scope `full` for what only the whole game can show; 10 items at most in all.
 - Each item is observable within one play session. Make it a **proxy** whenever a metric can stand for it ([fun-proxies.md](fun-proxies.md)); otherwise `human`, with `metric`, `threshold` and `how` left out.
 
@@ -85,6 +85,6 @@ Ids share one namespace with the fun checklist. In interactive mode, the user ap
 
 ## 6. Close
 
-`gamestate.py check --since <base>`, commit, progress entry, `gamestate.py complete`.
+`gamestate.py check --since <base>`, commit with the drafts, progress entry. Then write each draft in `docs/game/drafts/` to its page in the docs place, last (an open topic's drafts stay for its brainstorm, session rule 6); in the pages commit, record each page's new `version` and `updated` in `docs/game/wiki.json` and delete the drafts (a change to the vision or slice also updates `docs/game/vision.json`, in the first commit). Then run `gamestate.py complete`.
 
-**Done when** `complete` succeeds.
+**Done when** the page fixes and their `wiki.json` entries are committed, the only drafts left are an open topic's, and `complete` succeeds.

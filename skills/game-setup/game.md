@@ -1,6 +1,6 @@
 # Game workflow
 
-Config for the game-* skills. Every game-* session reads this file first. Edit it freely; it is the project's, not the skills'.
+Config for the game-* skills. Every game-* session reads this file first. Edit it freely; it is the project's, not the skills'. `game-setup upgrade` refreshes the sections the skills own and shows you what it replaces.
 
 ## The goal
 
@@ -28,7 +28,7 @@ The game is made over **many sessions, one step per session**. A person starts a
 
 Mode: {{autonomous | interactive}}
 
-Ideation and brainstorm topics are always conversations with a person (`with-user:` steps), and the slice verdict always waits for a person's playtest, whatever the mode. The mode decides the rest:
+Setup, ideation and brainstorm topics are always conversations with a person (`with-user:` steps), and the slice verdict always waits for a person's playtest, whatever the mode. The mode decides the rest:
 
 - **autonomous**: other steps decide on their own. At each judgement call, take the recommended answer and record it in an ADR as an assumption a human can overturn. Work only a person can do goes to the **human queue**.
 - **interactive**: the user also approves the fun checklist and richness targets (game-consolidate), the ticket breakdown (game-plan) and each verdict's outcome (game-verdict), when they are in the session.
@@ -39,22 +39,43 @@ Every game-* session is a **fresh session** doing **one task**:
 
 1. Start: note your base commit (`git rev-parse HEAD`) and run `python3 docs/game/gamestate.py status`. Read only the files your task names; reach for more only when the work demands it.
 2. Hand reading-heavy exploration to a subagent or the `research` skill, which returns a summary or writes notes to a file.
-3. When the step outgrows the session (a second unplanned subsystem appears, or you are past roughly half your context), split: write the remainder as new tickets, features or topics, commit what is green, stop. The next dispatch of the same task resumes from what is on disk.
+3. When the step outgrows the session (a second unplanned subsystem appears, or you are past roughly half your context), split: write the remainder as new tickets, features or topics, commit what is green with your page drafts, stop. The next dispatch of the same task resumes from what is on disk.
 4. Leave the repo green: commit only work whose tests pass.
-5. **Keep the wiki true.** When your work changes what the game is or how it plays, update the wiki page that describes it in the same commit. When you meet a design question no page answers, open a topic for it rather than deciding silently.
-6. End: `gamestate.py check --since <base>` passing; a commit; a progress entry of at most 10 lines appended to `docs/game/progress.md`; when the task is the phase's own (status shows `task:`) and every step is done, `gamestate.py complete`; and a short report: what changed, the **evidence**, what is left.
+5. **Keep the wiki true.** When your work changes what the game is or how it plays, change the page that describes your change, as the last step; see The wiki. When you meet a design question no page answers, open a topic for it rather than deciding silently.
+6. **Page drafts.** Every page text you write is first a **draft**: the page's full new text in `docs/game/drafts/<page-id>.md`. Drafts go into your state commit (and into any earlier commit, when the step splits). The pages commit then writes each draft to the docs place, records the page's `version` and `updated` in `wiki.json`, and deletes the draft (see "Pages are written last"). So a draft on disk is a page not yet written, and nothing drafted is lost when a session ends early:
+   - To change a page that has a draft, change the draft: it is newer than the docs place.
+   - A session that resumes a task picks up that task's drafts instead of redoing the work behind them. A topic's drafts belong to its brainstorm while the topic is `open` with a `resolution`; that session finishes them (game-brainstorm's step 1).
+   - Any other drafts outlived their step (a build whose feature now passes, a GDD sync): the next game-gdd session writes them first.
+7. End: `gamestate.py check --since <base>` passing; a commit; a progress entry of at most 10 lines appended to `docs/game/progress.md`; when the task is the phase's own (status shows `task:`) and every step is done, `gamestate.py complete`; and a short report: what changed, the **evidence**, what is left.
 
 **Asking the user.** Ask the person in the session directly, one question at a time, each with your recommended answer. In an unattended session (`--unattended`), take the recommended answer and record it in an ADR as an assumption.
 
 **The bar only rises.** Outside the plan phase a feature is never deleted and its `acceptance`, `verify` and `milestone` never change; a `must` feature leaves `must` only as `tier: "cut"` with `cut_reason: "replaced by F0xx[, F0yy]"` naming live must features. After consolidate, fun checklist items and richness targets can be added but not changed or removed. Set `passes: true` only with evidence from a run in this session. `gamestate.py check` enforces all of this against your base commit. The wiki, by contrast, changes freely: it describes the game, it doesn't judge it.
 
-## The wiki (agent-facing)
+## The wiki
 
-`docs/game/wiki/` is the living description of the game, written for agents: precise enough to plan, build and test from. It holds the **current truth** only; why something changed lives in an ADR the page links to.
+The wiki is the living description of the game: precise enough to plan, build and test from. It holds the **current truth** only; why something changed lives in an ADR the page links to. Its pages live in the docs place next to the tasks, which `docs/agents/docs.md` names with how to read, write and comment there. A user who chose local files gets `docs/game/wiki/` instead; that is the only case where the wiki is in the repo.
 
-- `index.md`: the map. One `##` section per area (Vision, Mechanics, Controls, Systems, Content, Modes and sessions, Screens and onboarding, Feel, Tone, art and world), each listing its pages as relative links with one line each. Every page is reachable from it.
-- `vision.md` (pitch, audience and platforms, pillars, anti-pillars, core loop, target feeling, tone, references, scope, kill condition), `slice.md` (the vertical slice: what it proves, what's in and out, its quality bar, its playtest) and `concepts.md` (the directions compared and the choice), all from ideation.
-- Every other page: one subject (a system, a content type, a mode, a screen flow), written by brainstorm topics and kept true by every phase. A page starts with:
+`docs/game/wiki.json` indexes the pages, one entry each:
+
+```json
+{"pages": [
+  {"id": "weapons", "title": "Weapons", "area": "Systems",
+   "link": "https://example.com/docs/weapons", "version": 3, "updated": "2026-11-22: stealing needs a free hand",
+   "flagged": {"topic": "T031", "note": "edited by hand; check against the page"}}
+]}
+```
+
+- `id`: unique and stable; topics and features name pages by it.
+- `title`: the page's title.
+- `area`: Vision, Mechanics, Controls, Systems, Content, Modes and sessions, Screens and onboarding, Feel, Tone, art and world. Each area is a section of the wiki's home page, listing its pages with one line each.
+- `link`: the page's URL, or its repo-relative path for local files.
+- `version`: the page's version as the session that wrote it read it back, the way `docs/agents/docs.md` says (the docs tool's version number, else its last-modified time, else a hash of the text; for local files, a git hash of the page above its comments). A page whose version moved without a session recording it was edited by hand.
+- `updated`: the date and a one-line reason, e.g. `"2026-11-22: stealing needs a free hand"`.
+- `flagged`: set when a direct edit was detected. It names the open topic that reviews the edit, and clears when that topic is resolved or deferred.
+- `index` is the wiki's home page (area Vision), created by setup from the game-ideation skill's `index-template.md`. Its sections are the areas; a session that adds a page adds the page's line under its area.
+- Once ideation is done, the pages `vision`, `slice` and `concepts` always exist: `vision` (pitch, audience and platforms, pillars, anti-pillars, core loop, target feeling, tone, references, scope, kill condition), `slice` (what the vertical slice proves, what is in and out, its quality bar, its playtest) and `concepts` (the directions compared and the choice).
+- Every other page has one subject (a system, a content type, a mode, a screen flow), is written by brainstorm topics and kept true by every phase. It starts with:
 
   ```markdown
   # <Title>
@@ -64,6 +85,32 @@ Every game-* session is a **fresh session** doing **one task**:
 
 - Link instead of repeating; split a page that passes about 200 lines; use the terms in `CONTEXT.md`.
 
+**Comments only.** People comment on wiki pages; sessions edit them. A person's comment becomes a topic or a note, never a silent change. game-gdd compares each page's version in the docs tool with the `version` in `wiki.json`. A mismatch, including a missing page, becomes a topic to review it plus a `flagged` entry. `gamestate.py` only validates `flagged`.
+
+**Pages are written last.** A session finishes its work, runs `check --since <base>` and commits its state and code with its page drafts (session rule 6). Only then does it write the pages in the docs place from those drafts; a second commit, the **pages commit**, records each page's new `version` and `updated` in `wiki.json` and deletes the drafts. A session that ends between the two commits leaves its drafts committed, and session rule 6 says who writes them. When the docs place can't be reached, the session stops with `stop: <tracker> docs unreachable` (naming the tracker from `issue-tracker.md`) rather than writing the pages elsewhere. Local files are used only when the user chose them in setup.
+
+**Setup is always `with-user:`.** Setup can't complete until `docs/agents/docs.md` exists and `state.json` has `docs_verified: {"place": "...", "date": "YYYY-MM-DD"}`, recording that the user's chosen place passed its smoke test.
+
+### vision.json
+
+`docs/game/vision.json` holds the vision's facts as data, so that checks and the verdict read them without parsing prose. The `vision` and `slice` pages explain them.
+
+```json
+{
+  "pillars": [{"id": "P1", "statement": "Every fight is a negotiation"}],
+  "anti_pillars": ["We will not add stat grinding, because it would compromise P1"],
+  "kill_condition": "Fewer than half of testers start a second match",
+  "slice": {
+    "test_question": "Is one match fun enough to repeat?",
+    "quality_bar": {"code": "representative", "feel": "production", "art": "placeholder",
+                    "audio": "placeholder", "ui": "representative", "onboarding": "placeholder"}
+  },
+  "directions": {"count": 3, "choice": "C2"}
+}
+```
+
+Each quality bar is `placeholder`, `representative`, `production` or `final`.
+
 ## Topics
 
 `docs/game/topics.json` holds the brainstorm tree: every design question, open or answered. Each topic is brainstormed with a person, one per session, and mirrored as a `ready-for-human` ticket in the tracker.
@@ -72,46 +119,49 @@ Every game-* session is a **fresh session** doing **one task**:
 {"id": "T014", "title": "Weapon stealing", "parent": "T003",
  "question": "How does a player take an opponent's weapon, and what stops it from dominating?",
  "priority": "core", "stage": "slice", "status": "open",
- "pages": ["wiki/systems/weapons.md"], "unblocks": ["F021"], "ticket": "#88",
+ "pages": ["weapons"], "unblocks": ["F021"], "ticket": "#88",
  "resolution": ""}
 ```
 
 - `priority`: `core` (the core loop depends on it), `support` (needed before planning is complete), `later` (depth that can wait).
 - `stage`: `slice` when the vertical slice needs it answered, otherwise `production`. Production topics wait until the slice ships.
-- `status`: `open`, `resolved` (its `pages` were written or updated and `resolution` gives the answer in a line) or `deferred` (`resolution` says why it waits). Any session may reopen a topic when the game changes under it.
+- `status`: `open`, `resolved` (its `pages` were written or updated and `resolution` gives the answer in a line) or `deferred` (`resolution` says why it waits). Any session may reopen a topic when the game changes under it: `status` back to `open`, and `resolution` cleared to `""` (an open topic with a `resolution` is a brainstorm between its two commits).
 - `unblocks`: features that can't be built until it is answered; the status tool brainstorms those topics before building them.
 
-## The GDD (human-facing)
+## The GDD
 
-A game design document for people, kept next to the tasks, where `docs/agents/human-docs.md` says. game-gdd writes it from the wiki in plain language and updates the pages whose wiki sources changed; the status tool makes it the next step before every phase or milestone change while the wiki has changed since the last sync. People read and comment there; their edits and comments come back as topics, never as silent changes to the wiki.
+A game design document for people, kept next to the tasks in the docs place `docs/agents/docs.md` names. game-gdd writes it from the wiki in plain language and updates the pages whose wiki sources changed. The status tool makes it the next step before every phase or milestone change while `wiki.json` or `own-calls.md` has changed since the last `gdd-synced`. People read and comment there; their edits and comments come back as topics, never as silent changes to the wiki.
 
 ## Files
 
 | Path | What | Written by |
 | --- | --- | --- |
 | `docs/game/seed.md` | the user's original prompt, verbatim | game-setup |
-| `docs/game/wiki/` | the living, agent-facing description of the game | ideation, brainstorm, consolidate; every phase keeps it true |
+| `docs/game/wiki.json` | index of the wiki pages (the pages live in the docs place) | ideation, brainstorm, consolidate; every phase keeps it true |
+| `docs/game/vision.json` | pillars, anti-pillars, kill condition, slice test question and quality bars, directions | ideation; brainstorm, consolidate, plan adjust and verdict when they change the vision or slice page |
+| `docs/game/drafts/` | page drafts: page text committed but not yet written in the docs place (session rule 6) | any session that writes pages |
 | `docs/game/topics.json` | the brainstorm tree | ideation, brainstorm; any phase opens topics |
 | `docs/game/fun-checklist.json` | fun checklist | game-consolidate |
 | `docs/game/keep.json` | what playtests and people said to keep, with pinned tuning values | game-verdict, game-gdd |
 | `docs/game/own-calls.md` | player-visible choices agents made that no page specified | game-build, any session |
 | `docs/game/richness.json` | richness targets | game-consolidate |
 | `docs/game/features.json` | definition of done | game-plan, game-polish add items; game-build sets `passes` |
-| `docs/game/state.json` | phase, milestone, task, counters, limits, attempts, verdicts, human queue, GDD sync point | `gamestate.py`; skills append verdicts and queue entries and set `adapter_verified` |
+| `docs/game/state.json` | `version` (of the state tool that wrote it), phase, milestone, task, counters, limits, attempts, verdicts, human queue, GDD sync point, `adapter_verified`, `docs_verified` | `gamestate.py`; skills append verdicts and queue entries; game-setup sets `docs_verified` and `adapter_verified` |
 | `docs/game/progress.md` | append-only session log | every session |
 | `docs/game/assets.md` | every asset's source and license | whoever adds an asset |
 | `docs/game/engine-notes.md` | engine CLI, headless, test and export facts | game-plan |
 | `docs/game/playtests/` | verdict evidence, captures, human playtest kits and answers | game-verdict, game-build |
 | `docs/game/archive/restart-N/` | the definition of done and human queue from before restart N | `gamestate.py` |
+| `docs/agents/docs.md` | where the wiki and GDD live and how to read, write and comment there | game-setup; game-gdd records new GDD pages |
 | `docs/game/gamestate.py` | reads, checks and advances state; commits its own state changes | game-setup installs it |
 
-Decisions are ADRs and game terms live in `CONTEXT.md`, both where `docs/agents/domain.md` says. Tickets live in the tracker `docs/agents/issue-tracker.md` describes, labelled with the roles in `docs/agents/triage-labels.md`. Human-facing documents live where `docs/agents/human-docs.md` says.
+Decisions are ADRs and game terms live in `CONTEXT.md`, both where `docs/agents/domain.md` says. Tickets live in the tracker `docs/agents/issue-tracker.md` describes, labelled with the roles in `docs/agents/triage-labels.md`. The wiki and GDD live where `docs/agents/docs.md` says.
 
 ## Vocabulary
 
-- **Pillars**: 3–4 statements of the feelings or features the game delivers, written `- **P1**: ...` in `wiki/vision.md`. Every feature serves one; a feature with no pillar is not in the game. **Anti-pillars** say what the game will never do and which pillar each protects.
-- **Kill condition**: the playtest result, stated in the vision, that would stop the game as conceived. The slice verdict checks it.
-- **Vertical slice**: the small part of the game built first (`wiki/slice.md`): one complete start → challenge → resolution delivering the target feeling, at the quality bar the user chose per aspect (`placeholder`, `representative` or `final`). Its verdict, after a person's playtest, is the gate into production, and the sessions it took set the production budget.
+- **Pillars**: 3–4 statements of the feelings or features the game delivers, in `vision.json`. Every feature serves one; a feature with no pillar is not in the game. **Anti-pillars** say what the game will never do and which pillar each protects.
+- **Kill condition**: the playtest result, stated in `vision.json`, that would stop the game as conceived. The slice verdict checks it.
+- **Vertical slice**: the small part of the game built first (`slice` page and `vision.json`): one complete start → challenge → resolution delivering the target feeling, at the quality bar the user chose per aspect (`placeholder`, `representative`, `production` or `final`). Its verdict, after a person's playtest, is the gate into production, and the sessions it took set the production budget.
 - **Core loop**: the action the player repeats minute to minute, in one sentence.
 - **Design-ready**: a topic's question is answered on a page precisely enough to plan features and write tests from. Brainstorming aims here, not at exhaustiveness.
 - **Fun checklist**: statements that are true when the game is fun, each observable in one play session, with a `scope`: `core-loop`, `slice` or `full`. A **proxy** item has a metric, threshold and method a bot run or replay can measure. A **human** item needs a person.
@@ -127,7 +177,7 @@ Decisions are ADRs and game terms live in `CONTEXT.md`, both where `docs/agents/
 - **Verdict**: the scored judgement of a green build against the fun checklist and richness targets: `ship`, `adjust`, `restart` or `kill`. Scopes: `core-loop` (on bots, before the slice is polished), `slice` (the gate into production; waits for a person's playtest), `full` (before polish), `final` (after polish; shipping it completes the run). It runs again when playtest answers arrive. Each score is `pass` or `fail` with an evidence file, `not-assessed` with the reason it couldn't be measured, or `pending-human`; a ship needs every item to pass.
 - **Kept values**: `keep.json` entries `{id, what, source, pins: [{file, key, value}], adr}` for what a playtest or a person said to keep. `gamestate.py check` holds each pinned tuning value (a dotted key in JSON, or a `key = value` / `key: value` line); changing or dropping one needs a new ADR in the entry's `adr`.
 - **Own calls**: player-visible choices an agent made that no page specified, logged in `own-calls.md` and shown in the GDD for people to keep or change.
-- **Durable assets**: seed.md, the wiki, the fun checklist, richness targets, kept values, ADRs, CONTEXT.md and final art. They survive a restart. Code is disposable.
+- **Durable assets**: seed.md, the wiki, `vision.json`, the fun checklist, richness targets, kept values, ADRs, CONTEXT.md and final art. They survive a restart. Code is disposable.
 - **Human queue**: `state.json` `human_queue` entries `{id, what, why, how, unblocks: [feature ids]}` for work only a person can do, each mirrored as a `ready-for-human` ticket. The run moves past queued features and stops at the end for the queue; open playtest entries don't stop it. A person finishing an entry deletes it, and for a `human`-verified feature sets `passes: true` with evidence starting `human:`; the next `/game-next` session goes back to anything still failing. A playtest entry also has `kind: "playtest"`, `scope` and `answers` (a file path): the person writes their answers to that file and leaves the entry, and the next session reopens the verdict with them.
 
 ### features.json item
@@ -138,12 +188,12 @@ Decisions are ADRs and game terms live in `CONTEXT.md`, both where `docs/agents/
   "pillar": "P2", "tier": "must", "milestone": "systems",
   "acceptance": ["Quitting mid-run and relaunching restores the same state hash"],
   "verify": {"kind": "replay", "how": "replay tests/replays/save-mid-run.json; state hash matches"},
-  "pages": ["wiki/systems/saves.md"], "measures": [], "tickets": ["#41"],
+  "pages": ["saves"], "measures": [], "tickets": ["#41"],
   "passes": false, "evidence": "", "blocked": "", "cut_reason": ""
 }
 ```
 
-`milestone` is one of `core-loop`, `slice` (the vertical slice), `systems`, `content`, `verdict-build` (production), `polish`. `verify.kind` is one of `test`, `sim`, `replay`, `bot`, `capture`, `check` (any scripted or recorded inspection) or `human`. `pages` lists the wiki pages the feature implements. `measures` lists the fun proxy and richness target ids whose metric this feature produces. Ids are never reused, including ids in `docs/game/archive/`. Build attempts are counted by `gamestate.py` in `state.json` `attempts`.
+`milestone` is one of `core-loop`, `slice` (the vertical slice), `systems`, `content`, `verdict-build` (production), `polish`. `verify.kind` is one of `test`, `sim`, `replay`, `bot`, `capture`, `check` (any scripted or recorded inspection) or `human`. `pages` lists the ids of the wiki pages the feature implements. `measures` lists the fun proxy and richness target ids whose metric this feature produces. Ids are never reused, including ids in `docs/game/archive/`. Build attempts are counted by `gamestate.py` in `state.json` `attempts`.
 
 ## Limits
 

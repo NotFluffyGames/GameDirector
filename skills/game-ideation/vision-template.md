@@ -1,6 +1,6 @@
 # Vision template
 
-Copy into `docs/game/wiki/vision.md` and fill every section. Keep the `##` headings exactly; `gamestate.py gate` looks for them.
+Page template for the `vision` page (area Vision) in the docs place; fill every section. Keep the `##` headings exactly. The pillars, anti-pillars and kill condition also go into `docs/game/vision.json`, which `gamestate.py gate` reads.
 
 ```markdown
 # Vision

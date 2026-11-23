@@ -1,11 +1,11 @@
 # GDD structure
 
-The human-facing GDD, as one document with these pages (or sections, where the docs tool has no pages). Each GDD page is written from the wiki pages listed beside it; one wiki page can feed several GDD pages.
+The human-facing GDD, as one document with these pages (or sections, where the docs tool has no pages). The GDD and the wiki are in the same docs place. Each GDD page is written from the wiki pages (ids in `docs/game/wiki.json`) listed beside it; one wiki page can feed several GDD pages.
 
 | GDD page | From the wiki | Written for |
 | --- | --- | --- |
-| **Overview** | `vision.md`, `concepts.md` | anyone: what the game is, who it is for, why it will be fun, the pillars and anti-pillars, the kill condition, what was considered and why this |
-| **Vertical slice** | `slice.md` | what is built first, what it must prove, its quality bar, and how it will be playtested |
+| **Overview** | the `vision` and `concepts` pages | anyone: what the game is, who it is for, why it will be fun, the pillars and anti-pillars, the kill condition, what was considered and why this |
+| **Vertical slice** | the `slice` page | what is built first, what it must prove, its quality bar, and how it will be playtested |
 | **Gameplay** | Mechanics and Controls pages | how a match or run plays, step by step, with the controls |
 | **Systems** | Systems pages | each system in a paragraph, and a short table of how systems affect each other |
 | **Content** | Content pages | what content there is, how much, and what makes pieces differ |
@@ -21,5 +21,5 @@ The human-facing GDD, as one document with these pages (or sections, where the d
 Rules:
 
 - Plain language. Explain a game term the first time each page uses it; keep the agent-facing precision (exact numbers, edge cases) in the wiki and link to it.
-- Each page ends with "Source: wiki pages …, topics …" so a reader can follow a section back to where it was decided.
-- Never edit the wiki to match the GDD; the GDD follows the wiki. People's edits come back as topics.
+- Each page ends with "Source: wiki pages …, topics …", with a link to each page, so a reader can follow a section back to where it was decided.
+- Never edit the wiki to match the GDD; the GDD follows the wiki. People's edits, on either, come back as topics, and an edited wiki page is flagged in `wiki.json` until its topic resolves.
