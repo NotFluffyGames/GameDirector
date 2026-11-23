@@ -3,6 +3,8 @@
 Run: python3 -m unittest discover tests
 """
 import json
+import os
+import re
 import shutil
 import subprocess
 import sys
@@ -11,6 +13,8 @@ import unittest
 from pathlib import Path
 
 SCRIPT = Path(__file__).resolve().parents[1] / "skills" / "game-setup" / "scripts" / "gamestate.py"
+LOOP = Path(__file__).resolve().parents[1] / "skills" / "game-next" / "scripts" / "loop.sh"
+CURRENT_VERSION = int(re.search(r"^CURRENT_VERSION = (\d+)$", SCRIPT.read_text(), re.M).group(1))
 
 
 VISION_JSON = {
@@ -892,6 +896,59 @@ class GameRun(unittest.TestCase):
         self.edit("state.json", lambda s: s.pop("version"))
         self.commit()
         self.assertIn("version 1 -> 6", self.tool("upgrade"))
+
+
+class Loop(unittest.TestCase):
+    """skills/game-next/scripts/loop.sh, driving a stand-in state tool and agent."""
+
+    def setUp(self):
+        self.root = Path(tempfile.mkdtemp())
+        (self.root / "docs" / "game").mkdir(parents=True)
+        (self.root / "docs" / "game" / "gamestate.py").write_text('print("next: game-build F1")\n')
+        (self.root / "agent.py").write_text(
+            "import sys\nfrom pathlib import Path\n"
+            "with open('calls.txt', 'a') as f:\n    f.write(sys.argv[-1] + '\\n')\n"
+            "print(Path('says.txt').read_text())\n")
+        self.state(version=CURRENT_VERSION, phase="build")
+
+    def tearDown(self):
+        shutil.rmtree(self.root)
+
+    def state(self, **fields):
+        (self.root / "docs" / "game" / "state.json").write_text(json.dumps(fields))
+
+    def loop(self, says="built F1", sessions="3"):
+        (self.root / "says.txt").write_text(says)
+        (self.root / "calls.txt").unlink(missing_ok=True)
+        r = subprocess.run(["bash", str(LOOP), sessions], cwd=self.root, capture_output=True, text=True,
+                           env=dict(os.environ, AGENT_CMD=f"{sys.executable} agent.py"))
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        calls = self.root / "calls.txt"
+        return r.stdout, len(calls.read_text().splitlines()) if calls.exists() else 0
+
+    def test_runs_one_unattended_session_per_step_up_to_the_limit(self):
+        out, calls = self.loop()
+        self.assertEqual(calls, 3)
+        self.assertIn("built F1", out)
+        self.assertIn("reached 3 sessions", out)
+
+    def test_stops_when_the_session_reports_a_stop(self):
+        out, calls = self.loop("could not read the home page\nstop: ClickUp docs unreachable\n")
+        self.assertEqual(calls, 1)
+        self.assertIn("could not read the home page", out)  # the user still sees the session's report
+        self.assertIn("loop: stop: ClickUp docs unreachable", out)
+
+    def test_an_older_or_newer_game_stops_before_any_session(self):
+        for fields, expected in (({"version": 3, "phase": "setup"}, "game-setup upgrade"),
+                                 ({"phase": "setup"}, "version 1"),
+                                 ({"version": 3, "phase": "build"}, f"version 3 and the plugin at {CURRENT_VERSION}"),
+                                 ({"version": CURRENT_VERSION + 1, "phase": "build"}, "newer than the plugin")):
+            with self.subTest(**fields):
+                self.state(**fields)
+                out, calls = self.loop()
+                self.assertEqual(calls, 0)
+                self.assertIn("loop: stop: ", out)
+                self.assertIn(expected, out)
 
 
 class Templates(unittest.TestCase):
