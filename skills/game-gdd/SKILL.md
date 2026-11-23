@@ -6,11 +6,11 @@ disable-model-invocation: true
 
 # Game GDD
 
-The **GDD** is for people: a readable design document that lives next to the tasks, where `docs/agents/human-docs.md` says. The **wiki** (`docs/game/wiki/`) is for agents and is the source of truth. This step makes the GDD say what the wiki says, in plain language, and carries people's reactions back as topics. Read `docs/agents/game.md` first and follow its session rules.
+The **GDD** is for people: a readable design document that lives next to the tasks, where `docs/agents/docs.md` says. The **wiki** (`docs/game/wiki/`) is for agents and is the source of truth. This step makes the GDD say what the wiki says, in plain language, and carries people's reactions back as topics. Read `docs/agents/game.md` first and follow its session rules.
 
 ## 1. Find what changed
 
-Read `docs/agents/human-docs.md` for where the GDD lives, how to read and write it, and its page list. Then list the wiki pages changed since the last sync:
+Read `docs/agents/docs.md` for where the GDD lives, how to read and write it, and its page list. Then list the wiki pages changed since the last sync:
 
 ```bash
 git diff --name-only <state.json gdd_synced> HEAD -- docs/game/wiki docs/game/own-calls.md
@@ -34,6 +34,6 @@ Create or update each affected section per [gdd-structure.md](gdd-structure.md):
 
 ## 4. Close
 
-Record any new page ids or links in `docs/agents/human-docs.md`, commit, run `python3 docs/game/gamestate.py gdd-synced`, append a progress entry.
+Record any new page ids or links in `docs/agents/docs.md`, commit, run `python3 docs/game/gamestate.py gdd-synced`, append a progress entry.
 
 **Done when** `gdd-synced` succeeds.

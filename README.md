@@ -37,7 +37,7 @@ The **vertical slice** comes first: a small part of the game, one complete start
 | Skill | Step | Produces | With you? | Leans on |
 | --- | --- | --- | --- | --- |
 | `game-next` | every session | runs the next step, checks it, reports what's next | — | — |
-| `game-setup` | first session | `docs/agents/game.md` and `human-docs.md` config, state files, verified engine commands | decisions | `research` |
+| `game-setup` | first session | `docs/agents/game.md` and `docs.md` config, state files, verified engine commands | decisions | `research` |
 | `game-ideation` | vision | vision (with anti-pillars and a kill condition), the vertical slice definition, directions considered, the first topics | always | `grilling`, `domain-modeling` |
 | `game-brainstorm` | one topic | the topic's wiki pages, follow-up topics | always | `grilling`, `research` |
 | `game-consolidate` | after each brainstorm pass | a complete, consistent wiki (with a whole-design review); the fun checklist and richness targets | interactive mode | — |
@@ -103,7 +103,7 @@ Copy the folders under `skills/` into your agent's skills directory, keeping the
 
 The game repo ends up with:
 - `docs/agents/game.md`: config, session rules, vocabulary, adapter commands, companion-skill fallbacks.
-- `docs/agents/human-docs.md`: where the GDD lives.
+- `docs/agents/docs.md`: where the GDD lives.
 - `docs/game/`: the seed idea, the wiki, the topic tree, fun checklist, richness targets, definition of done, state, progress log, assets and playtests.
 - ADRs.
 

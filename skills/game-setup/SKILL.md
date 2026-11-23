@@ -31,7 +31,7 @@ Read what exists before deciding anything:
 
 - **Autonomy**: `interactive` when the user passed `--interactive` or asked to be consulted; otherwise `autonomous`.
 - **Tracker**: an existing `docs/agents/issue-tracker.md` wins. Without one, ask the user whether to run `/setup-matt-pocock-skills` first or use local files (unattended: local files): write [issue-tracker-local.md](issue-tracker-local.md) as `docs/agents/issue-tracker.md`, plus a default `docs/agents/triage-labels.md` (the roles `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`, each label equal to its role).
-- **Human-facing docs**: an existing `docs/agents/human-docs.md` wins. Otherwise put them next to the tasks: the docs feature of the configured tracker (a docs page beside the task list, the tracker's wiki), or the docs tool the team uses beside it. With none, `docs/gdd/` in the repo. Confirm the place with the user.
+- **Human-facing docs**: an existing `docs/agents/docs.md` wins. Otherwise put them next to the tasks: the docs feature of the configured tracker (a docs page beside the task list, the tracker's wiki), or the docs tool the team uses beside it. With none, `docs/gdd/` in the repo. Confirm the place with the user.
 - **Domain docs**: an existing `docs/agents/domain.md` wins. Without one: single context, `CONTEXT.md` plus `docs/adr/` at the root, written into `docs/agents/domain.md`.
 - **Limits**: the defaults in [game.md](game.md), overridden by anything the user's prompt says about time or budget.
 
@@ -40,7 +40,7 @@ Read what exists before deciding anything:
 ### 3. Write
 
 1. No git repository: `git init` and an initial commit.
-2. `docs/agents/game.md` from [game.md](game.md), with the autonomy mode filled in, and `docs/agents/human-docs.md` from [human-docs.md](human-docs.md), with the location and how to read and write there.
+2. `docs/agents/game.md` from [game.md](game.md), with the autonomy mode filled in, and `docs/agents/docs.md` from [docs.md](docs.md), with the location and how to read and write there.
 3. Copy [scripts/gamestate.py](scripts/gamestate.py) to `docs/game/gamestate.py` and run `python3 docs/game/gamestate.py init` (`python` where `python3` doesn't exist). Apply limit overrides to `docs/game/state.json`. Without any Python 3, tell the user the gates become manual and stop.
 4. `docs/game/seed.md`: the user's prompt, verbatim, with any flags. Ideation reads it, and every restart.
 5. In `CLAUDE.md` or `AGENTS.md` (whichever exists; if neither, the one your harness reads), add under `## Agent skills`:
@@ -48,7 +48,7 @@ Read what exists before deciding anything:
    ```markdown
    ### Game workflow
 
-   [autonomous | interactive] game-* workflow, one step per session: run `/game-next`. Agent-facing wiki and state in `docs/game/`; human-facing GDD where `docs/agents/human-docs.md` says. See `docs/agents/game.md`.
+   [autonomous | interactive] game-* workflow, one step per session: run `/game-next`. Agent-facing wiki and state in `docs/game/`; human-facing GDD where `docs/agents/docs.md` says. See `docs/agents/game.md`.
    ```
 
 6. When an engine project already exists, do adapter mode now.
