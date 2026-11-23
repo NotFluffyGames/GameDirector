@@ -932,9 +932,15 @@ class GameRun(unittest.TestCase):
         self.ideate()
         self.research()  # its complete passed the gate
         r1 = self.game / "research" / "refs" / "R1"
+        (r1 / "art" / "shot-1.png").unlink()
+        self.commit()
+        self.assertEqual(self.next(), "game-research ref R1")  # a studied reference that falls short is studied again
+        self.assertEqual(self.next("--no-user"), "game-research ref R1")
+        self.edit(REFS, lambda d: d["refs"].append(ref("R9", "Okami", status="open")))
+        self.assertEqual(self.next(), "game-research ref R9")  # open references come first
+        self.edit(REFS, lambda d: d["refs"].pop())
         self.edit(REFS, lambda d: d["refs"][0].update(sources=d["refs"][0]["sources"][:2]))
         self.edit(REFS, lambda d: d["refs"][0]["how_studied"].pop("feel"))
-        (r1 / "art" / "shot-1.png").unlink()
         (r1 / "design.md").unlink()
         out = self.tool("gate", ok=False)
         self.assertIn("R1: 2 sources; needs 3", out)
@@ -1153,6 +1159,9 @@ class GameRun(unittest.TestCase):
         self.assertEqual(self.load("state.json")["human_queue"], [])
         archive = self.game / "archive" / "restart-1"
         self.assertTrue((archive / "features.json").exists() and (archive / "human-queue.json").exists())
+        self.assertTrue((archive / "homework.json").exists())  # the homework served the old direction
+        self.assertFalse((self.game / HOMEWORK).exists())
+        self.assertTrue(self.clean(), self.git("status", "--porcelain"))
         self.assertIn(f"references.json scanned_for is not {adr}: re-scan for the restart, then set it",
                       self.tool("complete", ok=False))
         self.edit(REFS, lambda d: d.update(scanned_for=adr))
@@ -1166,9 +1175,14 @@ class GameRun(unittest.TestCase):
         self.tool("advance")  # ideation -> research
         self.assertEqual(self.next(), "game-research ref R6")  # the studied references are not studied again
         self.study("R6")
-        self.assertFalse(self.next().startswith("game-research ref"))
+        self.assertEqual(self.next(), "game-research brief")  # the brief is redone for the new direction
         self.assertEqual(dossier.read_text(), studied)
         self.assertEqual(next(r for r in self.load(REFS)["refs"] if r["id"] == "R1")["status"], "studied")
+        self.write("docs/game/" + HOMEWORK, json.dumps({"reason": "R6 needs nothing from a person", "items": []}))
+        self.edit("wiki.json", lambda d: next(p for p in d["pages"] if p["id"] == "research").update(version="2"))
+        self.commit()
+        self.tool("complete")
+        self.sync()
         self.tool("advance")  # research -> brainstorm
         self.tool("advance")  # brainstorm -> consolidate: nothing open for the slice
         self.tool("complete")

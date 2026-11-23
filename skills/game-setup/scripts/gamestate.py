@@ -231,10 +231,12 @@ class Game:
             return False
 
     def commit(self, message, *paths):
-        """Commit only the given paths; leaves any other staged work alone."""
+        """Commit only the given paths, a tracked one that was removed included; leaves any other staged work alone."""
         if not self.in_git():
             return
-        rel = [p.relative_to(self.root).as_posix() for p in paths if p.exists()]
+        rel = [p.relative_to(self.root).as_posix() for p in paths]
+        rel = [r for r in rel if (self.root / r).exists()
+               or self._git("ls-files", "--error-unmatch", "--", r).returncode == 0]
         self._git("add", "--", *rel)
         self._git("commit", "-q", "-m", f"game-state: {message}", "--", *rel)
 
@@ -1092,7 +1094,8 @@ class Game:
                 for r in self.active_roles() if r not in covered]
 
     def _research_gate(self):
-        why = self._reference_coverage()
+        """Each reason here has a _research_action step, so the phase never stalls on a bare game-research."""
+        why = []
         for r in self.references():
             if r.get("status") == "open":
                 why.append(f"{r['id']}: open, not studied yet")
@@ -1143,8 +1146,11 @@ class Game:
         return folder.is_dir() and any(p.is_file() and p.suffix.lower() in IMAGE_TYPES for p in folder.rglob("*"))
 
     def _research_action(self):
-        """The research phase's next session: each open reference in turn, then the brief; None once both are done."""
-        ref = next((r for r in self.references() if r.get("status") == "open"), None)
+        """The research phase's next session: each open reference in turn, then a studied one whose dossier falls
+        short, then the brief; None once all are done."""
+        refs = self.references()
+        ref = next((r for r in refs if r.get("status") == "open"), None)
+        ref = ref or next((r for r in refs if r.get("status") == "studied" and self._dossier_reasons(r)), None)
         if ref:
             return f"game-research ref {ref['id']}"
         if "research" not in self.page_ids() or not self.homework_path.exists():
@@ -1438,12 +1444,16 @@ class Game:
         self._write(archive / "human-queue.json", st.get("human_queue", []))
         self.features["features"] = []
         self._write(self.features_path, self.features)
+        if self.homework_path.exists():  # the brief is redone for the new direction
+            shutil.move(str(self.homework_path), str(archive / "homework.json"))
+            self.homework_data = copy(DEFAULT_HOMEWORK)
         st.update(phase="scan", stage="slice", milestone=None, task=f"game-research restart {adr}",
                   restart_adr=adr, passed_verdicts=[], slice_sessions=None, adapter_verified=False,
                   checkpoint_due=False, human_queue=[], attempts={})
-        self.commit(f"restart {n}", self.features_path, archive / "features.json", archive / "human-queue.json")
-        return [f"restart {n}: definition of done and human queue archived to {archive.relative_to(self.root)}; "
-                "close their open tickets"]
+        self.commit(f"restart {n}", self.features_path, archive / "features.json", archive / "human-queue.json",
+                    self.homework_path, archive / "homework.json")
+        return [f"restart {n}: definition of done, human queue and research homework archived to "
+                f"{archive.relative_to(self.root)}; close their open tickets"]
 
     def _checkpoint(self):
         st = self.state
