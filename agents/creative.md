@@ -4,7 +4,8 @@ description: Use only when game-review dispatches the creative director to revie
 model: inherit
 tools: Read, Glob, Grep, Write, Bash
 disallowedTools: Edit, NotebookEdit, Agent
-skills: game-role-creative
+skills:
+  - game-director:game-role-creative
 maxTurns: 40
 ---
 You are the creative director of a game made with the game-* skills. You own its identity: what it is, and how it differs from its genre default.

@@ -27,9 +27,19 @@ def frontmatter(text):
 
 
 def agent_frontmatter(text):
-    """Agent frontmatter keys carry capitals (disallowedTools, maxTurns) that the skill parser drops."""
+    """Agent frontmatter keys carry capitals (disallowedTools, maxTurns) that the skill parser drops; a key may
+    hold a YAML list ('  - item' lines), returned as a list."""
     m = re.match(r"---\n(.*?)\n---\n", text, re.S)
-    return dict(re.findall(r"^([A-Za-z-]+): (.*)$", m.group(1), re.M)) if m else {}
+    fm, key = {}, None
+    for line in (m.group(1).splitlines() if m else []):
+        kv = re.match(r"^([A-Za-z-]+):[ ]*(.*)$", line)
+        item = re.match(r"^\s+- (.*)$", line)
+        if kv:
+            key = kv.group(1)
+            fm[key] = kv.group(2) if kv.group(2) else []
+        elif item and isinstance(fm.get(key), list):
+            fm[key].append(item.group(1).strip())
+    return fm
 
 
 def outside_code(text):
@@ -53,6 +63,10 @@ class Packaging(unittest.TestCase):
     def test_plugin_lists_exactly_the_skill_folders(self):
         listed = json.loads((ROOT / ".claude-plugin" / "plugin.json").read_text())["skills"]
         self.assertEqual(sorted(listed), [f"./skills/{p.name}" for p in skill_dirs()])
+
+    def test_plugin_has_no_agents_key(self):
+        # an "agents" key replaces the default agents/ scan, so agents added later would silently not ship
+        self.assertNotIn("agents", json.loads((ROOT / ".claude-plugin" / "plugin.json").read_text()))
 
     def test_every_skill_has_valid_frontmatter_and_agent_metadata(self):
         for d in skill_dirs():
@@ -83,7 +97,7 @@ class Packaging(unittest.TestCase):
                 for ref in ("questions.md", "page-template.md", "checklist.md", "dossier.md"):
                     self.assertTrue((d / ref).is_file(), ref)
                 for mode in ("north-star", "research", "challenge", "review"):
-                    self.assertIn(mode, text)
+                    self.assertRegex(text, rf"(?m)^## \d+\. {mode}\b")
 
     def test_every_role_has_one_agent(self):
         for role in load_tool().ROLES:
@@ -94,10 +108,12 @@ class Packaging(unittest.TestCase):
                 self.assertTrue(path.is_file())
                 fm = agent_frontmatter(path.read_text())
                 self.assertEqual(fm.get("name"), role)
-                self.assertEqual(fm.get("skills"), f"game-role-{role}")
-                self.assertIn("Edit", fm.get("disallowedTools", ""))
-                self.assertIn("Agent", fm.get("disallowedTools", ""))
-                self.assertNotIn("Edit", fm.get("tools", ""))
+                self.assertTrue(fm.get("description"))
+                self.assertEqual(fm.get("skills"), [f"game-director:game-role-{role}"])
+                disallowed = [t.strip() for t in fm.get("disallowedTools", "").split(",")]
+                self.assertIn("Edit", disallowed)
+                self.assertIn("Agent", disallowed)
+                self.assertNotIn("Edit", [t.strip() for t in fm.get("tools", "").split(",")])
                 self.assertEqual(fm.get("model"), "inherit")
 
 

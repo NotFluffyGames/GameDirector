@@ -15,10 +15,6 @@ The creative role's page is the `vision` page (area Vision). It gains one short 
 
 1. <testable on a capture or in play>
 2. <...>
-
-### Decided and overruled
-
-- <date> <note id>: <decision> because <reason>
 ```
 
-The invariants here and in `vision.json` are the same strings. A change to one changes the other in the same commit, and only the person approves it.
+Decided and overruled notes live in `docs/game/roles/creative.md`, not here. The invariants here and in `vision.json` are the same strings. A change to one changes the other in the same commit, and only the person approves it.

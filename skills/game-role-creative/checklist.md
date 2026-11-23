@@ -1,8 +1,8 @@
 # Creative: review checklist
 
-Mark each line `ok`, a note, or `not-assessed` with the reason. Measured lines come first and can be `blocking`; judged lines are `advisory` unless anchored to a label, a chosen reference or a vision rule the build contradicts.
+Mark each line passed, a note, or `not-assessed` with the reason. Every note is `advisory`: the creative role measures nothing in code. An anchor (a label, a chosen reference or a vision rule) decides whether a note can fail a verdict item through its `item`, never its severity. Read the `review` items that name `creative` first.
 
-## Measured
+## Checked first
 
 - Each invariant's observable test, run on the captures and the event log: pass or fail, with the path.
 - Every `north_stars.creative` reference still named by the vision page, and `invariants` equal to the page's list.
