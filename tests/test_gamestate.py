@@ -1,7 +1,12 @@
 """End-to-end tests for skills/game-setup/scripts/gamestate.py.
 
+GameRun drives the tool in-process against a MemoryHistory, so a game run makes no git calls and no commits.
+
 Run: python3 -m unittest discover tests
 """
+import contextlib
+import importlib.util
+import io
 import json
 import os
 import re
@@ -11,10 +16,23 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
+
+from memory_history import ISOLATED_GIT, MemoryHistory
 
 SCRIPT = Path(__file__).resolve().parents[1] / "skills" / "game-setup" / "scripts" / "gamestate.py"
 LOOP = Path(__file__).resolve().parents[1] / "skills" / "game-next" / "scripts" / "loop.sh"
 CURRENT_VERSION = int(re.search(r"^CURRENT_VERSION = (\d+)$", SCRIPT.read_text(), re.M).group(1))
+
+
+def load_gamestate():
+    spec = importlib.util.spec_from_file_location("gamestate", SCRIPT)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+gamestate = load_gamestate()
 
 
 VISION_JSON = {
@@ -199,37 +217,42 @@ class GameRun(unittest.TestCase):
         self.game = self.root / "docs" / "game"
         self.game.mkdir(parents=True)
         (self.root / "docs" / "agents").mkdir()
-        shutil.copy(SCRIPT, self.game / "gamestate.py")
-        self.git("init", "-q")
-        self.git("config", "user.email", "test@example.com")
-        self.git("config", "user.name", "test")
+        self.history = MemoryHistory(self.root)  # the game's git history
 
     def tearDown(self):
         shutil.rmtree(self.root)
 
     # ---------- helpers ----------
-    def git(self, *args):
-        return subprocess.run(["git", *args], cwd=self.root, check=True, capture_output=True, text=True).stdout
+    def head(self):
+        return self.history.rev_parse("HEAD")
 
     def commit(self):
-        self.git("add", "-A")
-        self.git("commit", "-qm", "work", "--allow-empty")
+        self.history.commit_all("work")
 
-    def tool(self, *args, ok=True, script=None):
-        r = subprocess.run([sys.executable, str(script or self.game / "gamestate.py"), *args],
-                           cwd=self.root, capture_output=True, text=True)
+    def tool(self, *args, ok=True):
+        """The state tool run on this game in-process: its stdout then stderr, and its exit code checked against ok."""
+        out, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            try:
+                code = gamestate.main([*args, "--root", str(self.root)], history=self.history)
+            except SystemExit as e:
+                code = e.code
+        if isinstance(code, str):  # sys.exit("error: ...") prints the message and exits 1
+            err.write(code + "\n")
+            code = 1
+        output = out.getvalue() + err.getvalue()
         if ok:
-            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+            self.assertEqual(code or 0, 0, output)
         else:
-            self.assertNotEqual(r.returncode, 0, r.stdout + r.stderr)
-        return r.stdout + r.stderr
+            self.assertNotEqual(code or 0, 0, output)
+        return output
 
     def plugin(self, *args, ok=True):
-        """The plugin's own copy of the tool, run against this game (as game-next and upgrade do)."""
-        return self.tool(*args, "--root", str(self.root), ok=ok, script=SCRIPT)
+        """The plugin's own copy of the tool, run against this game (as game-next and upgrade do); in-process, tool()."""
+        return self.tool(*args, ok=ok)
 
     def clean(self):
-        return self.git("status", "--porcelain") == ""
+        return self.history.clean()
 
     def next(self, *flags):
         return self.tool("status", *flags).split("next: ", 1)[1].strip()
@@ -273,7 +296,7 @@ class GameRun(unittest.TestCase):
     def write_review(self, target, role, commit, notes=(), result=None):
         """A valid review file for target by role; for a feature target it also sets that feature's reviews[role]."""
         if commit == "HEAD":
-            commit = self.git("rev-parse", "HEAD").strip()
+            commit = self.head()
         rel = f"docs/game/reviews/{target}/{role}.json"
         notes = list(notes)
         self.write(rel, json.dumps({"role": role, "target": target, "commit": commit, "independent": True,
@@ -402,7 +425,7 @@ class GameRun(unittest.TestCase):
     def write_audit(self, rid, notes=()):
         notes = list(notes)
         self.write(f"docs/game/research/refs/{rid}/audit.json", json.dumps(
-            {"role": "creative", "target": rid, "commit": self.git("rev-parse", "HEAD").strip(), "independent": True,
+            {"role": "creative", "target": rid, "commit": self.head(), "independent": True,
              "inputs": [], "result": "notes" if notes else "ok", "reason": "", "notes": notes}))
 
     def study(self, rid):
@@ -467,7 +490,7 @@ class GameRun(unittest.TestCase):
         self.to_plan()
         self.plan(extra=[feature("F4", "slice", kind="capture", roles=("art", "feel"))])
         self.set_passes("F1", "F2")
-        base = self.git("rev-parse", "HEAD").strip()
+        base = self.head()
         self.set_passes("F4")
         out = self.tool("check", "--since", base, ok=False)
         self.assertIn("F4: passes without a review by art", out)
@@ -480,9 +503,9 @@ class GameRun(unittest.TestCase):
         self.to_plan()
         self.plan(extra=[feature("F4", "slice", kind="capture", roles=("art",))])
         self.set_passes("F1", "F2")
-        old = self.git("rev-parse", "HEAD").strip()
+        old = self.head()
         self.commit()
-        base = self.git("rev-parse", "HEAD").strip()
+        base = self.head()
         self.write_review("F4", "art", old, notes=[self.note(decision="wontfix: fine")])
         self.set_passes("F4")
         self.assertIn("F4: the art review predates this session's work; review again",
@@ -735,6 +758,24 @@ class GameRun(unittest.TestCase):
         self.tool("advance")
         self.assertEqual(self.phase()[0], "done")
         self.assertEqual(self.next(), "stop: done")
+
+    def test_the_games_copy_runs_as_a_program_and_finds_its_game(self):
+        """game-next runs docs/game/gamestate.py with no --root; init makes no git calls."""
+        shutil.copy(SCRIPT, self.game / "gamestate.py")
+        r = subprocess.run([sys.executable, str(self.game / "gamestate.py"), "init"], cwd=self.root / "docs" / "agents",
+                           capture_output=True, text=True)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertTrue((self.game / "state.json").is_file())
+
+    def test_game_runs_never_call_git(self):
+        real_run = subprocess.run
+
+        def run(args, *rest, **kwargs):
+            program = args if isinstance(args, (str, bytes, os.PathLike)) else args[0]
+            self.assertNotEqual(Path(os.fsdecode(program).split()[0]).name, "git", f"a game run called {args}")
+            return real_run(args, *rest, **kwargs)
+        with mock.patch("subprocess.run", run):
+            self.test_full_run_through_the_slice_production_and_polish()
 
     # ---------- tests: the slice ----------
     def test_production_topics_wait_until_the_slice_ships(self):
@@ -1274,7 +1315,7 @@ class GameRun(unittest.TestCase):
         self.assertTrue((archive / "features.json").exists() and (archive / "human-queue.json").exists())
         self.assertTrue((archive / "homework.json").exists())  # the homework served the old direction
         self.assertFalse((self.game / HOMEWORK).exists())
-        self.assertTrue(self.clean(), self.git("status", "--porcelain"))
+        self.assertTrue(self.clean())
         self.assertIn(f"references.json scanned_for is not {adr}: re-scan for the restart, then set it",
                       self.tool("complete", ok=False))
         self.edit(REFS, lambda d: d.update(scanned_for=adr))
@@ -1451,12 +1492,10 @@ class GameRun(unittest.TestCase):
         self.to_plan()
         self.plan()
         self.tool("tick", self.next())
-        base = self.git("rev-parse", "HEAD").strip()
-        (self.root / "junk.txt").write_text("a bad session")
-        self.commit()
-        self.git("reset", "--hard", base)
-        self.assertEqual(self.load("state.json")["counters"]["sessions"], 1)
-        self.assertEqual(self.phase(), ("build", "core-loop"))
+        base = self.head()
+        state = json.loads(self.history.show(base, "docs/game/state.json"))  # what `git reset --hard base` restores
+        self.assertEqual(state["counters"]["sessions"], 1)
+        self.assertEqual((state["phase"], state["milestone"]), ("build", "core-loop"))
 
     def test_nice_features_are_built_when_the_budget_allows(self):
         self.to_plan()
@@ -1576,7 +1615,7 @@ class GameRun(unittest.TestCase):
         self.assertEqual({k: s[k] for k in kept}, kept)
         self.assertEqual(self.load("features.json")["milestones"], MILESTONES)
         self.assertTrue((self.game / "vision.json").exists())
-        self.assertTrue(self.clean(), self.git("status", "--porcelain"))
+        self.assertTrue(self.clean())
         self.assertEqual(self.next(), "with-user: game-setup upgrade")
         self.assertIn("already at version 7", self.tool("upgrade"))
 
@@ -1599,7 +1638,7 @@ class GameRun(unittest.TestCase):
         self.assertEqual({k: s["limits"][k] for k in old["limits"]}, old["limits"])
         self.assertEqual({k: s["counters"][k] for k in old["counters"]}, old["counters"])
         self.assertEqual(self.load("features.json")["milestones"], MILESTONES)
-        self.assertTrue(self.clean(), self.git("status", "--porcelain"))
+        self.assertTrue(self.clean())
         self.assertEqual(self.plugin("status").split("next: ", 1)[1].strip(), "with-user: game-setup upgrade")
         self.edit("features.json", lambda d: d["features"].append(feature("F1", "slice")))
         self.assertNotIn("milestone 'slice' is not in features.milestones", self.plugin("check", ok=False))
@@ -1686,7 +1725,7 @@ class Loop(unittest.TestCase):
         (self.root / "says.txt").write_text(says)
         (self.root / "calls.txt").unlink(missing_ok=True)
         r = subprocess.run(["bash", str(LOOP), sessions], cwd=self.root, capture_output=True, text=True,
-                           env=dict(os.environ, AGENT_CMD=f"{sys.executable} agent.py"))
+                           env=dict(os.environ, AGENT_CMD=f"{sys.executable} agent.py", **ISOLATED_GIT))
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         calls = self.root / "calls.txt"
         return r.stdout, len(calls.read_text().splitlines()) if calls.exists() else 0
