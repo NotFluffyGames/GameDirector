@@ -637,6 +637,22 @@ class GameRun(unittest.TestCase):
         self.tool("advance")
         self.assertEqual(self.next(), "game-verdict core-loop")
 
+    def test_gdd_goes_stale_when_a_page_entry_or_own_call_changes(self):
+        self.to_plan()
+        self.plan()
+        self.edit("wiki.json", lambda d: d["pages"][1].update(version="2", updated="dash cooldown added"))
+        self.set_passes("F1", "F2")  # commits
+        self.sync()  # next must be game-gdd before the milestone moves on
+        self.tool("advance")
+        self.assertEqual(self.next(), "game-verdict core-loop")
+
+    def test_the_gdd_is_never_stale_while_the_index_has_no_pages(self):
+        self.to_ideation()  # no wiki.json yet, and the GDD was never synced
+        self.assertIn("human GDD: in sync", self.tool("status"))
+        self.write("docs/game/own-calls.md", "| today | F1 | a call |\n")
+        self.commit()
+        self.assertIn("human GDD: in sync", self.tool("status"))
+
     def test_brainstorm_share_lets_support_topics_wait_until_consolidate_defers_them(self):
         self.to_ideation()
         self.ideate()
