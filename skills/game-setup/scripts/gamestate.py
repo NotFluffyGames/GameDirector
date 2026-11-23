@@ -6,8 +6,10 @@ game-setup copies this file to docs/game/gamestate.py in the game's repo.
 Commands:
   init               create any missing state files under docs/game/
   upgrade            bring an older game's state to this tool's version: a game
-                     still at setup is reset (limits, counters and human_queue
-                     kept); later phases apply MIGRATIONS, or are refused
+                     still at setup is reset (limits, counters, human_queue and
+                     adapter_verified kept; milestones refreshed); later phases
+                     apply MIGRATIONS. Refuses, changing nothing, a missing,
+                     newer or malformed state, or a phase with no migration
   status [--no-user] one-screen summary, ending with the `next:` action.
                      --no-user: nobody is there to talk to, so skip `with-user:`
                      work (ideation, brainstorm topics) and do what else can be done

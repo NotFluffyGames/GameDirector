@@ -146,7 +146,7 @@ A game design document for people, kept next to the tasks in the docs place `doc
 | `docs/game/own-calls.md` | player-visible choices agents made that no page specified | game-build, any session |
 | `docs/game/richness.json` | richness targets | game-consolidate |
 | `docs/game/features.json` | definition of done | game-plan, game-polish add items; game-build sets `passes` |
-| `docs/game/state.json` | phase, milestone, task, counters, limits, attempts, verdicts, human queue, GDD sync point, `adapter_verified`, `docs_verified` | `gamestate.py`; skills append verdicts and queue entries; game-setup sets `docs_verified` and `adapter_verified` |
+| `docs/game/state.json` | `version` (of the state tool that wrote it), phase, milestone, task, counters, limits, attempts, verdicts, human queue, GDD sync point, `adapter_verified`, `docs_verified` | `gamestate.py`; skills append verdicts and queue entries; game-setup sets `docs_verified` and `adapter_verified` |
 | `docs/game/progress.md` | append-only session log | every session |
 | `docs/game/assets.md` | every asset's source and license | whoever adds an asset |
 | `docs/game/engine-notes.md` | engine CLI, headless, test and export facts | game-plan |
