@@ -466,7 +466,7 @@ class GameRun(unittest.TestCase):
             if r["status"] == "open":
                 self.study(r["id"])
         self.brief()
-        self.tool("complete")
+        self.tool("gate")  # the research phase has no task to complete
 
     def to_brainstorm(self):
         self.to_ideation()
@@ -520,6 +520,26 @@ class GameRun(unittest.TestCase):
                       self.tool("check", "--since", base, ok=False))
         self.write_review("F4", "art", "HEAD", notes=[self.note(decision="wontfix: fine")])
         self.assertNotIn("predates", self.tool("check", "--since", base))
+
+    def test_a_feature_passes_only_on_reviews_of_it_by_its_roles(self):
+        self.to_plan()
+        self.plan(extra=[feature("F4", "slice", kind="capture", roles=("art", "feel"))])
+        self.write_review("F4", "feel", "HEAD")
+        self.write_review("F5", "art", "HEAD")
+
+        def art_review(path):
+            self.edit("features.json", lambda d: next(f for f in d["features"] if f["id"] == "F4")["reviews"].update(
+                art=path))
+            self.commit()
+        art_review("docs/game/reviews/F4/feel.json")
+        self.set_passes("F4")
+        self.assertIn("F4: reviews.art (docs/game/reviews/F4/feel.json) is a review by feel, not art",
+                      self.tool("check", ok=False))
+        art_review("docs/game/reviews/F5/art.json")
+        self.assertIn("F4: reviews.art (docs/game/reviews/F5/art.json) is a review of F5, not F4",
+                      self.tool("check", ok=False))
+        self.write_review("F4", "art", "HEAD")
+        self.tool("check")
 
     def test_review_notes_need_decisions_that_point_somewhere(self):
         self.to_plan()
@@ -594,6 +614,47 @@ class GameRun(unittest.TestCase):
         self.calibrate()
         self.tool("check")
 
+    def test_with_art_off_the_feel_target_queues_calibration_and_the_slice_verdict_waits(self):
+        self.to_plan()
+        self.switch_off("art")
+        self.plan_features(feature("F1", "core-loop", measures=["FC1"], target="feel"), feature("F2", "core-loop"),
+                           feature("F3", "slice", measures=["FC4"]))
+        self.set_passes("F1", "F2")
+        self.assertIn("the feel target passes (art is off): queue a calibrate entry for a person (kind calibrate)",
+                      self.tool("check", ok=False))
+        self.edit("state.json", lambda s: s["human_queue"].append(CALIBRATE))
+        self.commit()
+        self.tool("check")
+        self.tool("advance")
+        self.assertEqual(self.next(), "game-verdict core-loop")  # judged on bots
+        self.record_verdict("ship")
+        self.tool("advance")
+        self.assertEqual(self.phase(), ("build", "slice"))
+        self.set_passes("F3")
+        self.tool("advance")
+        self.assertEqual(self.next(), CALIBRATION_WAIT)
+        self.calibrate()
+        self.assertEqual(self.next(), "game-verdict slice")
+
+    def test_with_art_and_feel_off_the_first_slice_feature_with_roles_queues_calibration(self):
+        self.to_plan()
+        self.switch_off("art", "feel")
+        self.plan_features(feature("F1", "core-loop", measures=["FC1"]), feature("F2", "core-loop"),
+                           feature("F3", "slice", kind="capture", measures=["FC4"], roles=("ux",)))
+        self.set_passes("F1", "F2")
+        self.tool("check")  # no feature with roles passes yet
+        self.tool("advance")
+        self.record_verdict("ship")
+        self.tool("advance")
+        self.write_review("F3", "ux", "HEAD")
+        self.set_passes("F3")
+        self.assertIn("slice feature F3 passes (art and feel are off): queue a calibrate entry for a person "
+                      "(kind calibrate)", self.tool("check", ok=False))
+        self.edit("state.json", lambda s: s["human_queue"].append(CALIBRATE))
+        self.commit()
+        self.tool("advance")
+        self.assertEqual(self.next(), CALIBRATION_WAIT)
+
     def test_the_slice_verdict_waits_for_calibration(self):
         self.to_slice_verdict()
         self.assertEqual(self.next(), "stop: waiting for calibration: a person labels the kit "
@@ -631,7 +692,8 @@ class GameRun(unittest.TestCase):
 
     def test_upgrade_brings_a_version_6_game_at_setup_to_7(self):
         self.tool("init")
-        self.edit("state.json", lambda s: s.update(version=6, phase="setup", task=None))
+        verified = {"place": "ClickUp doc", "date": "2026-11-20"}  # a 0.6.0 game that passed its docs smoke test
+        self.edit("state.json", lambda s: s.update(version=6, phase="setup", task=None, docs_verified=verified))
         self.commit()
         s = self.load("state.json")
         self.assertEqual(s["version"], 6)
@@ -640,6 +702,7 @@ class GameRun(unittest.TestCase):
         self.assertEqual((s["version"], s["phase"], s["task"]), (7, "setup", "game-setup upgrade"))
         self.assertIsNone(s["intent"])
         self.assertIsNone(s["research_sources"])
+        self.assertEqual(s["docs_verified"], verified)  # setup doesn't redo the tasks home or the smoke test
 
     def test_a_page_in_a_taste_area_makes_a_feature_visible(self):
         self.to_plan()
@@ -653,6 +716,12 @@ class GameRun(unittest.TestCase):
         self.edit("vision.json", lambda v: v.update(roles_off={"audio": "played muted in class"}))
         self.edit("topics.json", lambda d: d["topics"][1].update(roles=["audio"]))
         self.assertIn("topic T2: role 'audio' is switched off in vision.json roles_off", self.tool("check", ok=False))
+
+    def test_creative_cannot_be_switched_off(self):
+        self.to_ideation()
+        self.edit("vision.json", lambda v: v.update(roles_off={"creative": "a small game"}))
+        self.assertIn("vision.json roles_off: creative can't be switched off (it decides every review note)",
+                      self.tool("check", ok=False))
 
     def test_consolidate_gate_skips_areas_of_roles_switched_off(self):
         self.to_brainstorm()
@@ -670,6 +739,22 @@ class GameRun(unittest.TestCase):
             feature("F1", "core-loop", measures=["FC1"], target="feel"), feature("F2", "core-loop"),
             feature("F3", "slice", measures=["FC4"]),
             feature("F5", "slice", kind="capture", roles=("art",), target="visual"), *extra]))
+        self.edit("state.json", lambda s: s.update(adapter_verified=True))
+        self.commit()
+        self.tool("complete")
+        self.tool("advance")
+
+    def switch_off(self, *roles):
+        """Roles the person switched off: no topic or fun checklist item names them any more."""
+        self.edit("vision.json", lambda v: v.update(roles_off={r: "not this game" for r in roles}))
+        self.edit("topics.json", lambda d: [t.update(roles=[r for r in t["roles"] if r not in roles] or ["design"])
+                                            for t in d["topics"]])
+        self.edit("fun-checklist.json", lambda d: d.update(
+            items=[i for i in d["items"] if not set(i.get("roles", [])) & set(roles)]))
+        self.commit()
+
+    def plan_features(self, *features):
+        self.edit("features.json", lambda d: d.update(features=list(features)))
         self.edit("state.json", lambda s: s.update(adapter_verified=True))
         self.commit()
         self.tool("complete")
@@ -953,6 +1038,35 @@ class GameRun(unittest.TestCase):
         self.tool("advance")
         self.assertEqual(self.phase(), ("polish", "polish"))  # not stopped again: no loop on advance
         self.assertEqual(self.next(), f'game-build F8 "feature F8" picks {PICKS}')
+
+    def test_labels_written_during_a_limit_stop_do_not_hold_the_run(self):
+        self.to_core_verdict()
+        self.edit("state.json", lambda s: (s["limits"].update(max_adjusts=0), s["human_queue"].append(CALIBRATE)))
+        self.commit()
+        self.record_verdict("adjust")
+        self.tool("advance")
+        self.edit("state.json", lambda s: s.update(stop_reason=None))  # the person decides to go on
+        self.commit()
+        self.assertEqual(self.next(), "stop: waiting on the human queue (1 open)")
+        self.calibrate()  # and labels the kit, leaving the entry for the next verdict to consume
+        self.assertEqual(self.next(), "advance")
+        self.tool("advance")
+        self.assertEqual(self.next(), "game-plan adjust docs/adr/0001-v.md")
+
+    def test_labels_left_in_the_queue_at_the_end_do_not_stop_the_run_again(self):
+        self.to_polish()
+        self.set_passes("F8", "F9", evidence="human: picked")
+        self.tool("advance")
+        self.edit("state.json", lambda s: s["human_queue"].append({"id": "H2", "what": "sign the store page"}))
+        self.commit()
+        self.record_verdict("ship")
+        self.tool("advance")
+        self.assertEqual(self.phase()[0], "awaiting-human")
+        self.edit("state.json", lambda s: s.update(human_queue=[CALIBRATE]))  # H2 done; a kit labelled meanwhile
+        self.commit()
+        self.assertEqual(self.next(), "advance")
+        self.tool("advance")
+        self.assertEqual(self.phase()[0], "done")  # not stopped again: no loop on advance
 
     def test_the_picks_stop_names_every_kit(self):
         self.to_polish()
@@ -1266,7 +1380,7 @@ class GameRun(unittest.TestCase):
         self.assertEqual(self.next(), "game-research brief")  # the research page is still missing
         self.edit("wiki.json", lambda d: d["pages"].append(page("research")))
         self.commit()
-        self.tool("complete")
+        self.tool("gate")
         self.sync()
         self.assertEqual(self.next("--no-user"), "advance")
         self.tool("advance")
@@ -1323,6 +1437,18 @@ class GameRun(unittest.TestCase):
             self.assertIn("references.json R1: homework must be a list of non-empty strings", out)
             self.assertIn("R1: 1 sources; needs 3", out)  # a malformed list names no gap
 
+    def test_homework_waives_missing_sources_only_past_the_first(self):
+        self.to_ideation()
+        self.ideate()
+        self.research()
+        self.edit(REFS, lambda d: d["refs"][0].update(sources=[], homework=["play R1 for 20 minutes"]))
+        self.commit()
+        self.assertIn("R1: 0 sources; needs 3, or at least 1 when homework names the gap", self.tool("gate", ok=False))
+        self.assertEqual(self.next(), "game-research ref R1")
+        self.edit(REFS, lambda d: d["refs"][0].update(sources=["https://store.example/R1"]))
+        self.commit()
+        self.assertNotIn("R1:", self.tool("gate"))
+
     def test_research_keeps_a_reference_open_for_every_active_role(self):
         self.to_ideation()
         self.ideate()
@@ -1343,14 +1469,22 @@ class GameRun(unittest.TestCase):
 
     def test_brainstorm_waits_on_open_homework(self):
         self.to_brainstorm()
-        self.edit(HOMEWORK, lambda d: d["items"][0].update(status="open", answer=""))
+        second = {"id": "H2", "what": "watch R2's trailer", "why": "the art north star", "questions": ["what reads?"],
+                  "minutes": 5, "roles": ["art"], "status": "open", "answer": ""}
+        self.edit(HOMEWORK, lambda d: (d["items"][0].update(status="open", answer=""), d["items"].append(second)))
         self.commit()
-        self.assertEqual(self.next(), "with-user: game-research homework")  # before any topic
+        self.assertEqual(self.next(), "with-user: game-research homework (2 open)")  # before any topic
         self.assertEqual(self.next("--no-user"), HOMEWORK_WAIT)
-        self.tool("tick", "with-user: game-research homework")
+        self.tool("tick", "with-user: game-research homework (2 open)")
         counters = self.load("state.json")["counters"]
         self.assertEqual((counters["sessions"], counters["brainstorm_sessions"]), (1, 0))
-        self.edit(HOMEWORK, lambda d: d["items"][0].update(status="skip"))
+        for _ in range(4):
+            self.tool("tick", "with-user: game-research homework (2 open)")
+        self.assertIn("stop: stalled", self.next())  # five sessions that answered nothing
+        self.edit(HOMEWORK, lambda d: d["items"][0].update(status="answered", answer="yes, from the trail"))
+        self.commit()
+        self.assertEqual(self.next(), "with-user: game-research homework (1 open)")  # an answer is progress
+        self.edit(HOMEWORK, lambda d: d["items"][1].update(status="skip", answer="no time"))
         self.commit()
         self.assertTrue(self.next().startswith("with-user: game-brainstorm T2"))
 
@@ -1425,6 +1559,16 @@ class GameRun(unittest.TestCase):
         self.edit("fun-checklist.json", lambda d: d["items"][-1].update(kind="vibes"))
         self.assertIn("fun FC9: kind must be one of", self.tool("check", ok=False))
 
+    def test_a_taste_review_item_is_never_core_loop_scope(self):
+        self.to_ideation()
+        item = {"id": "FC9", "statement": "the dash reads", "scope": "core-loop", "kind": "review",
+                "roles": ["feel"], "taste": True}
+        self.edit("fun-checklist.json", lambda d: d["items"].append(item))
+        self.assertIn("fun FC9: a taste review item has scope slice or full (the core-loop verdict runs on bots, "
+                      "before calibration)", self.tool("check", ok=False))
+        self.edit("fun-checklist.json", lambda d: d["items"][-1].update(taste=False))
+        self.tool("check")  # a review a page rule or a measurement settles may judge the core loop
+
     def test_review_items_fail_only_on_anchored_notes(self):
         self.to_slice_verdict()
         self.calibrate()
@@ -1434,6 +1578,25 @@ class GameRun(unittest.TestCase):
         anchored = self.note(item="FC5", decision="feature F3")  # the example note carries a rule anchor
         self.record_verdict("adjust", reviews={"art": [anchored]}, complete=False)
         self.assertIn("FC5: scored pass but its reviews say fail", self.tool("complete", ok=False))
+
+    def test_an_undecided_verdict_review_note_holds_the_core_loop_verdict(self):
+        self.to_core_verdict()
+        undecided = self.note(anchor=None, item=None, decision="")
+        self.record_verdict("ship", reviews={"audio": [undecided]}, complete=False)
+        self.assertIn("docs/game/reviews/verdict-core-loop/audio.json: note N1 has no decision",
+                      self.tool("complete", ok=False))
+        self.write_review("verdict-core-loop", "audio", "HEAD", [dict(undecided, decision="wontfix: the mix is fine")])
+        self.tool("complete")
+
+    def test_an_undecided_verdict_review_note_holds_a_slice_ship(self):
+        self.to_slice_verdict()
+        self.calibrate()
+        undecided = self.note(anchor=None, item="FC5", decision="")
+        self.record_verdict("ship", reviews={"art": [undecided]}, complete=False)
+        self.assertIn("docs/game/reviews/verdict-slice/art.json: note N1 has no decision",
+                      self.tool("complete", ok=False))
+        self.write_review("verdict-slice", "art", "HEAD", [dict(undecided, decision="topic T3")])
+        self.tool("complete")
 
     def test_taste_items_are_not_assessed_until_calibration(self):
         self.to_slice_verdict()  # no labels.json
@@ -1564,7 +1727,7 @@ class GameRun(unittest.TestCase):
         self.write("docs/game/" + HOMEWORK, json.dumps({"reason": "R6 needs nothing from a person", "items": []}))
         self.edit("wiki.json", lambda d: next(p for p in d["pages"] if p["id"] == "research").update(version="2"))
         self.commit()
-        self.tool("complete")
+        self.tool("gate")
         self.sync()
         self.tool("advance")  # research -> brainstorm
         self.tool("advance")  # brainstorm -> consolidate: nothing open for the slice
@@ -1573,6 +1736,14 @@ class GameRun(unittest.TestCase):
         self.assertEqual(self.next(), "game-plan restart docs/adr/0001-v.md")
         self.edit("features.json", lambda d: d["features"].append(feature("F1", "core-loop")))
         self.assertIn("F1: reuses an id", self.tool("check", ok=False))
+
+    def test_a_restart_keeps_review_decisions_that_name_archived_features(self):
+        self.to_core_verdict()
+        self.record_verdict("restart", reviews={"audio": [self.note(anchor=None, item=None, decision="feature F2")]})
+        self.tool("advance")
+        self.assertEqual(self.load("features.json")["features"], [])  # F2 lives on in the archive only
+        self.assertEqual(self.tool("check"), "check: ok\n")
+        self.assertEqual(self.next(), "game-research restart docs/adr/0001-v.md")
 
     def test_limits_stop_for_a_human_and_resume_the_owed_task(self):
         self.to_plan()
@@ -1838,7 +2009,8 @@ class GameRun(unittest.TestCase):
         self.tool("init")
         kept = {"limits": dict(self.load("state.json")["limits"], budget_sessions=80),
                 "counters": {"sessions": 4, "brainstorm_sessions": 0, "adjusts": 0, "restarts": 0},
-                "human_queue": [{"id": "H1", "what": "make a ClickUp space"}], "adapter_verified": True}
+                "human_queue": [{"id": "H1", "what": "make a ClickUp space"}], "adapter_verified": True,
+                "docs_verified": {"place": "ClickUp doc", "date": "2026-11-20"}}  # the tasks home and docs place
         self.edit("state.json", lambda s: (s.pop("stage"), s.update(version=3, phase="setup", task=None, **kept)))
         self.edit("features.json", lambda d: d.update(milestones=["core-loop", "systems", "content", "verdict-build",
                                                                   "polish"]))
