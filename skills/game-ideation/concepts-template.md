@@ -1,6 +1,6 @@
 # Directions template
 
-Copy into `docs/game/wiki/concepts.md`. Keep the `##` headings and the `### C<n>:` direction headings exactly; `gamestate.py gate` looks for them.
+Page template for the `concepts` page (area Vision) in the docs place. Keep the `##` headings and the `### C<n>:` direction headings exactly; `gamestate.py gate` looks for them. The count and the choice also go into `docs/game/vision.json` `directions`.
 
 ```markdown
 # Directions considered

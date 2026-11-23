@@ -12,7 +12,7 @@ One session, one feature. Read `docs/agents/game.md` first and follow its sessio
 
 - The feature the task names (`game-build F012 …`). If its ticket is blocked in the tracker, take the first alternative the task lists whose ticket isn't.
 
-Claim the ticket as `docs/agents/issue-tracker.md` describes. Read the ticket, the feature, the wiki `pages` it implements, `CONTEXT.md`, the ADRs those pages link, and the engine-notes.md entries for the commands you will run. A feature that was tried before has notes on its ticket: start from them.
+Claim the ticket as `docs/agents/issue-tracker.md` describes. Read the ticket, the feature, the wiki `pages` it implements (ids in `docs/game/wiki.json`, read through the docs place), `CONTEXT.md`, the ADRs those pages link, and the engine-notes.md entries for the commands you will run. A feature that was tried before has notes on its ticket: start from them.
 
 **Done when** you can state the acceptance criteria and the exact verify command you will run at the end.
 
@@ -20,7 +20,7 @@ Claim the ticket as `docs/agents/issue-tracker.md` describes. Read the ticket, t
 
 - Game rules go in the **simulation core**, built test-first with the `tdd` skill. Rendering, audio and input devices stay in the thin **presentation shell**.
 - Every value a designer would tweak becomes a **tuning knob** in the system's knob file; every system keeps its on/off toggle working. Values pinned in `docs/game/keep.json` stay as they are.
-- The pages are the spec. When building shows they are wrong or incomplete in a small, obvious way (a missing edge case, a number that needs tuning), fix the page in the same commit with a `Last changed` line, and log it as an **own call** (step 4). When it raises a real design question, open a topic with this feature in `unblocks`, commit what is green, and stop: the question is brainstormed with a person first.
+- The pages are the spec. When building shows they are wrong or incomplete in a small, obvious way (a missing edge case, a number that needs tuning), fix the page with a `Last changed` line, written last (step 4), and log it as an **own call** (step 4). When it raises a real design question, open a topic with this feature in `unblocks`, commit what is green, and stop: the question is brainstormed with a person first.
 - In interactive mode, when it's unclear whether a mechanic or UI works for a person, the `prototype` skill can make a quick demo for the user to judge.
 - Assets: placeholders before the polish milestone; final assets in polish, from the source the asset ADR names, in the style the art pages set. Record every added asset's source and license in `docs/game/assets.md`.
 - Run single tests while working and the adapter's full `test` command at the end. When the full suite shows an already-passing feature now failing, set its `passes` to false and say so in your report: the state tool sends it back to build.
@@ -45,8 +45,9 @@ Red: run the `diagnosing-bugs` loop, fix, verify again.
 2. In `features.json`, set `passes: true` and `evidence`: the command, the result (numbers, hash, artifact path) and the commit.
 3. **Own calls**: for every choice a player could notice that no page specified (a timing, a number, a behaviour, a visual), append a row to `docs/game/own-calls.md` (date, feature, the call, the page now stating it). People see them in the GDD and keep or change each.
 4. Close the ticket, commit, append the progress entry.
+5. Write any page fix from step 2 in the docs place, last, record its new `version` and `updated` in `docs/game/wiki.json`, and commit that.
 
-**Done when** `gamestate.py check --since <base>` passes on the final commit.
+**Done when** `gamestate.py check --since <base>` passes on the final commit, and every page fix is written with its `wiki.json` entry committed.
 
 ## When the feature doesn't fit the session
 

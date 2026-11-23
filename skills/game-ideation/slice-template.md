@@ -1,6 +1,6 @@
 # Vertical slice template
 
-Copy into `docs/game/wiki/slice.md` and fill every section. Keep the `##` headings exactly; `gamestate.py gate` looks for them.
+Page template for the `slice` page (area Vision) in the docs place; fill every section. Keep the `##` headings exactly. The test question and the quality bars also go into `docs/game/vision.json` `slice`, which `gamestate.py gate` reads.
 
 ```markdown
 # Vertical slice

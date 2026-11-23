@@ -29,9 +29,11 @@ The `next:` line names it:
 | `fix: …` | Fix the listed `gamestate.py check` violations without weakening the definition of done. |
 | `stop: …` | Nothing to do: go to step 4 and report the stop. |
 
+Before a `with-user:` or `game-<phase>` step, read the wiki's home page (the `index` entry in `docs/game/wiki.json`) through the docs place, as `docs/agents/docs.md` describes. If it can't be read, report `stop: <tracker> docs unreachable` (naming the tracker from `docs/agents/issue-tracker.md`) and go to step 4 without starting the step.
+
 Run `gamestate.py tick "<the next: line>"`, note the base commit (`git rev-parse HEAD`), then read the phase skill's SKILL.md (`../game-<phase>/SKILL.md` beside this skill, or the installed `game-<phase>` skill) and follow it, with the rest of the `next:` line as its task.
 
-**Done when** the phase skill's own steps are done, or it stopped at a session boundary it names.
+**Done when** the home page was read and the phase skill's own steps are done, or it stopped at a session boundary it names, or the docs stop was reported.
 
 ## 3. Check
 

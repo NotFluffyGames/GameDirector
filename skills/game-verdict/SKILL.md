@@ -40,15 +40,15 @@ For each proxy item and richness target in scope, run its `how` with enough seed
 
 ## 3. Look at it, and at the wiki
 
-Capture the key moments: start, the core verb mid-loop, a win, a loss, every main UI screen. Judge them against the art pages' tone and readability rules, and for the slice against slice.md's quality bar. Record findings as notes; they inform the decision but score nothing.
+Capture the key moments: start, the core verb mid-loop, a win, a loss, every main UI screen. Judge them against the art pages' tone and readability rules, and for the slice against the `slice` page's quality bar. Record findings as notes; they inform the decision but score nothing.
 
-Then check the wiki against what was built, for the features in scope: where the game now differs from its pages in a small, settled way, fix the page with a `Last changed` line; where the difference is a design question, open a topic.
+Then check the wiki against what was built, for the features in scope, reading their pages through the docs place: where the game now differs from its pages in a small, settled way, fix the page with a `Last changed` line (drafted now, written in the docs place after step 6's commit); where the difference is a design question, open a topic.
 
 **Done when** the captures are saved and every difference between the game and its pages is a page fix or a topic.
 
 ## 4. Human items
 
-Write the playtest kit ([playtesting.md](playtesting.md)) into the evidence folder, following slice.md's Playtest section for the slice, and add a human queue entry: `{"id": "...", "what": "playtest <scope>", "kind": "playtest", "scope": "<scope>", "answers": "<evidence folder>/answers.md", "how": "<path to the kit>"}`. Remove unanswered playtest entries of this scope or a narrower one (core-loop < slice < full < final): this kit supersedes them. Tell the user the kit is ready.
+Write the playtest kit ([playtesting.md](playtesting.md)) into the evidence folder, following the `slice` page's Playtest section for the slice, and add a human queue entry: `{"id": "...", "what": "playtest <scope>", "kind": "playtest", "scope": "<scope>", "answers": "<evidence folder>/answers.md", "how": "<path to the kit>"}`. Remove unanswered playtest entries of this scope or a narrower one (core-loop < slice < full < final): this kit supersedes them. Tell the user the kit is ready.
 
 - **slice**: stop here and record no verdict yet. The run waits until a person has played the slice and written the answers file; the next session runs Answers mode.
 - **other scopes**: score human items `pending-human` and go on.
@@ -70,7 +70,7 @@ For each failing item, find its cause before deciding anything: toggle systems o
 
 In interactive mode the user decides, given the scores, the isolation findings and your recommendation.
 
-Write the verdict ADR where `docs/agents/domain.md` puts ADRs: scope, build commit, a score table (item or target, value, threshold, result, evidence path), isolation findings and the outcome. For the slice: the answer to slice.md's test question, and the kill condition checked. For adjust: exactly what to change, including knob values. For restart or kill: lessons (what failed, why, what changes next time, which durable assets still hold).
+Write the verdict ADR where `docs/agents/domain.md` puts ADRs: scope, build commit, a score table (item or target, value, threshold, result, evidence path), isolation findings and the outcome. For the slice: the answer to the `slice` page's test question, and the kill condition checked. For adjust: exactly what to change, including knob values. For restart or kill: lessons (what failed, why, what changes next time, which durable assets still hold).
 
 Append to `state.json` `verdicts`:
 
@@ -80,7 +80,9 @@ Append to `state.json` `verdicts`:
             "FC5": {"result": "not-assessed", "evidence": "capture unavailable on this machine"}}}
 ```
 
-**Done when** every item and target in scope is scored and `gamestate.py complete` succeeds after `check --since <base>`, the commit and the progress entry.
+After the commit and the progress entry, write the page fixes from step 3 in the docs place, last, and record each page's new `version` and `updated` in `docs/game/wiki.json` in a second commit.
+
+**Done when** every item and target in scope is scored, the page fixes are written with their `wiki.json` entries committed, and `gamestate.py complete` succeeds after `check --since <base>`.
 
 ## Answers mode
 
