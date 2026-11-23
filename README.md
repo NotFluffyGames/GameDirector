@@ -100,8 +100,8 @@ Copy the folders under `skills/` into your agent's skills directory, keeping the
 | --- | --- |
 | to start a game | `/game-next <idea>` (add `--interactive` to approve tickets and decide verdicts too) |
 | the next step | `/game-next`, in a fresh session |
-| steps that need no person to run back to back | `AGENT_CMD='claude -p' skills/game-next/scripts/loop.sh` (see `skills/game-next/unattended.md`) |
-| to bring a game set up with an older version up to date | `/game-setup upgrade` (updates `gamestate.py` and state to schema version 6, and sets up the docs place if the game has none) |
+| steps that need no person to run back to back | `AGENT_CMD='claude -p' <plugin folder>/skills/game-next/scripts/loop.sh`, from the game repo (see `skills/game-next/unattended.md`) |
+| to bring a game set up with an older version up to date | `/game-next` notices and runs `game-setup upgrade` with you while the game is still at setup (updates `gamestate.py` and state to schema version 6, and sets up the docs place if the game has none); a game mid-run on an older version stops instead, since mid-run upgrades aren't supported |
 | a specific phase by hand | `/game-ideation`, `/game-brainstorm T014`, `/game-consolidate`, `/game-gdd`, `/game-plan`, `/game-build F012`, `/game-verdict full`, `/game-polish` |
 
 The game repo ends up with:
