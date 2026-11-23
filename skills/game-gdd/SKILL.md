@@ -1,6 +1,6 @@
 ---
 name: game-gdd
-description: Sync the human-facing game design document, kept next to the tasks, from the agent-facing wiki, both in the docs place - create it the first time, rewrite the sections whose wiki pages changed, show the AI's own calls, and turn people's comments and direct edits into brainstorm topics or kept values. Runs whenever the wiki changed before a phase or milestone moves on.
+description: Sync the human-facing game design document, kept next to the tasks, from the agent-facing wiki, both in the docs place - create it the first time, rewrite the sections whose wiki pages changed, show the direction, the research, the AI's own calls and the roles' review decisions, and turn people's comments and direct edits into brainstorm topics or kept values. Runs whenever the wiki changed before a phase or milestone moves on.
 disable-model-invocation: true
 ---
 
@@ -12,15 +12,16 @@ The **GDD** is for people: a readable design document that lives next to the tas
 
 Read `docs/agents/docs.md` for where the GDD lives, how to read and write it, and its page list.
 
-First finish **leftover drafts** (session rule 6 in `docs/agents/game.md`): each draft in `docs/game/drafts/` that isn't an open topic's (a topic `open` with a `resolution`, listing the page) is a page a finished step committed but never wrote. Write each to its page in the docs place, record its `version` and `updated` in `docs/game/wiki.json`, delete the draft, and commit.
+First finish **leftover drafts** (session rule 6 in `docs/agents/game.md`): each draft in `docs/game/drafts/` that isn't an open topic's (a topic `open` with a `resolution`, listing the page) is a page a finished step committed but never wrote. Write each to its page in the docs place, record its `version` and `updated` in `docs/game/wiki.json`, delete the draft, and commit. A leftover `homework.md` draft is the research homework page, never a wiki page: write it to the page `docs/game/research/homework.json` `page` links, as the game-research skill's brief does, with no `wiki.json` entry.
 
 Then list the wiki pages changed since the last sync, from the files in the repo:
 
 ```bash
-git diff <state.json gdd_synced> HEAD -- docs/game/wiki.json docs/game/vision.json docs/game/own-calls.md
+git diff <state.json gdd_synced> HEAD -- docs/game/wiki.json docs/game/vision.json docs/game/own-calls.md \
+  docs/game/research/homework.json docs/game/reviews
 ```
 
-The `version` and `updated` fields of each page entry show which pages changed. With no `gdd_synced` yet, every page is new: the GDD gets created.
+The `version` and `updated` fields of each page entry show which pages changed; `vision.json` feeds the Direction page, `homework.json` the Landscape and research page, and the review files the Status page. With no `gdd_synced` yet, every page is new: the GDD gets created.
 
 Then detect direct edits, skipping pages that already have a `flagged` entry (their topic is open) and pages with an open topic's draft (being written): read each page's current version in the docs tool, as `docs/agents/docs.md` says, and compare it with the `version` in `wiki.json`. A mismatch is an edit nobody committed through a session. A page missing from the docs tool counts as edited. Each mismatch becomes an open topic quoting what changed (a diff or the changed passage), with the page in its `pages`, mirrored as a `ready-for-human` ticket; give the page a `flagged` entry (`{"topic": "T031", "note": "..."}`) in `wiki.json`, and draft the page as it now reads plus a visible note pointing at the topic (written in step 4, after the state commit). The topic's brainstorm decides what the page says; until then the GDD shows the committed text, and the flagged page's GDD section says it is under review.
 
@@ -34,9 +35,9 @@ Before writing over anything, read the GDD sections you are about to update, and
 
 ## 3. Write the GDD
 
-Create or update each affected section per [gdd-structure.md](gdd-structure.md): plain language, short paragraphs, tables and lists where they read better, one link per section back to its wiki pages and topics. Keep the **Status** page current from `gamestate.py status`: stage and phase, what is built and verified, the last verdict's scores, open topics. List the own calls added since the last sync on the **Own calls** page, newest first, each inviting a keep-or-change comment.
+Create or update each affected section per [gdd-structure.md](gdd-structure.md): plain language, short paragraphs, tables and lists where they read better, one link per section back to its wiki pages and topics. Keep the **Status** page current from `gamestate.py status`: stage and phase, what is built and verified, the last verdict's scores, open topics, and the review decisions since the last sync: per review (`docs/game/reviews/<target>/`), each role's result and how many notes it raised, the features and topics they opened, and each `wontfix` with its reason, inviting a comment from anyone who would decide it otherwise. The **Landscape and research** page links the homework page and summarises its open items, never copying it. List the own calls added since the last sync on the **Own calls** page, newest first, each inviting a keep-or-change comment.
 
-**Done when** every changed wiki page's content reads correctly in its GDD section, and the Status section matches status.
+**Done when** every changed wiki page's content reads correctly in its GDD section, the Direction page matches `vision.json`'s north stars and invariants, and the Status section matches status and lists every review decision since the last sync.
 
 ## 4. Close
 
