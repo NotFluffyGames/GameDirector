@@ -154,6 +154,8 @@ CALIBRATE = {"id": "H0", "what": "label the calibration kit", "kind": "calibrate
 PICKS = "docs/game/playtests/evidence/F8/compare/picks.md"
 COMPARE = {"id": "H5", "what": "pick F8's grade", "kind": "compare",
            "how": "docs/game/playtests/evidence/F8/compare/index.md", "answers": PICKS, "unblocks": ["F8"]}
+CALIBRATION_WAIT = ("stop: waiting for calibration: a person labels the kit (docs/game/calibration/kit.md) into "
+                    "docs/game/calibration/labels.json; then run /game-next")
 PICKS_WAIT = ("stop: waiting for A/B picks: a person picks from the kit "
               "(docs/game/playtests/evidence/F8/compare/index.md) into " + PICKS
               + ", leaving the queue entry; then run /game-next")
@@ -813,6 +815,8 @@ class GameRun(unittest.TestCase):
         self.assertEqual(self.phase(), ("polish", "polish"))
         self.assertEqual(self.load("state.json")["task"], "game-polish")
         self.assertEqual(self.next(), "game-polish")
+        self.assertIn("polish not planned yet (game-polish)", self.tool("status"))
+        self.assertIn("no must polish features yet", self.tool("complete", ok=False))  # F10 is a review's, and nice
         self.edit("features.json", lambda d: d["features"].append(feature("F8", "polish")))
         self.commit()
         self.tool("complete")
@@ -862,8 +866,15 @@ class GameRun(unittest.TestCase):
         self.edit("state.json", lambda s: s["attempts"].update(F8=3))
         self.commit()
         self.assertEqual(self.next(), "game-plan unblock F8")
+        self.edit("state.json", lambda s: s.update(human_queue=[  # unblock hands it over: a plain entry replaces it
+            {"id": "H6", "what": "apply F8's picks by hand", "unblocks": ["F8"]}]))
+        self.commit()
+        self.assertEqual(self.next(), 'game-build F9 "feature F9"')
+        self.set_passes("F9")
+        self.tool("advance")
+        self.assertEqual(self.next(), "game-verdict final")
 
-    def test_answered_picks_reopen_a_run_stopped_for_the_queue(self):
+    def test_picks_queued_during_the_final_verdict_hold_it(self):
         self.to_polish()
         self.set_passes("F9")
         self.set_passes("F8", evidence="human: picked")
@@ -871,15 +882,65 @@ class GameRun(unittest.TestCase):
         self.assertEqual(self.next(), "game-verdict final")
         self.set_passes("F8", value=False)  # a regression, rebuilt during the verdict: its kit waits for picks
         self.queue_picks()
-        self.record_verdict("ship")
-        self.tool("advance")
-        self.assertEqual(self.phase()[0], "awaiting-human")
-        self.assertIn("waiting on the human queue", self.next())
+        self.assertEqual(self.next(), PICKS_WAIT)  # the final verdict never ships with picks pending
+        self.assertEqual(self.next("--no-user"), PICKS_WAIT)
         self.write(PICKS, "pair 1: before")
         self.commit()
-        self.assertEqual(self.next(), "advance")
-        self.tool("advance")
         self.assertEqual(self.next(), f'game-build F8 "feature F8" picks {PICKS}')
+        self.edit("state.json", lambda s: s.update(human_queue=[]))  # the picks session: applied, entry removed
+        self.set_passes("F8", evidence=f"human: picks in {PICKS}")
+        self.assertEqual(self.next(), "game-verdict final")
+        self.record_verdict("ship")
+        self.tool("advance")
+        self.assertEqual(self.phase()[0], "done")
+
+    def test_a_reopened_full_verdict_routes_back_to_polish_for_picks(self):
+        self.to_polish()
+        self.queue_picks()
+        self.set_passes("F9")
+        answers = "docs/game/playtests/full/answers.md"
+        self.edit("state.json", lambda s: s["human_queue"].append(
+            {"id": "H3", "what": "playtest", "kind": "playtest", "scope": "full", "answers": answers}))
+        self.write(answers, "FC2: yes")
+        self.commit()
+        self.tool("advance")
+        self.assertEqual(self.next(), f"game-verdict full answers {answers}")
+        self.record_verdict("ship")
+        self.tool("advance")
+        self.assertEqual(self.phase(), ("polish", "polish"))  # not into the final verdict while picks are queued
+        self.assertEqual(self.next(), PICKS_WAIT)
+
+    def test_the_picks_stop_names_every_kit(self):
+        self.to_polish()
+        kit, picks = "docs/game/playtests/evidence/F9/compare/index.md", "docs/game/playtests/evidence/F9/compare/picks.md"
+        self.edit("state.json", lambda s: s["human_queue"].extend(
+            [COMPARE, dict(COMPARE, id="H7", how=kit, answers=picks, unblocks=["F9"])]))
+        self.commit()
+        self.assertEqual(self.next(), "stop: waiting for A/B picks: a person picks from the kit "
+                                      f"(docs/game/playtests/evidence/F8/compare/index.md) into {PICKS} and the kit "
+                                      f"({kit}) into {picks}, leaving the queue entries; then run /game-next")
+
+    def test_full_and_final_verdicts_wait_for_a_repeat_calibration(self):
+        self.to_production_plan()
+        self.set_passes("F4")
+        self.set_passes("F7", evidence="human: checked by hand")
+        self.tool("advance")
+        self.assertEqual(self.next(), "game-verdict full")
+        kit = self.game / "calibration" / "kit-1"
+        kit.mkdir(parents=True)
+        (self.game / "calibration" / "labels.json").rename(kit / "labels.json")  # an adjust changed north_stars.art
+        self.edit("state.json", lambda s: s["human_queue"].append(CALIBRATE))
+        self.commit()
+        self.assertEqual(self.next(), CALIBRATION_WAIT)
+        self.assertEqual(self.next("--no-user"), CALIBRATION_WAIT)
+        self.calibrate()
+        self.assertEqual(self.next(), "game-verdict full")
+
+    def test_the_core_loop_verdict_never_waits_for_calibration(self):
+        self.to_core_verdict()
+        self.edit("state.json", lambda s: s["human_queue"].append(CALIBRATE))
+        self.commit()
+        self.assertEqual(self.next(), "game-verdict core-loop")  # judged on bots
 
     # ---------- tests: the slice ----------
     def test_production_topics_wait_until_the_slice_ships(self):

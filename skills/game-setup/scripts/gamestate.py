@@ -530,7 +530,8 @@ class Game:
         return fs[0]["milestone"] if fs else None
 
     def has_polish_features(self):
-        return any(f.get("tier") != "cut" and f.get("milestone") == POLISH for f in self.items())
+        """game-polish's plan: must features in polish (a review decision adds nice ones)."""
+        return any(f.get("tier") == "must" and f.get("milestone") == POLISH for f in self.items())
 
     def green_pool(self):
         """Milestones whose must features have to pass in the current phase."""
@@ -558,11 +559,7 @@ class Game:
         return next((e for e in self.queue(playtests=True) if e.get("scope") == scope), None)
 
     def pending_playtest(self):
-        for entry in self.queue(playtests=True):
-            answers = entry.get("answers")
-            if answers and (self.root / answers).exists():
-                return entry
-        return None
+        return next((e for e in self.queue(playtests=True) if self.answered(e)), None)
 
     def open_topics(self, priorities=PRIORITIES):
         rank = {p: i for i, p in enumerate(PRIORITIES)}
@@ -1111,9 +1108,8 @@ class Game:
         elif phase == "plan":
             why += self._plan_gate()
         elif phase == "awaiting-human":
-            waiting = [e for e in self.queue(playtests=False) if not (e.get("kind") == "compare" and self.answered(e))]
-            if waiting:  # answered picks are the next build session's to apply
-                why.append(f"{len(waiting)} human queue entries open")
+            if self.queue(playtests=False):
+                why.append(f"{len(self.queue(playtests=False))} human queue entries open")
             if st.get("stop_reason"):
                 why.append(f"stopped: {st['stop_reason']} (a human decides, then sets stop_reason to null)")
         if phase in ("build", "verdict", "polish", "done"):
@@ -1410,7 +1406,7 @@ class Game:
         if phase == "verdict":
             return self._verdict_gate()
         if phase == "polish":
-            return [] if self.has_polish_features() else ["no polish features yet"]
+            return [] if self.has_polish_features() else ["no must polish features yet"]
         return self.gate()
 
     # ---------- transitions ----------
@@ -1452,6 +1448,7 @@ class Game:
     def _route(self):
         """Send the run to whatever comes next: failing work first, then the verdict it has earned."""
         st, passed = self.state, self.state.get("passed_verdicts", [])
+        answered, waiting = self.compares()
         if self.stage() == "slice":
             m = self.earliest_failing_ms(SLICE_MS)
             if m == SLICE_MS[0]:
@@ -1470,7 +1467,7 @@ class Game:
             self._enter_verdict("full")
         elif not st.get("polish_planned"):  # features review decisions put in polish don't plan it
             st.update(phase="polish", milestone=POLISH, task="game-polish")
-        elif self.failing([POLISH]) or self.compares()[0] or ("final" not in passed and self.compares()[1]):
+        elif self.failing([POLISH]) or ("final" not in passed and (answered or waiting)):
             st.update(phase="polish", milestone=POLISH, task=None)  # picks are applied before the final verdict
         elif "final" not in passed:
             self._enter_verdict("final")
@@ -1644,14 +1641,19 @@ class Game:
             if action:
                 return action
         if phase == "verdict":
-            entry = self.playtest_entry(st.get("verdict_scope"))
+            scope = st.get("verdict_scope")
+            if scope == "final":  # polish isn't finished while a person's picks are pending
+                action = self._picks_action() or self._picks_stop()
+                if action:
+                    return action
+            entry = self.playtest_entry(scope)
             calibrate = next((e for e in self.queue() if e.get("kind") == "calibrate"), None)
-            if calibrate and st.get("verdict_scope") == "slice" and not (self.root / LABELS).exists():
+            if calibrate and scope != "core-loop" and not (self.root / LABELS).exists():  # core-loop: on bots
                 return (f"stop: waiting for calibration: a person labels the kit ({calibrate['how']}) "
                         f"into {LABELS}; then run /game-next")
-            if entry and (self.root / entry["answers"]).exists():
-                return f"game-verdict {st['verdict_scope']} answers {entry['answers']}"
-            if entry and st.get("verdict_scope") == "slice":
+            if entry and self.answered(entry):
+                return f"game-verdict {scope} answers {entry['answers']}"
+            if entry and scope == "slice":
                 return (f"stop: waiting for the slice playtest: a person plays the build with the kit "
                         f"({entry.get('how', 'see the human queue')}) and writes {entry['answers']}; then run /game-next")
         task = st.get("task")
@@ -1675,10 +1677,10 @@ class Game:
                 return action
         if waiting:
             return f"stop: waiting for a person: start a session with someone present and run /game-next to do '{waiting}' together"
-        picks = self.compares()[1] if phase == "polish" else []
-        if picks:  # nothing else to build: the final verdict waits for the person's A/B picks
-            kits = " and ".join(f"the kit ({e.get('how')}) into {e.get('answers')}" for e in picks)
-            return f"stop: waiting for A/B picks: a person picks from {kits}, leaving the queue entry; then run /game-next"
+        if phase == "polish":  # nothing else to build: the final verdict waits for the person's A/B picks
+            action = self._picks_stop()
+            if action:
+                return action
         if self.gate():
             if phase == "verdict":
                 return f"game-verdict {st.get('verdict_scope')}"
@@ -1728,6 +1730,14 @@ class Game:
         if f and self.is_blocked(f):
             return f"game-plan unblock {fid}"
         return f"game-build {fid} \"{f.get('title', '')}\" picks {e['answers']}"
+
+    def _picks_stop(self):
+        waiting = self.compares()[1]
+        if not waiting:
+            return None
+        kits = " and ".join(f"the kit ({e.get('how')}) into {e.get('answers')}" for e in waiting)
+        entries = "entry" if len(waiting) == 1 else "entries"
+        return f"stop: waiting for A/B picks: a person picks from {kits}, leaving the queue {entries}; then run /game-next"
 
     def _nice_action(self, milestone):
         st = self.state
@@ -1839,8 +1849,7 @@ def main(argv, history=None):
             st["polish_planned"] = True  # from now on routing builds polish instead of planning it again
         if st["phase"] == "verdict":  # answers read by this verdict are consumed with it
             st["human_queue"] = [e for e in st["human_queue"] if not (
-                (e.get("kind") == "playtest" and e.get("scope") == st.get("verdict_scope")
-                 and (game.root / e.get("answers", "")).is_file())
+                (e.get("kind") == "playtest" and e.get("scope") == st.get("verdict_scope") and game.answered(e))
                 or (e.get("kind") == "calibrate" and (game.root / LABELS).is_file()))]
         game.save_state(f"complete {done}")
         print(f"complete: {done}\nnext: {game.next_action()}")
