@@ -15,7 +15,7 @@ Read `docs/agents/game.md` first and follow its session rules. When the work doe
 
 ## 1. Completeness
 
-Walk the areas in `docs/game/wiki.json` one by one, reading their pages through the docs place; in the slice stage, only what the `slice` page's In list needs (Modes and sessions can wait). For each, the pages must answer what planning will ask:
+Walk the areas one by one (the list in "The wiki" in `docs/agents/game.md`, or the home page's sections), reading each area's pages (those in `docs/game/wiki.json` with that `area`) through the docs place; an area with no page is a gap; in the slice stage, only what the `slice` page's In list needs (Modes and sessions can wait). For each, the pages must answer what planning will ask:
 
 - **Mechanics**: every object, action, win and fail condition, and edge case (ties, timeouts, simultaneous actions), precise enough to write tests from.
 - **Controls**: every input action with its binding per device.
@@ -42,7 +42,7 @@ Fix what has an obvious answer in the page that is wrong, with a `Last changed` 
 
 ## 3. Settle the tree
 
-Every open topic of this stage must be `core` or `support` work for a person, or wait: mark each `later` topic, and any `support` topic the brainstorm share left unanswered, `deferred` with a one-line reason (what it waits for). A deferred topic can be reopened in any later phase. Production topics stay open through the slice stage.
+Every open topic of this stage must be `core` or `support` work for a person, or wait: mark each `later` topic, and any `support` topic the brainstorm share left unanswered, `deferred` with a one-line reason (what it waits for). When a topic you defer is the review of a flagged page, remove that page's `flagged` entry in `wiki.json` and the note on the page (written last, as step 6 says). A deferred topic can be reopened in any later phase. Production topics stay open through the slice stage.
 
 **Done when** `gamestate.py gate` lists no open core or support topic for this stage.
 

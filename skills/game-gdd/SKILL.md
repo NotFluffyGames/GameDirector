@@ -18,7 +18,7 @@ git diff <state.json gdd_synced> HEAD -- docs/game/wiki.json docs/game/vision.js
 
 The `version` and `updated` fields of each page entry show which pages changed. With no `gdd_synced` yet, every page is new: the GDD gets created.
 
-Then detect direct edits: read each page's current version in the docs tool and compare it with the `version` in `wiki.json`. A mismatch is an edit nobody committed through a session (including a page whose session died before recording it). A page missing from the docs tool counts as edited. Each mismatch becomes an open topic quoting what changed (a diff or the changed passage), with the page in its `pages`, mirrored as a `ready-for-human` ticket; give the page a `flagged` entry (`{"topic": "T031", "note": "..."}`) in `wiki.json` and put a visible note on the page pointing at the topic. The topic's brainstorm decides what the page says; until then the GDD shows the committed text, and the flagged page's GDD section says it is under review.
+Then detect direct edits, skipping pages that already have a `flagged` entry (their topic is open): read each page's current version in the docs tool and compare it with the `version` in `wiki.json`. A mismatch is an edit nobody committed through a session (including a page whose session died before recording it). A page missing from the docs tool counts as edited. Each mismatch becomes an open topic quoting what changed (a diff or the changed passage), with the page in its `pages`, mirrored as a `ready-for-human` ticket; give the page a `flagged` entry (`{"topic": "T031", "note": "..."}`) in `wiki.json`; the visible note on the page pointing at the topic is written in step 4, after the state commit. The topic's brainstorm decides what the page says; until then the GDD shows the committed text, and the flagged page's GDD section says it is under review.
 
 **Done when** you have the list of changed wiki pages, every version mismatch or missing page is a topic with a `flagged` entry and a note, and you know the GDD sections each changed page feeds ([gdd-structure.md](gdd-structure.md)).
 
@@ -36,6 +36,6 @@ Create or update each affected section per [gdd-structure.md](gdd-structure.md):
 
 ## 4. Close
 
-Record any new page ids or links in `docs/agents/docs.md`, commit the state (`wiki.json` flags, topics), run `python3 docs/game/gamestate.py gdd-synced`, append a progress entry. Then write the wording fixes to wiki pages from step 2, last, record their new `version` and `updated` in `wiki.json`, and commit that.
+Record any new page ids or links in `docs/agents/docs.md`, commit the state (`wiki.json` flags, topics). Then write, last, the visible notes on flagged pages and the wording fixes from step 2 to wiki pages, record each page's new `version` and `updated` in `wiki.json`, and commit that. Then append a progress entry and run `python3 docs/game/gamestate.py gdd-synced` as the last action.
 
-**Done when** `gdd-synced` succeeds and every wiki page written here has its `wiki.json` entry committed.
+**Done when** every wiki page written here has its `wiki.json` entry committed and `gdd-synced` succeeds.

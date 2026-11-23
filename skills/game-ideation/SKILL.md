@@ -29,7 +29,7 @@ Draft 3–5 **directions** for the `concepts` page, laid out as [concepts-templa
 - cross the seed with a reference game from a different genre;
 - invert one of the seed's assumptions.
 
-Score each on fun potential, richness potential, fit to the user's answers, how well an agent can build and test it, and risk. Present them with your recommendation and challenge the user's favourite as hard as the others. The user chooses. Record the choice, its reasons and the ideas worth borrowing from the others under `## Choice`, and `directions` (`count`, `choice`) in `docs/game/vision.json`.
+Score each on fun potential, richness potential, fit to the user's answers, how well an agent can build and test it, and risk. Present them with your recommendation and challenge the user's favourite as hard as the others. The user chooses. Record the choice, its reasons and the ideas worth borrowing from the others under `## Choice`, and `directions` in `docs/game/vision.json`: `count`, and `choice`, the chosen direction's id (e.g. `C2`).
 
 **Done when** the concepts draft has 3–5 scored directions and the user's choice, and `vision.json` records both.
 

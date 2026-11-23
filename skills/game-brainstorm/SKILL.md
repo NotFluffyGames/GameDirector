@@ -18,6 +18,8 @@ Take the topic the task names (`game-brainstorm T014 …`), or with none, the fi
 - the pages the topic writes, and the pages the wiki's home page links them to (ids and links in `docs/game/wiki.json`, read through the docs place);
 - `CONTEXT.md`, and the ADRs those pages link.
 
+If the topic is `open` but already has a `resolution` and `pages`, an earlier session died between its two commits (step 5). Do not re-run the conversation: find those pages in the docs place by the recorded ids and titles (a page may exist without a `wiki.json` entry), and do step 5's second half.
+
 Then prepare your challenges before asking anything: where could this idea contradict the vision or another page, what could make it dominant, boring, confusing or too big, and how do two or three reference games handle the same question (the `research` skill, if you need facts).
 
 **Done when** you can state the topic's question, what the wiki already says about it, and your three strongest challenges.
@@ -54,6 +56,6 @@ For each question the conversation raised but didn't settle, open a child topic:
 
 Set the topic's `pages` (ids) and a one-line `resolution`, leaving its `status` `open` for now. `gamestate.py check --since <base>`, commit the state (topics, vision.json, ADRs, `CONTEXT.md`), progress entry.
 
-Then write the pages, last: create or update each drafted page in the docs place, add the home page line for each new one under its area, and record each page's `version` (from the docs tool) and `updated` in `docs/game/wiki.json` (a new page gets an entry with `id`, `title`, `area`, `link`). Set the topic `resolved`, close its ticket, run `check --since <base>` again, and commit that.
+Then write the pages, last: create or update each drafted page in the docs place, add the home page line for each new one under its area, and record each page's `version` (from the docs tool) and `updated` in `docs/game/wiki.json` (a new page gets an entry with `id`, `title`, `area`, `link`), including the `index` entry's new `version` and `updated` when you changed the home page. When the topic was a review of a flagged page, remove that page's `flagged` entry and the note on the page. Set the topic `resolved`, close its ticket, run `check --since <base>` again, and commit that.
 
 **Done when** the topic is resolved, its pages are written with their `wiki.json` entries committed, and check passes.

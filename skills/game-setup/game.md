@@ -98,7 +98,7 @@ The wiki is the living description of the game: precise enough to plan, build an
     "quality_bar": {"code": "representative", "feel": "production", "art": "placeholder",
                     "audio": "placeholder", "ui": "representative", "onboarding": "placeholder"}
   },
-  "directions": {"count": 3, "choice": "B"}
+  "directions": {"count": 3, "choice": "C2"}
 }
 ```
 
