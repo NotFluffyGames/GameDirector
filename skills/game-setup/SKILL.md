@@ -75,3 +75,9 @@ For each row: write the command (or wrapper script) into the Commands table of `
 Set `adapter_verified: true` in `docs/game/state.json`, commit, append a progress entry.
 
 **Done when** the commit holds the verified Commands table and `adapter_verified: true`.
+
+## Upgrade mode
+
+Task `game-setup upgrade`: bring an older game's files up to this version. Copy [scripts/gamestate.py](scripts/gamestate.py) over `docs/game/gamestate.py`, run `python3 docs/game/gamestate.py upgrade`, then finish project mode's steps the upgrade leaves open.
+
+**Done when** `gamestate.py upgrade` reports the current version.

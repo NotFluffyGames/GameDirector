@@ -5,6 +5,9 @@ game-setup copies this file to docs/game/gamestate.py in the game's repo.
 
 Commands:
   init               create any missing state files under docs/game/
+  upgrade            bring an older game's state to this tool's version: a game
+                     still at setup is reset (limits, counters and human_queue
+                     kept); later phases apply MIGRATIONS, or are refused
   status [--no-user] one-screen summary, ending with the `next:` action.
                      --no-user: nobody is there to talk to, so skip `with-user:`
                      work (ideation, brainstorm topics) and do what else can be done
@@ -60,8 +63,13 @@ RICH_FIELDS = ["aspect", "scope", "statement", "metric", "threshold", "how"]
 MIN_SEED_TOPICS = 5
 NICE_RESERVE = 10  # sessions kept back for verdicts and polish before nice features are built
 
+CURRENT_VERSION = 6
+# from_version -> migrate(game) -> notes; brings game.state to from_version + 1.
+# Empty so far: a game past setup can't be upgraded until a release adds entries.
+MIGRATIONS = {}
+
 DEFAULT_STATE = {
-    "version": 5,
+    "version": CURRENT_VERSION,
     "phase": "setup",
     "stage": "slice",
     "milestone": None,
@@ -108,6 +116,10 @@ def copy(data):
     return json.loads(json.dumps(data))
 
 
+class UpgradeError(Exception):
+    pass
+
+
 class Game:
     def __init__(self, root: Path):
         self.root = root
@@ -121,6 +133,7 @@ class Game:
         self.wiki_index_path = self.dir / "wiki.json"
         self.vision_path = self.dir / "vision.json"
         self.state = self._load(self.state_path, DEFAULT_STATE)
+        self.found_version = self._found_version()
         self.features = self._load(self.features_path, DEFAULT_FEATURES)
         self.fun = self._load(self.fun_path, DEFAULT_FUN)
         self.richness = self._load(self.richness_path, DEFAULT_RICHNESS)
@@ -144,6 +157,12 @@ class Game:
                 merged[key] = value
         return merged
 
+    def _found_version(self):
+        """The version written in state.json (1 when absent); _load overwrites it with the default."""
+        if not self.state_path.exists():
+            return CURRENT_VERSION
+        return json.loads(self.state_path.read_text(encoding="utf-8")).get("version", 1)
+
     # ---------- persistence ----------
     def _write(self, path, data):
         path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
@@ -164,6 +183,47 @@ class Game:
         rel = [p.relative_to(self.root).as_posix() for p in paths if p.exists()]
         self._git("add", "--", *rel)
         self._git("commit", "-q", "-m", f"game-state: {message}", "--", *rel)
+
+    def write_missing_files(self):
+        """Create every state file that doesn't exist yet; returns the paths created, relative to the root."""
+        self.dir.mkdir(parents=True, exist_ok=True)
+        created = []
+        for path, data in ((self.state_path, self.state), (self.features_path, self.features),
+                           (self.fun_path, self.fun), (self.richness_path, self.richness),
+                           (self.topics_path, self.topics_data), (self.keep_path, self.keep),
+                           (self.wiki_index_path, self.wiki_index), (self.vision_path, self.vision_data)):
+            if not path.exists():
+                self._write(path, data)
+                created.append(path.relative_to(self.root).as_posix())
+        for name, text in DEFAULT_TEXT.items():
+            if not (self.dir / name).exists():
+                (self.dir / name).write_text(text, encoding="utf-8")
+                created.append(f"docs/game/{name}")
+        return created
+
+    def upgrade(self):
+        """Bring the state to CURRENT_VERSION; returns notes. Raises UpgradeError when it can't."""
+        old = self.found_version
+        if old >= CURRENT_VERSION:
+            return [f"already at version {CURRENT_VERSION}"]
+        if self.state.get("phase") == "setup":
+            fresh = copy(DEFAULT_STATE)
+            for key in ("limits", "counters", "human_queue"):
+                fresh[key] = self.state.get(key, fresh[key])
+            fresh["task"] = "game-setup upgrade"
+            self.state.clear()
+            self.state.update(fresh)
+            self._write(self.state_path, self.state)
+            notes = [f"version {old} -> {CURRENT_VERSION}"]
+            return notes + [f"created {path}" for path in self.write_missing_files()]
+        notes = []
+        for v in range(old, CURRENT_VERSION):
+            if v not in MIGRATIONS:
+                raise UpgradeError(f"upgrade from version {v} in phase {self.state.get('phase')} "
+                                   f"isn't supported: no migration from version {v}")
+            notes += MIGRATIONS[v](self)
+            self.state["version"] = v + 1
+        return [f"version {old} -> {CURRENT_VERSION}"] + notes
 
     def save_state(self, message):
         self._write(self.state_path, self.state)
@@ -1078,18 +1138,21 @@ def main(argv):
     game = Game(find_root(argv))
     st = game.state
     if cmd == "init":
-        game.dir.mkdir(parents=True, exist_ok=True)
-        for path, data in ((game.state_path, game.state), (game.features_path, game.features),
-                           (game.fun_path, game.fun), (game.richness_path, game.richness),
-                           (game.topics_path, game.topics_data), (game.keep_path, game.keep),
-                           (game.wiki_index_path, game.wiki_index), (game.vision_path, game.vision_data)):
-            if not path.exists():
-                game._write(path, data)
-                print(f"created {path.relative_to(game.root)}")
-        for name, text in DEFAULT_TEXT.items():
-            if not (game.dir / name).exists():
-                (game.dir / name).write_text(text, encoding="utf-8")
-                print(f"created docs/game/{name}")
+        for path in game.write_missing_files():
+            print(f"created {path}")
+        return 0
+    if cmd == "upgrade":
+        try:
+            notes = game.upgrade()
+        except UpgradeError as e:
+            print(e)
+            return 1
+        if game.found_version < CURRENT_VERSION:
+            game._write(game.state_path, game.state)
+            new = [game.root / n[len("created "):] for n in notes if n.startswith("created ")]
+            game.commit(f"upgrade to version {CURRENT_VERSION}", game.state_path, *new)
+        print("\n".join(notes))
+        print(f"next: {game.next_action()}")
         return 0
     if cmd == "status":
         print(game.status(no_user="--no-user" in argv))

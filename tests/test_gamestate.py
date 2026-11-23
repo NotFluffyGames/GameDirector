@@ -708,6 +708,31 @@ class GameRun(unittest.TestCase):
         self.commit()
         self.tool("complete")
 
+    def test_upgrade_resets_an_old_game_still_at_setup(self):
+        self.tool("init")
+        self.edit("state.json", lambda s: (s.pop("stage"), s.update(version=3, phase="setup", task=None)))
+        (self.game / "vision.json").unlink()
+        self.commit()
+        out = self.tool("upgrade")
+        self.assertIn("version 3 -> 6", out)
+        s = self.load("state.json")
+        self.assertEqual((s["version"], s["phase"], s["task"], s["stage"]), (6, "setup", "game-setup upgrade", "slice"))
+        self.assertTrue((self.game / "vision.json").exists())
+        self.assertEqual(self.next(), "with-user: game-setup upgrade")
+        self.assertIn("already at version 6", self.tool("upgrade"))
+
+    def test_upgrade_refuses_an_old_game_mid_run(self):
+        self.to_plan()
+        self.edit("state.json", lambda s: s.update(version=4))
+        self.commit()
+        self.assertIn("upgrade from version 4 in phase plan isn't supported", self.tool("upgrade", ok=False))
+
+    def test_upgrade_treats_a_missing_version_as_1(self):
+        self.tool("init")
+        self.edit("state.json", lambda s: s.pop("version"))
+        self.commit()
+        self.assertIn("version 1 -> 6", self.tool("upgrade"))
+
 
 class Templates(unittest.TestCase):
     """The skills' templates must produce files the gates accept."""
