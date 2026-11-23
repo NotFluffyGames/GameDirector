@@ -29,7 +29,7 @@
   - Wiki areas, in this order: `Vision`, `Mechanics`, `Controls`, `Systems`, `Content`, `Modes and sessions`, `Screens and onboarding`, `Feel`, `Art`, `Audio`, `Narrative and world`.
 - **State versions:** `CURRENT_VERSION` becomes `7`. Mid-run upgrades stay unsupported; setup-phase games are reset as in 0.6.0.
 - **The plugin version** becomes `0.7.0`, in Task 15 only.
-- **Commits** end with exactly these two lines. No model identifier appears in commit messages, code comments or docs. An agent's `model:` field uses the aliases `opus` or `sonnet` as configuration.
+- **Commits** end with exactly these two lines. No model identifier appears in commits, code, skills or agent files. Agents use `model: inherit`, and `game-review` picks a model tier per role at dispatch, in words ("the most capable model available", "a standard model").
 
   ```
   Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
@@ -671,7 +671,7 @@ def test_upgrade_brings_a_version_6_game_at_setup_to_7(self):
 ---
 name: creative
 description: Use only when game-review dispatches the creative director to review, challenge, research, audit or decide notes for a game made with the game-* skills.
-model: opus
+model: inherit
 tools: Read, Glob, Grep, Write, Bash
 disallowedTools: Edit, NotebookEdit, Agent
 skills: game-role-creative
@@ -693,7 +693,7 @@ maxTurns: 40
     - `skills` is `game-role-<id>`;
     - `disallowedTools` contains `Edit` and `Agent`;
     - `tools` doesn't contain `Edit`;
-    - `model` is non-empty.
+    - `model` is `inherit`.
 
     Until Tasks 9–10, skip ids without a role skill folder via `subTest` plus `self.skipTest`. Task 10 removes the skip.
 
@@ -752,7 +752,7 @@ maxTurns: 40
     - judged: cohesion with the visual target, read order, placeholder or stock look;
     - calibrated by stills.
 
-  Models: `opus` for design and art, `sonnet` for feel.
+  Model tier at dispatch (stated in game-review, Task 11): the most capable model for design and art, a standard model for feel.
 
 - [ ] **Step 2: Run the whole suite.** Expected: OK, with the agent test skipping only roles without a skill.
 
@@ -781,7 +781,7 @@ maxTurns: 40
     - judged with usability heuristics;
     - calibrated by stills.
 
-  Model `sonnet` for all three.
+  Model tier at dispatch: a standard model for all three.
 
 - [ ] **Step 2: Run the whole suite.** Expected: OK, with no skips.
 
@@ -817,6 +817,7 @@ maxTurns: 40
   7. **Record and commit:** the reviews, the feature's `reviews` map, and the role memory files (overruled notes, A/B picks, label reasons).
 
   Also cover:
+  - the model tier per role at dispatch: the most capable model available for `creative`, `art` and `design`, and a standard model for the rest;
   - the no-subagent fallback: run roles one at a time, `"independent": false`;
   - the two-round cap for features;
   - the agent dispatch fallback when skill preloading by name fails: pass the role skill's absolute path from this skill's base directory.
