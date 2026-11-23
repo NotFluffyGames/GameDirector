@@ -26,7 +26,7 @@ Keeps the game from being designed from memory. The **scan** maps the landscape 
   - Save each in `docs/game/research/refs/<id>/<role>/` for the role that uses it (`art`, `ux`, `feel`; in both folders when two use it), named by what it shows (`hud.png`, `dash-strip.png`), with its source in `material/index.md`.
   - Shrink it: `python3 <measure.py> shrink IN.png --out OUT.png` (longest side at most 1280 px). `measure.py` reads only 8-bit, non-interlaced PNG: convert anything else (JPEG, WebP, a 16-bit or interlaced PNG) first with what this machine has (`magick` or `convert`, `ffmpeg`, Python's Pillow, macOS `sips`). With no converter, keep an original PNG, JPEG or WebP as is only when it is at most 1280 px on its longest side and at most 500 KB (`file` prints its dimensions; Steam's `path_thumbnail` qualifies); otherwise save nothing, and the image is `not-assessed: no converter`.
   - `research_sources.images` is `docs` (setup's offer for a public repo): keep the images out of git with `docs/game/research/refs/.gitignore` (`*.png`, `*.jpg`, `*.jpeg`, `*.webp`), and upload each to the docs place on a reference-images page per reference, as `docs/agents/docs.md` says, its link in `material/index.md`. A later session on a fresh checkout restores them from there. Where the docs tool takes no images, they stay in this checkout only, and the index says so.
-- **Homework candidates.** What the agent can't do goes on a list as it arises: a game it can't play (a person playing it is the strongest evidence for feel, ux and audio), sound it can't hear, an unreachable source, an image no source gives, an audit finding it couldn't fix. In a ref session, into the reference's `homework` list in `references.json`, each `{"what", "why", "roles", "minutes"}`; in a scan, into the landscape page's "Not researched" section. The brief ranks them.
+- **Homework candidates.** What the agent can't do goes on a list as it arises: a game it can't play (a person playing it is the strongest evidence for feel, ux and audio), sound it can't hear, an unreachable source, an image no source gives, an audit finding it couldn't fix. In a ref session, into the reference's `homework` list in `references.json`, one line each: what a person does and the gap it fills ("play R3 for 20 minutes and time the dash's recovery: feel"); the gate accepts a reference short of sources whose gap is named there. In a scan, into the landscape page's "Not researched" section. The brief ranks them.
 - **Pages last.** Every page is drafted in `docs/game/drafts/<page-id>.md` and written in the docs place after the state commit, as "Pages are written last" in `docs/agents/game.md` says. A new wiki page gets a `wiki.json` entry (`id`, `title`, area `Vision`, `link`, `version` read back as `docs/agents/docs.md` says, `updated`) and a line under Vision on the home page, whose `index` entry gets its new `version` and `updated` in the same pages commit.
 - **Offer, never choose.** Which comps count as "us", which anchors to break, the hook, the references and the price are the person's picks in ideation. A weak number states the odds; it never drops a direction.
 
@@ -40,7 +40,7 @@ Keeps the game from being designed from memory. The **scan** maps the landscape 
   - `roles`: the role ids it informs; `sources`: links, or `person: <homework id>, <date>`;
   - `status`: `candidate` (from the scan), `open` (ideation picked it), `studied` (its dossier is done);
   - `how_studied`: per role, `{"how": "played" | "watched" | "read" | "not-assessed", "reason": "..."}`;
-  - `homework`: its candidates (above).
+  - `homework`: its candidates (above), non-empty strings.
 - `docs/game/research/refs/<id>/`: `material/` (the gathered sources, `index.md`, page copies in `pages/`), one dossier section `<role>.md` per role, the image folders `art/`, `ux/` and `feel/`, and `audit.json` (the review record from `docs/agents/game.md`: role `creative`, target `<id>`).
 - `docs/game/research/homework.json`: `{"reason": "", "page": "<link>", "items": [...]}`, at most ten items in rank order, or none with a `reason`. Each item: `id` (`H1`…), `what`, `why`, `questions` (a list), `minutes`, `roles`, `status` (`open`, `answered` or `skip`), `answer`, `ticket`.
 - Wiki pages `landscape` (the scan) and `research` (the brief), both area Vision.
@@ -128,7 +128,7 @@ Into `material/`, once for every role:
 - for a reference that isn't a game (a film, a book, an artwork), its pages and published stills;
 - `material/index.md`: one line per source with its URL, retrieval date, what it gave and the file that holds it; a source that failed: `<source>: n/a: <reason>`.
 
-**Done when** every source is a file under `material/` with its index line, or an `n/a` line with its reason, and at least three are gathered. With fewer reachable, commit what you have and end the session reporting the failed hosts: the reference's gate needs three sources, so a person must make more reachable.
+**Done when** every source is a file under `material/` with its index line, or an `n/a` line with its reason, and at least three are gathered, or each gap has a candidate in the entry's `homework` saying what a person does to fill it (the failed hosts go in the progress entry).
 
 ### 3. Play and capture
 
@@ -201,7 +201,7 @@ Draft `docs/game/drafts/research.md` (title "Research"):
 
 ### 3. Rank the homework
 
-From the candidates, the unknowns and the unreachable sources whose work still matters, merge duplicates and rank by how much each answer could change a decision: a north star, a slice topic, a risk. Keep at most ten; the rest go under the brief's unknowns as "not pursued: ranked below ten". Each candidate is now an item or such a line: empty the entries' `homework` lists, so a later brief starts from new candidates only.
+From every studied reference's `homework` candidates, the unknowns and the unreachable sources whose work still matters, merge duplicates and rank by how much each answer could change a decision: a north star, a slice topic, a risk. Keep at most ten; the rest go under the brief's unknowns as "not pursued: ranked below ten". A candidate that an item in `docs/game/archive/*/homework.json` already answered or skipped isn't asked again. The entries' `homework` lists stay as they are: the gate reads them.
 
 Write `docs/game/research/homework.json` in rank order. Each item:
 

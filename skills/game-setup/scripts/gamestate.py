@@ -455,6 +455,14 @@ class Game:
         roles = entry.get("roles")
         return [r for r in roles if isinstance(r, str)] if isinstance(roles, list) else []
 
+    @staticmethod
+    def ref_homework(entry):
+        """The candidate homework a reference names for what the agent couldn't reach; [] when malformed."""
+        hw = entry.get("homework", [])
+        if not isinstance(hw, list) or not all(isinstance(h, str) and h.strip() for h in hw):
+            return []
+        return hw
+
     def items(self):
         return self.features.get("features", [])
 
@@ -883,6 +891,8 @@ class Game:
             errs += self._known_roles(owner, r.get("roles", []))
             if not isinstance(r.get("sources", []), list):
                 errs.append(f"{owner}: sources must be a list")
+            if "homework" in r and r["homework"] != [] and not self.ref_homework(r):
+                errs.append(f"{owner}: homework must be a list of non-empty strings")
             how = r.get("how_studied", {})
             if not isinstance(how, dict):
                 errs.append(f"{owner}: how_studied must be an object")
@@ -1184,7 +1194,7 @@ class Game:
 
     def _dossier_reasons(self, r):
         """Reasons a studied reference's dossier falls short: its sections, how each was studied, images, sources
-        and the creative audit."""
+        (fewer pass when its homework names how a person fills the gap) and the creative audit."""
         rid, why = r["id"], []
         base = f"docs/game/research/refs/{rid}"
         how = r.get("how_studied") if isinstance(r.get("how_studied"), dict) else {}
@@ -1201,7 +1211,7 @@ class Game:
                 why.append(f"{rid}: no image for the {role} section")
         sources = r.get("sources") if isinstance(r.get("sources"), list) else []
         n = len([s for s in sources if s])
-        if n < MIN_SOURCES:
+        if n < MIN_SOURCES and not self.ref_homework(r):  # sources it couldn't reach are the person's homework
             why.append(f"{rid}: {n} sources; needs {MIN_SOURCES}")
         audit = self.review(f"{base}/audit.json")
         if audit is None:

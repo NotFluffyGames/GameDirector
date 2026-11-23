@@ -1094,6 +1094,26 @@ class GameRun(unittest.TestCase):
         (r1 / "audit.json").unlink()
         self.assertIn("R1: no audit (docs/game/research/refs/R1/audit.json)", self.tool("gate", ok=False))
 
+    def test_a_reference_short_of_sources_passes_when_the_gap_is_homework(self):
+        self.to_ideation()
+        self.ideate()
+        self.research()
+        self.edit(REFS, lambda d: d["refs"][0].update(sources=d["refs"][0]["sources"][:1]))
+        self.commit()
+        self.assertIn("R1: 1 sources; needs 3", self.tool("gate", ok=False))
+        self.assertEqual(self.next(), "game-research ref R1")
+        self.edit(REFS, lambda d: d["refs"][0].update(homework=["play R1 for 20 minutes and note the dash timing"]))
+        self.commit()
+        self.assertNotIn("R1: 1 sources", self.tool("gate"))  # what the agent couldn't reach is the person's
+        self.assertEqual(self.tool("check"), "check: ok\n")
+        self.assertNotEqual(self.next(), "game-research ref R1")
+        for bad in ("play it", ["", "  "], [3]):
+            self.edit(REFS, lambda d: d["refs"][0].update(homework=bad))
+            out = self.tool("check", ok=False) + self.tool("gate", ok=False)
+            self.assertNotIn("Traceback", out)
+            self.assertIn("references.json R1: homework must be a list of non-empty strings", out)
+            self.assertIn("R1: 1 sources; needs 3", out)  # a malformed list names no gap
+
     def test_research_keeps_a_reference_open_for_every_active_role(self):
         self.to_ideation()
         self.ideate()
