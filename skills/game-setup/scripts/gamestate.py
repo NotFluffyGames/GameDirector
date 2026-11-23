@@ -12,7 +12,8 @@ Commands:
                      newer or malformed state, or a phase with no migration
   status [--no-user] one-screen summary, ending with the `next:` action.
                      --no-user: nobody is there to talk to, so skip `with-user:`
-                     work (ideation, brainstorm topics) and do what else can be done
+                     work (ideation, research homework, brainstorm topics) and do
+                     what else can be done
   check [--since C]  invariants; exit 1 on violations. --since: the commit the
                      session started from (default HEAD), for the edit guard
   gate               does the current task or phase gate pass? exit 1 if not
@@ -34,9 +35,10 @@ import subprocess
 import sys
 from pathlib import Path
 
-PHASES = ["setup", "ideation", "brainstorm", "consolidate", "plan", "build", "verdict", "polish",
+PHASES = ["setup", "scan", "ideation", "research", "brainstorm", "consolidate", "plan", "build", "verdict", "polish",
           "awaiting-human", "done"]
-DESIGN_PHASES = ["setup", "ideation", "brainstorm", "consolidate"]  # the bar (fun checklist, richness) is set here
+DESIGN_PHASES = ["setup", "scan", "ideation", "research", "brainstorm", "consolidate"]  # the bar is set here
+PHASE_SKILLS = {"scan": "game-research"}  # phases whose skill isn't game-<phase>
 PLANNING_PHASES = DESIGN_PHASES + ["plan"]                          # the definition of done is rewritten here
 TOPIC_PHASES = ["consolidate", "plan", "build", "verdict", "polish"]  # topics interrupt these when work needs them
 REOPENABLE = ["build", "polish", "awaiting-human", "done"]
@@ -73,6 +75,16 @@ CALIBRATED_ROLES = ["creative", "feel", "art", "ux"]  # roles whose taste judgme
 LABELS = "docs/game/calibration/labels.json"
 DECISION_RE = r"^(fixed [0-9a-f]{7,40}|feature F\d+|topic T\d+|wontfix: \S.*)$"
 MIN_SEED_TOPICS = 5
+INTENTS = ["sell", "hobby"]
+REF_WHY = ["comp", "aspect"]
+REF_STATUSES = ["candidate", "open", "studied"]
+HOW_STUDIED = ["played", "watched", "read", "not-assessed"]
+HOMEWORK_STATUSES = ["open", "answered", "skip"]
+MAX_HOMEWORK = 10
+MIN_COMPS = 3
+MIN_SOURCES = 3
+IMAGE_ROLES = ["art", "ux", "feel"]  # dossier sections that need an image in refs/<id>/<role>/ unless not assessed
+IMAGE_TYPES = (".png", ".jpg", ".jpeg", ".webp")
 PAGE_ROLES = ("feel", "art", "audio", "narrative", "ux")  # roles whose page ideation seeds a slice topic for
 NICE_RESERVE = 10  # sessions kept back for verdicts and polish before nice features are built
 
@@ -95,6 +107,8 @@ DEFAULT_STATE = {
     "checkpoint_due": False,
     "adapter_verified": False,
     "docs_verified": None,
+    "intent": None,
+    "research_sources": None,
     "gdd_synced": None,
     "restart_adr": None,
     "resume": None,
@@ -114,6 +128,8 @@ DEFAULT_TOPICS = {"topics": []}
 DEFAULT_KEEP = {"keep": []}
 DEFAULT_WIKI = {"pages": []}
 DEFAULT_VISION = {}
+DEFAULT_REFERENCES = {"scanned_for": None, "refs": []}  # research files: the research skill writes them, init doesn't
+DEFAULT_HOMEWORK = {"reason": "", "items": []}
 MISSING = object()
 DEFAULT_TEXT = {
     "progress.md": "# Progress\n\nAppend-only session log. One entry per session, newest last, at most 10 lines each.\n",
@@ -150,6 +166,9 @@ class Game:
         self.keep_path = self.dir / "keep.json"
         self.wiki_index_path = self.dir / "wiki.json"
         self.vision_path = self.dir / "vision.json"
+        self.research_dir = self.dir / "research"
+        self.references_path = self.research_dir / "references.json"
+        self.homework_path = self.research_dir / "homework.json"
         self.written = []  # every file this run wrote, so the command that wrote them can commit them
         self.state = self._load(self.state_path, DEFAULT_STATE)
         self.found_version = self._found_version()
@@ -160,6 +179,8 @@ class Game:
         self.keep = self._load(self.keep_path, DEFAULT_KEEP)
         self.wiki_index = self._load(self.wiki_index_path, DEFAULT_WIKI, shape_checked=True)
         self.vision_data = self._load(self.vision_path, DEFAULT_VISION, shape_checked=True)
+        self.references_data = self._load(self.references_path, DEFAULT_REFERENCES, shape_checked=True)
+        self.homework_data = self._load(self.homework_path, DEFAULT_HOMEWORK, shape_checked=True)
 
     def _read(self, path):
         try:
@@ -374,6 +395,25 @@ class Game:
                     if not str(reason or "").strip()]
         return why
 
+    def references(self):
+        """The well-formed reference entries in references.json; _check_research reports the rest."""
+        refs = self.references_data.get("refs") if isinstance(self.references_data, dict) else None
+        if not isinstance(refs, list):
+            return []
+        return [r for r in refs if isinstance(r, dict) and isinstance(r.get("id"), str) and r["id"]]
+
+    def homework(self):
+        items = self.homework_data.get("items") if isinstance(self.homework_data, dict) else None
+        return [i for i in items if isinstance(i, dict)] if isinstance(items, list) else []
+
+    def homework_open(self):
+        return [i for i in self.homework() if i.get("status") == "open"]
+
+    @staticmethod
+    def ref_roles(entry):
+        roles = entry.get("roles")
+        return [r for r in roles if isinstance(r, str)] if isinstance(roles, list) else []
+
     def items(self):
         return self.features.get("features", [])
 
@@ -532,6 +572,7 @@ class Game:
         errs += self._vision_shape()
         errs += self._check_keep()
         errs += self._check_reviews()
+        errs += self._check_research()
         if self.stage() not in STAGES:
             errs.append(f"state.stage must be one of {STAGES}")
         for e in self.queue():
@@ -725,6 +766,72 @@ class Game:
                 pass
         return ids
 
+    # ---------- research ----------
+    @staticmethod
+    def _entries(label, data, key):
+        """The object entries of data[key] that have an id, and the reasons data falls short of that shape."""
+        if not isinstance(data, dict):
+            return [], [f"{label} is not an object"]
+        entries = data.get(key, [])
+        if not isinstance(entries, list):
+            return [], [f"{label} {key} is not a list"]
+        good, why, seen = [], [], set()
+        for n, e in enumerate(entries, 1):
+            if not isinstance(e, dict):
+                why.append(f"{label} {key}: entry {n} is not an object")
+            elif not (isinstance(e.get("id"), str) and e["id"]):
+                why.append(f"{label} {key}: entry {n} has no id")
+            else:
+                if e["id"] in seen:
+                    why.append(f"{label} {e['id']}: duplicate id")
+                seen.add(e["id"])
+                good.append(e)
+        return good, why
+
+    @staticmethod
+    def _known_roles(owner, roles):
+        """Reasons a research entry's roles aren't role ids. Research outlives roles_off, so only unknown ids count."""
+        if not isinstance(roles, list):
+            return [f"{owner}: roles must be a list"]
+        return [f"{owner}: role '{r}' is not one of {ROLES}" for r in roles if r not in ROLES]
+
+    def _check_research(self):
+        """Reasons references.json, homework.json or a reference's audit is malformed; the gates read around them."""
+        refs, errs = self._entries("references.json", self.references_data, "refs")
+        for r in refs:
+            owner = f"references.json {r['id']}"
+            if r.get("why") not in REF_WHY:
+                errs.append(f"{owner}: why must be one of {REF_WHY}")
+            if r.get("status") not in REF_STATUSES:
+                errs.append(f"{owner}: status must be one of {REF_STATUSES}")
+            errs += self._known_roles(owner, r.get("roles", []))
+            if not isinstance(r.get("sources", []), list):
+                errs.append(f"{owner}: sources must be a list")
+            how = r.get("how_studied", {})
+            if not isinstance(how, dict):
+                errs.append(f"{owner}: how_studied must be an object")
+                continue
+            for role, h in how.items():
+                if role not in ROLES:
+                    errs.append(f"{owner}: how_studied role '{role}' is not one of {ROLES}")
+                elif not (isinstance(h, dict) and h.get("how") in HOW_STUDIED):
+                    errs.append(f"{owner}: how_studied {role}: how must be one of {HOW_STUDIED}")
+        if self.homework_path.exists():  # its default is empty without a reason, so only a written list is checked
+            items, why = self._entries("homework.json", self.homework_data, "items")
+            errs += why
+            for i in items:
+                if i.get("status") not in HOMEWORK_STATUSES:
+                    errs.append(f"homework.json {i['id']}: status must be one of {HOMEWORK_STATUSES}")
+                errs += self._known_roles(f"homework.json {i['id']}", i.get("roles", []))
+            listed = self.homework_data.get("items") if isinstance(self.homework_data, dict) else None
+            if isinstance(listed, list) and len(listed) > MAX_HOMEWORK:
+                errs.append(f"homework.json has {len(listed)} items; keep it to {MAX_HOMEWORK} or fewer")
+            if listed == [] and not str(self.homework_data.get("reason") or "").strip():
+                errs.append("homework.json has no items and no reason")
+        for p in sorted((self.research_dir / "refs").glob("*/audit.json")):
+            errs += self._review_shape(p.relative_to(self.root).as_posix())
+        return errs
+
     # ---------- reviews ----------
     def review(self, path):
         """The review file at path (relative to the game root) as a dict; None when missing, unreadable or not an object."""
@@ -890,8 +997,17 @@ class Game:
             dv = st.get("docs_verified")
             if not (isinstance(dv, dict) and dv.get("place") and dv.get("date")):
                 why.append("docs not verified: run the docs smoke test (game-setup)")
+            if st.get("intent") not in INTENTS:
+                why.append(f"state.intent must be one of {INTENTS}")
+            sources = st.get("research_sources")
+            if not (isinstance(sources, dict) and sources.get("checked")):
+                why.append("research sources not checked (game-setup records research_sources)")
+        elif phase == "scan":
+            why += self._scan_gate()
         elif phase == "ideation":
             why += self._ideation_gate()
+        elif phase == "research":
+            why += self._research_gate()
         elif phase == "brainstorm":
             open_now = ["core"] if self.brainstorm_share_spent() else ["core", "support"]
             why += [f"topic {t['id']}: open ({t.get('priority')})" for t in self.open_topics(open_now) if self.in_stage(t)]
@@ -954,7 +1070,86 @@ class Game:
             if r in PAGE_ROLES and not any(t.get("stage") == "slice" and isinstance(t.get("roles"), list)
                                            and r in t["roles"] for t in seeded):
                 why.append(f"no slice topic for role {r} (its page)")
+        return why + self._reference_coverage()
+
+    def _scan_gate(self):
+        why = [] if "landscape" in self.page_ids() else ["wiki.json has no page 'landscape'"]
+        if self.state.get("intent") != "hobby":  # only a hobby game goes without comps
+            n = sum(r.get("why") == "comp" for r in self.references())
+            if n < MIN_COMPS:
+                why.append(f"scan: {n} comps; needs {MIN_COMPS}")
+        adr = self.state.get("restart_adr")
+        scanned = self.references_data.get("scanned_for") if isinstance(self.references_data, dict) else None
+        if adr and scanned != adr:
+            why.append(f"references.json scanned_for is not {adr}: re-scan for the restart, then set it")
         return why
+
+    def _reference_coverage(self):
+        """Reasons an active role has no reference opened for study (open now, or studied before a restart)."""
+        covered = {role for r in self.references() if r.get("status") in ("open", "studied")
+                   for role in self.ref_roles(r)}
+        return [f"references.json: no reference opened for study for role {r}"
+                for r in self.active_roles() if r not in covered]
+
+    def _research_gate(self):
+        why = self._reference_coverage()
+        for r in self.references():
+            if r.get("status") == "open":
+                why.append(f"{r['id']}: open, not studied yet")
+            elif r.get("status") == "studied":
+                why += self._dossier_reasons(r)
+        if "research" not in self.page_ids():
+            why.append("wiki.json has no page 'research'")
+        if not self.homework_path.exists():
+            why.append("docs/game/research/homework.json is missing (it may be empty, with a reason)")
+        return why
+
+    def _dossier_reasons(self, r):
+        """Reasons a studied reference's dossier falls short: its sections, how each was studied, images, sources
+        and the creative audit."""
+        rid, why = r["id"], []
+        base = f"docs/game/research/refs/{rid}"
+        how = r.get("how_studied") if isinstance(r.get("how_studied"), dict) else {}
+        for role in self.ref_roles(r):
+            if not (self.root / base / f"{role}.md").is_file():
+                why.append(f"{rid}: no {role} dossier ({base}/{role}.md)")
+            h = how.get(role)
+            if not (isinstance(h, dict) and h.get("how") in HOW_STUDIED):
+                why.append(f"{rid}: {role} how_studied not set")
+            elif h["how"] == "not-assessed":
+                if not str(h.get("reason") or "").strip():
+                    why.append(f"{rid}: {role} not-assessed needs a reason")
+            elif role in IMAGE_ROLES and not self._has_image(self.root / base / role):
+                why.append(f"{rid}: no image for the {role} section")
+        sources = r.get("sources") if isinstance(r.get("sources"), list) else []
+        n = len([s for s in sources if s])
+        if n < MIN_SOURCES:
+            why.append(f"{rid}: {n} sources; needs {MIN_SOURCES}")
+        audit = self.review(f"{base}/audit.json")
+        if audit is None:
+            why.append(f"{rid}: no audit ({base}/audit.json)")
+        for note in audit.get("notes") if audit and isinstance(audit.get("notes"), list) else []:
+            if not isinstance(note, dict):
+                continue  # _review_shape reports it
+            d = str(note.get("decision") or "")
+            if not d:
+                why.append(f"{rid}: audit note {note.get('id')} is open")
+            elif note.get("severity") == "blocking" and not d.startswith("fixed"):
+                why.append(f"{rid}: audit note {note.get('id')} is blocking and not fixed")
+        return why
+
+    @staticmethod
+    def _has_image(folder):
+        return folder.is_dir() and any(p.is_file() and p.suffix.lower() in IMAGE_TYPES for p in folder.rglob("*"))
+
+    def _research_action(self):
+        """The research phase's next session: each open reference in turn, then the brief; None once both are done."""
+        ref = next((r for r in self.references() if r.get("status") == "open"), None)
+        if ref:
+            return f"game-research ref {ref['id']}"
+        if "research" not in self.page_ids() or not self.homework_path.exists():
+            return "game-research brief"
+        return None
 
     def _north_star_reasons(self, v):
         """Reasons the north stars and invariants ideation sets are missing or thin."""
@@ -1121,8 +1316,13 @@ class Game:
             return [f"playtest answers for {entry['scope']}: verdict reopened"]
         production = " production" if self.stage() == "production" else ""
         if phase == "setup":
-            st.update(phase="ideation", task="game-ideation")
+            st.update(phase="scan", task="game-research scan")
+        elif phase == "scan":
+            adr = st.get("restart_adr")
+            st.update(phase="ideation", task=f"game-ideation restart {adr}" if adr else "game-ideation")
         elif phase == "ideation":
+            st.update(phase="research", task=None)
+        elif phase == "research":
             st.update(phase="brainstorm", task=None)
         elif phase == "brainstorm":
             st.update(phase="consolidate", task="game-consolidate" + production)
@@ -1238,7 +1438,7 @@ class Game:
         self._write(archive / "human-queue.json", st.get("human_queue", []))
         self.features["features"] = []
         self._write(self.features_path, self.features)
-        st.update(phase="ideation", stage="slice", milestone=None, task=f"game-ideation restart {adr}",
+        st.update(phase="scan", stage="slice", milestone=None, task=f"game-research restart {adr}",
                   restart_adr=adr, passed_verdicts=[], slice_sessions=None, adapter_verified=False,
                   checkpoint_due=False, human_queue=[], attempts={})
         self.commit(f"restart {n}", self.features_path, archive / "features.json", archive / "human-queue.json")
@@ -1259,7 +1459,7 @@ class Game:
     def tick(self, action):
         st = self.state
         st["counters"]["sessions"] += 1
-        if "game-brainstorm" in action:
+        if "game-brainstorm" in action:  # a research homework session isn't a topic: it spends no share
             st["counters"]["brainstorm_sessions"] += 1
         last = st["last_dispatch"]
         last["repeats"] = last["repeats"] + 1 if last.get("action") == action else 1
@@ -1300,11 +1500,23 @@ class Game:
         return action
 
     def _work(self, no_user=False):
-        """The next action. Ideation and brainstorm topics happen with a person (`with-user:`); without one,
-        the run does whatever else it can and stops only when nothing else is left."""
+        """The next action. Ideation, research homework and brainstorm topics happen with a person (`with-user:`);
+        without one, the run does whatever else it can and stops only when nothing else is left."""
         st, phase, m = self.state, self.state["phase"], self.state.get("milestone")
         if phase in ("build", "polish") and st.get("checkpoint_due"):
             return "game-plan checkpoint"
+        if phase == "scan" and self._scan_gate():  # the agent alone, from the seed
+            adr = st.get("restart_adr")
+            return st.get("task") or (f"game-research restart {adr}" if adr else "game-research scan")
+        if phase == "research":
+            action = self._research_action()  # the agent alone; what it can't do becomes homework
+            if action:
+                return action
+        if phase == "brainstorm" and self.homework_open():  # topics are grilled with the homework's answers
+            if no_user:
+                return ("stop: waiting for research homework: a person answers or skips each open item in "
+                        "docs/game/research/homework.json (or the homework page), then run /game-next")
+            return "with-user: game-research homework"
         waiting = None
         topic = self._topic_action()  # design questions the work depends on come first
         if topic:
@@ -1349,7 +1561,7 @@ class Game:
                 return f"game-verdict {st.get('verdict_scope')}"
             if phase == "brainstorm":
                 return "with-user: game-brainstorm"
-            return f"game-{phase}"
+            return PHASE_SKILLS.get(phase, f"game-{phase}")
         if phase != "setup" and self.gdd_stale():
             return "game-gdd"  # the human GDD catches up before every phase or milestone change
         return "advance"

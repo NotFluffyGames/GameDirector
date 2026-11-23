@@ -90,8 +90,9 @@ class Steps(unittest.TestCase):
         for phase in tool.PHASES:
             if phase in ("awaiting-human", "done"):
                 continue
-            with self.subTest(phase=phase):
-                self.assertTrue((SKILLS / f"game-{phase}" / "SKILL.md").is_file())
+            skill = tool.PHASE_SKILLS.get(phase, f"game-{phase}")
+            with self.subTest(phase=phase, skill=skill):
+                self.assertTrue((SKILLS / skill / "SKILL.md").is_file())
 
     def test_every_scheduled_step_and_mode_is_handled_by_its_skill(self):
         tool = load_tool()

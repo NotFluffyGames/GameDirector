@@ -50,9 +50,33 @@ PAGE_IDS = {"Vision": ["vision", "slice", "concepts"], "Mechanics": ["mechanics"
             "Art": ["art"], "Audio": ["audio"], "Narrative and world": ["tone"]}
 
 
+ROLES = ["creative", "design", "feel", "art", "audio", "narrative", "ux"]
+IMAGE_ROLES = ["art", "ux", "feel"]
+RESEARCH_PAGES = ["landscape", "research"]  # the research skill's pages, both in area Vision
+REFS = "research/references.json"
+HOMEWORK = "research/homework.json"
+SOURCES = {"checked": "2026-11-23", "reachable": [], "unreachable": []}
+HOMEWORK_WAIT = ("stop: waiting for research homework: a person answers or skips each open item in "
+                 "docs/game/research/homework.json (or the homework page), then run /game-next")
+
+
+def page(pid, area="Vision"):
+    return {"id": pid, "title": pid.title(), "area": area, "link": f"https://docs.example/{pid}",
+            "version": "1", "updated": "x"}
+
+
 def wiki_index(*areas):
-    return {"pages": [{"id": i, "title": i.title(), "area": a, "link": f"https://docs.example/{i}",
-                       "version": "1", "updated": "x"} for a in areas for i in PAGE_IDS[a]]}
+    return {"pages": [page(i, a) for a in areas for i in PAGE_IDS[a]]}
+
+
+def ref(rid, title, why="aspect", roles=("art",), status="candidate"):
+    return {"id": rid, "title": title, "why": why, "roles": list(roles),
+            "sources": [f"https://store.example/{rid}"], "status": status, "how_studied": {}}
+
+
+COMPS = [ref("R1", "Towerfall", "comp", ("design", "feel", "art")),
+         ref("R2", "Samurai Gunn", "comp", ("creative", "design", "feel")),
+         ref("R3", "Nidhogg", "comp", ("creative", "ux"))]
 
 
 def topic(tid, parent="T1", priority="support", status="open", stage="slice", pages=(), unblocks=(),
@@ -287,7 +311,9 @@ class GameRun(unittest.TestCase):
             self.tool("complete")
 
     def write_wiki(self, areas):
-        self.write("docs/game/wiki.json", json.dumps(wiki_index(*areas)))
+        """Index the pages of these areas; the research pages already indexed stay."""
+        kept = [p for p in self.load("wiki.json")["pages"] if p["id"] in RESEARCH_PAGES]
+        self.write("docs/game/wiki.json", json.dumps({"pages": wiki_index(*areas)["pages"] + kept}))
 
     def sync(self):
         self.assertEqual(self.next(), "game-gdd")
@@ -302,42 +328,120 @@ class GameRun(unittest.TestCase):
         self.commit()
 
     # ---------- the slice ----------
-    def to_ideation(self):
-        self.tool("init")
+    def agent_docs(self):
         (self.root / "docs" / "agents" / "game.md").write_text("# Game workflow\n")
         (self.root / "docs" / "agents" / "docs.md").write_text("# Docs\n")
-        self.edit("state.json", lambda s: s.update(docs_verified={"place": "ClickUp doc", "date": "2026-11-22"}))
+
+    def to_scan(self):
+        self.tool("init")
+        self.agent_docs()
+        self.edit("state.json", lambda s: s.update(docs_verified={"place": "ClickUp doc", "date": "2026-11-22"},
+                                                   intent="sell", research_sources=SOURCES))
         self.commit()
         self.assertEqual(self.next(), "with-user: game-setup")
         self.tool("complete")
+        self.tool("advance")
+        self.assertEqual(self.next(), "game-research scan")
+
+    def scan(self, refs=COMPS):
+        """The landscape scan: the landscape page and the comps as candidate references."""
+        self.edit("wiki.json", lambda d: d["pages"].append(page("landscape")))
+        self.write("docs/game/" + REFS, json.dumps({"scanned_for": None, "refs": list(refs)}))
+        self.commit()
+        self.tool("complete")
+
+    def to_ideation(self):
+        self.to_scan()
+        self.scan()
+        self.sync()
         self.tool("advance")
         self.assertEqual(self.next(), "with-user: game-ideation")
 
     def test_setup_waits_for_a_verified_docs_place(self):
         self.tool("init")
-        (self.root / "docs" / "agents" / "game.md").write_text("# Game workflow\n")
-        (self.root / "docs" / "agents" / "docs.md").write_text("# Docs\n")
+        self.agent_docs()
         self.commit()
         self.assertEqual(self.next(), "with-user: game-setup")
         self.assertIn("docs not verified", self.tool("complete", ok=False))
         self.assertIn("stop: waiting for a person", self.next("--no-user"))
-        self.edit("state.json", lambda s: s.update(docs_verified={"place": "ClickUp doc", "date": "2026-11-22"}))
+        self.edit("state.json", lambda s: s.update(docs_verified={"place": "ClickUp doc", "date": "2026-11-22"},
+                                                   intent="sell", research_sources=SOURCES))
         self.commit()
         self.tool("complete")
+
+    def open_references(self):
+        """Ideation's pick: the comps are studied, plus one aspect reference per role they leave out."""
+        def fn(d):
+            for r in d["refs"]:
+                if r["why"] == "comp":
+                    r["status"] = "open"
+            covered = {role for r in d["refs"] if r["status"] == "open" for role in r["roles"]}
+            n = len(d["refs"])
+            for role in ROLES:
+                if role not in covered:
+                    n += 1
+                    d["refs"].append(ref(f"R{n}", f"the {role} reference", roles=(role,), status="open"))
+        self.edit(REFS, fn)
 
     def ideate(self):
         (self.game / "vision.json").write_text(json.dumps(VISION_JSON))
         self.write_wiki(["Vision"])
         (self.game / "topics.json").write_text(json.dumps(SEED_TOPICS))
+        self.open_references()
         self.commit()
         self.tool("complete")
+        self.sync()
+        self.tool("advance")
+        self.assertEqual(self.phase(), ("research", None))
+
+    def write_audit(self, rid, notes=()):
+        notes = list(notes)
+        self.write(f"docs/game/research/refs/{rid}/audit.json", json.dumps(
+            {"role": "creative", "target": rid, "commit": self.git("rev-parse", "HEAD").strip(), "independent": True,
+             "inputs": [], "result": "notes" if notes else "ok", "reason": "", "notes": notes}))
+
+    def study(self, rid):
+        """One game-research ref session: a dossier per role, an image per image role, sources and an audit."""
+        base = f"docs/game/research/refs/{rid}"
+
+        def fn(d):
+            r = next(r for r in d["refs"] if r["id"] == rid)
+            for role in r["roles"]:
+                self.write(f"{base}/{role}.md", f"# {r['title']}: {role}\n")
+                if role in IMAGE_ROLES:
+                    self.write(f"{base}/{role}/shot-1.png", "png")
+            r.update(status="studied", sources=[f"https://store.example/{rid}/{n}" for n in range(3)],
+                     how_studied={role: {"how": "read", "reason": ""} for role in r["roles"]})
+        self.edit(REFS, fn)
+        self.write_audit(rid)
+        self.commit()
+
+    def brief(self):
+        """game-research brief: the research page and the homework list."""
+        self.edit("wiki.json", lambda d: d["pages"].append(page("research")))
+        self.write("docs/game/" + HOMEWORK, json.dumps({"reason": "", "items": [
+            {"id": "H1", "what": "play R1 for 20 minutes", "why": "the feel north star",
+             "questions": ["does the dash read at a glance?"], "minutes": 20, "roles": ["feel"],
+             "status": "answered", "answer": "yes, from the trail"}]}))
+        self.commit()
+
+    def research(self):
+        for r in self.load(REFS)["refs"]:
+            if r["status"] == "open":
+                self.study(r["id"])
+        self.brief()
+        self.tool("complete")
+
+    def to_brainstorm(self):
+        self.to_ideation()
+        self.ideate()
+        self.research()
         self.sync()
         self.tool("advance")
         self.assertEqual(self.phase(), ("brainstorm", None))
 
     def to_plan(self):
-        self.to_ideation()
-        self.ideate()
+        self.to_brainstorm()
         self.assertTrue(self.next().startswith("with-user: game-brainstorm T2"))  # core before support
         self.write_wiki(SLICE_AREAS)
         self.resolve("T2", "T3", "T7", "T8", "T9", "T10", "T11")  # the slice's topics; T4-T6 wait for production
@@ -428,8 +532,7 @@ class GameRun(unittest.TestCase):
         self.assertIn("topic T2: role 'audio' is switched off in vision.json roles_off", self.tool("check", ok=False))
 
     def test_consolidate_gate_skips_areas_of_roles_switched_off(self):
-        self.to_ideation()
-        self.ideate()
+        self.to_brainstorm()
         self.edit("vision.json", lambda v: v.update(roles_off={"audio": "muted"}))
         self.edit("topics.json", lambda d: d.update(topics=[t for t in d["topics"] if t["id"] != "T9"]))
         self.write_wiki([a for a in SLICE_AREAS if a != "Audio"])
@@ -580,7 +683,7 @@ class GameRun(unittest.TestCase):
         self.edit("state.json", lambda s: s.update(stop_reason=None))
         self.commit()
         self.tool("advance")
-        self.assertEqual(self.next(), "with-user: game-ideation restart docs/adr/0001-v.md")
+        self.assertEqual(self.next(), "game-research restart docs/adr/0001-v.md")
 
     def test_ideation_needs_the_slice_and_a_slice_topic(self):
         self.to_ideation()
@@ -681,6 +784,7 @@ class GameRun(unittest.TestCase):
         (self.game / "vision.json").write_text(json.dumps(VISION_JSON))
         self.edit("topics.json", lambda d: d.update(topics=[t for t in SEED_TOPICS["topics"] if t["id"] != "T8"]))
         self.write_wiki(["Vision"])
+        self.open_references()
         self.commit()
         self.assertIn("no slice topic for role art (its page)", self.tool("complete", ok=False))
         v = dict(VISION_JSON, roles_off={"art": "no art role"})
@@ -708,8 +812,7 @@ class GameRun(unittest.TestCase):
         self.assertIn("vision.json has no anti-pillar", self.tool("gate", ok=False))
 
     def test_consolidate_gate_needs_a_page_per_area_for_the_stage(self):
-        self.to_ideation()
-        self.ideate()
+        self.to_brainstorm()
         self.write_wiki([a for a in SLICE_AREAS if a != "Feel"])
         self.resolve("T2", "T3", "T7", "T8", "T9", "T10", "T11")
         self.sync()
@@ -717,8 +820,7 @@ class GameRun(unittest.TestCase):
         self.assertIn("wiki.json has no page in area 'Feel'", self.tool("gate", ok=False))
 
     def test_slice_consolidate_needs_a_human_item_and_production_needs_richness(self):
-        self.to_ideation()
-        self.ideate()
+        self.to_brainstorm()
         self.write_wiki(SLICE_AREAS)
         self.resolve("T2", "T3", "T7", "T8", "T9", "T10", "T11")
         self.sync()
@@ -728,10 +830,191 @@ class GameRun(unittest.TestCase):
         self.commit()
         self.assertIn("no human item for the slice playtest", self.tool("gate", ok=False))
 
-    # ---------- tests: review items ----------
-    def test_slice_consolidate_needs_review_items_for_creative_art_and_feel(self):
+    # ---------- tests: research ----------
+    def test_setup_needs_intent_and_checked_research_sources(self):
+        self.tool("init")
+        self.agent_docs()
+        self.edit("state.json", lambda s: s.update(docs_verified={"place": "ClickUp doc", "date": "2026-11-22"}))
+        self.commit()
+        out = self.tool("complete", ok=False)
+        self.assertIn("state.intent must be one of ['sell', 'hobby']", out)
+        self.assertIn("research sources not checked (game-setup records research_sources)", out)
+        self.edit("state.json", lambda s: s.update(intent="profit", research_sources={"reachable": []}))
+        self.commit()
+        out = self.tool("complete", ok=False)
+        self.assertIn("state.intent must be one of ['sell', 'hobby']", out)
+        self.assertIn("research sources not checked (game-setup records research_sources)", out)
+        self.edit("state.json", lambda s: s.update(intent="hobby", research_sources=SOURCES))
+        self.commit()
+        self.tool("complete")
+        self.assertFalse((self.game / "research").exists())  # init writes no research files; the research skill does
+
+    def test_the_scan_runs_alone_before_ideation(self):
+        self.to_scan()
+        self.assertEqual(self.next("--no-user"), "game-research scan")
+        self.write("docs/game/" + REFS, json.dumps({"scanned_for": None, "refs": COMPS[:2]}))
+        self.commit()
+        out = self.tool("complete", ok=False)
+        self.assertIn("scan: 2 comps; needs 3", out)
+        self.assertIn("wiki.json has no page 'landscape'", out)
+        self.edit("state.json", lambda s: s.update(task=None))  # with its task cleared, the scan still runs alone
+        self.commit()
+        self.assertEqual(self.next(), "game-research scan")
+        self.assertEqual(self.next("--no-user"), "game-research scan")
+        self.scan()
+        self.sync()
+        self.tool("advance")
+        self.assertEqual(self.phase(), ("ideation", None))
+        self.assertEqual(self.next(), "with-user: game-ideation")
+
+    def test_hobby_needs_no_comps_but_sell_needs_three(self):
+        self.to_scan()
+        self.edit("wiki.json", lambda d: d["pages"].append(page("landscape")))
+        self.write("docs/game/" + REFS, json.dumps({"scanned_for": None, "refs": COMPS[:2] + [ref("R3", "Okami")]}))
+        self.commit()
+        self.assertIn("scan: 2 comps; needs 3", self.tool("gate", ok=False))  # an aspect reference is no comp
+        self.edit("state.json", lambda s: s.update(intent="hobby"))
+        self.edit(REFS, lambda d: d.update(refs=[]))
+        self.commit()
+        self.assertIn("gate scan: PASS", self.tool("gate"))
+        self.edit("state.json", lambda s: s.update(intent="sell"))
+        self.edit(REFS, lambda d: d.update(refs=COMPS))
+        self.commit()
+        self.assertIn("gate scan: PASS", self.tool("gate"))
+
+    def test_ideation_opens_a_reference_per_active_role(self):
+        self.to_ideation()
+        (self.game / "vision.json").write_text(json.dumps(VISION_JSON))
+        self.write_wiki(["Vision"])
+        (self.game / "topics.json").write_text(json.dumps(SEED_TOPICS))
+        self.commit()
+        out = self.tool("complete", ok=False)
+        for role in ROLES:  # the scan's comps are only candidates
+            self.assertIn(f"references.json: no reference opened for study for role {role}", out)
+        self.open_references()
+        self.edit(REFS, lambda d: d["refs"][0].update(status="candidate"))  # R1, the only comp with art
+        self.commit()
+        out = self.tool("complete", ok=False)
+        self.assertIn("references.json: no reference opened for study for role art", out)
+        self.assertEqual(out.count("no reference opened for study"), 1)
+        self.edit("vision.json", lambda v: v.update(roles_off={"art": "the game is text only"}))
+        self.edit("topics.json", lambda d: d.update(topics=[t for t in d["topics"] if t["id"] != "T8"]))
+        self.commit()
+        self.tool("complete")  # a role switched off needs no reference
+
+    def test_research_runs_one_session_per_open_reference_then_the_brief(self):
         self.to_ideation()
         self.ideate()
+        self.edit(REFS, lambda d: d["refs"].insert(0, ref("R9", "Okami")))  # a candidate nobody picked
+        self.commit()
+        self.assertIn("R1: open, not studied yet", self.tool("gate", ok=False))
+        opened = [r["id"] for r in self.load(REFS)["refs"] if r["status"] == "open"]
+        self.assertEqual(opened, ["R1", "R2", "R3", "R4", "R5"])
+        for rid in opened:
+            self.assertEqual(self.next(), f"game-research ref {rid}")
+            self.assertEqual(self.next("--no-user"), f"game-research ref {rid}")
+            self.study(rid)
+        self.assertEqual(self.next(), "game-research brief")
+        self.assertEqual(self.next("--no-user"), "game-research brief")
+        self.write("docs/game/" + HOMEWORK, json.dumps({"reason": "the agent could do it all", "items": []}))
+        self.commit()
+        self.assertEqual(self.next(), "game-research brief")  # the research page is still missing
+        self.edit("wiki.json", lambda d: d["pages"].append(page("research")))
+        self.commit()
+        self.tool("complete")
+        self.sync()
+        self.assertEqual(self.next("--no-user"), "advance")
+        self.tool("advance")
+        self.assertEqual(self.phase(), ("brainstorm", None))
+
+    def test_research_gate_checks_evidence_per_reference(self):
+        self.to_ideation()
+        self.ideate()
+        self.research()  # its complete passed the gate
+        r1 = self.game / "research" / "refs" / "R1"
+        self.edit(REFS, lambda d: d["refs"][0].update(sources=d["refs"][0]["sources"][:2]))
+        self.edit(REFS, lambda d: d["refs"][0]["how_studied"].pop("feel"))
+        (r1 / "art" / "shot-1.png").unlink()
+        (r1 / "design.md").unlink()
+        out = self.tool("gate", ok=False)
+        self.assertIn("R1: 2 sources; needs 3", out)
+        self.assertIn("R1: no image for the art section", out)
+        self.assertIn("R1: no design dossier (docs/game/research/refs/R1/design.md)", out)
+        self.assertIn("R1: feel how_studied not set", out)
+        self.edit(REFS, lambda d: d["refs"][0]["how_studied"].update(art={"how": "not-assessed"}))
+        out = self.tool("gate", ok=False)
+        self.assertIn("R1: art not-assessed needs a reason", out)
+        self.assertNotIn("R1: no image for the art section", out)  # what wasn't assessed needs no image
+        self.write_audit("R1", [self.note(decision="")])
+        self.assertIn("R1: audit note N1 is open", self.tool("gate", ok=False))
+        self.write_audit("R1", [self.note(severity="blocking", decision="wontfix: the shot is fine")])
+        self.assertIn("R1: audit note N1 is blocking and not fixed", self.tool("gate", ok=False))
+        (r1 / "audit.json").unlink()
+        self.assertIn("R1: no audit (docs/game/research/refs/R1/audit.json)", self.tool("gate", ok=False))
+
+    def test_brainstorm_waits_on_open_homework(self):
+        self.to_brainstorm()
+        self.edit(HOMEWORK, lambda d: d["items"][0].update(status="open", answer=""))
+        self.commit()
+        self.assertEqual(self.next(), "with-user: game-research homework")  # before any topic
+        self.assertEqual(self.next("--no-user"), HOMEWORK_WAIT)
+        self.tool("tick", "with-user: game-research homework")
+        counters = self.load("state.json")["counters"]
+        self.assertEqual((counters["sessions"], counters["brainstorm_sessions"]), (1, 0))
+        self.edit(HOMEWORK, lambda d: d["items"][0].update(status="skip"))
+        self.commit()
+        self.assertTrue(self.next().startswith("with-user: game-brainstorm T2"))
+
+    def test_malformed_research_files_are_reasons_not_crashes(self):
+        self.to_ideation()
+        self.ideate()
+
+        def run():
+            out = self.tool("check", ok=False) + self.tool("status") + self.tool("gate", ok=False)
+            self.assertNotIn("Traceback", out)
+            return out
+        self.write("docs/game/" + REFS, "[]")
+        self.write("docs/game/" + HOMEWORK, json.dumps({"items": "x"}))
+        self.write("docs/game/research/refs/R1/audit.json", "[]")
+        out = run()
+        for expected in ("references.json is not an object", "homework.json items is not a list",
+                         "docs/game/research/refs/R1/audit.json: not a JSON object"):
+            self.assertIn(expected, out)
+        self.write("docs/game/" + REFS, json.dumps({"refs": "x"}))
+        self.write("docs/game/" + HOMEWORK, "[]")
+        out = run()
+        self.assertIn("references.json refs is not a list", out)
+        self.assertIn("homework.json is not an object", out)
+        bad = {"id": "R2", "why": "vibes", "status": "maybe", "roles": ["lighting"], "sources": "x",
+               "how_studied": {"art": {"how": "dreamt"}, "lighting": "x"}}
+        self.write("docs/game/" + REFS, json.dumps({"refs": ["R1", bad, dict(bad, roles="art", how_studied=[]),
+                                                             {"why": "comp"}]}))
+        items = [{"id": f"H{n}", "status": "open", "roles": []} for n in range(1, 12)]
+        items[0]["status"], items[1]["id"], items[2]["roles"] = "later", "H1", ["lighting"]
+        self.write("docs/game/" + HOMEWORK, json.dumps({"reason": "", "items": items + ["H12"]}))
+        out = run()
+        for expected in ("references.json refs: entry 1 is not an object",
+                         "references.json R2: why must be one of ['comp', 'aspect']",
+                         "references.json R2: status must be one of ['candidate', 'open', 'studied']",
+                         "references.json R2: role 'lighting' is not one of",
+                         "references.json R2: sources must be a list",
+                         "references.json R2: how_studied art: how must be one of "
+                         "['played', 'watched', 'read', 'not-assessed']",
+                         "references.json R2: how_studied role 'lighting' is not one of",
+                         "references.json R2: duplicate id", "references.json R2: roles must be a list",
+                         "references.json R2: how_studied must be an object",
+                         "references.json refs: entry 4 has no id",
+                         "homework.json H1: status must be one of ['open', 'answered', 'skip']",
+                         "homework.json H1: duplicate id", "homework.json H3: role 'lighting' is not one of",
+                         "homework.json items: entry 12 is not an object",
+                         "homework.json has 12 items; keep it to 10 or fewer"):
+            self.assertIn(expected, out)
+        self.write("docs/game/" + HOMEWORK, json.dumps({"reason": " ", "items": []}))
+        self.assertIn("homework.json has no items and no reason", run())
+
+    # ---------- tests: review items ----------
+    def test_slice_consolidate_needs_review_items_for_creative_art_and_feel(self):
+        self.to_brainstorm()
         self.write_wiki(SLICE_AREAS)
         self.resolve("T2", "T3", "T7", "T8", "T9", "T10", "T11")
         self.sync()
@@ -855,20 +1138,39 @@ class GameRun(unittest.TestCase):
         self.tool("advance")  # the re-plan changed nothing in core-loop
         self.assertEqual(self.next(), "game-verdict core-loop")
 
-    def test_restart_goes_back_to_ideation_and_archives_features_and_queue(self):
+    def test_restart_rescans_then_ideates_then_studies_only_new_references(self):
         self.to_core_verdict()
         self.edit("state.json", lambda s: s["human_queue"].append({"id": "H1", "what": "x", "unblocks": ["F2"]}))
         self.commit()
+        dossier = self.game / "research" / "refs" / "R1" / "art.md"
+        studied = dossier.read_text()
         self.record_verdict("restart")
         self.tool("advance")
-        self.assertEqual(self.next(), "with-user: game-ideation restart docs/adr/0001-v.md")
+        adr = "docs/adr/0001-v.md"
+        self.assertEqual(self.next(), f"game-research restart {adr}")
+        self.assertEqual(self.next("--no-user"), f"game-research restart {adr}")
         self.assertEqual(self.load("features.json")["features"], [])
         self.assertEqual(self.load("state.json")["human_queue"], [])
         archive = self.game / "archive" / "restart-1"
         self.assertTrue((archive / "features.json").exists() and (archive / "human-queue.json").exists())
+        self.assertIn(f"references.json scanned_for is not {adr}: re-scan for the restart, then set it",
+                      self.tool("complete", ok=False))
+        self.edit(REFS, lambda d: d.update(scanned_for=adr))
+        self.commit()
         self.tool("complete")
-        self.tool("advance")  # ideation -> brainstorm: nothing open for the slice, the wiki unchanged
-        self.tool("advance")  # brainstorm -> consolidate
+        self.tool("advance")  # scan -> ideation: the wiki unchanged
+        self.assertEqual(self.next(), f"with-user: game-ideation restart {adr}")
+        self.edit(REFS, lambda d: d["refs"].append(ref("R6", "Okami", roles=("art",), status="open")))
+        self.commit()
+        self.tool("complete")
+        self.tool("advance")  # ideation -> research
+        self.assertEqual(self.next(), "game-research ref R6")  # the studied references are not studied again
+        self.study("R6")
+        self.assertFalse(self.next().startswith("game-research ref"))
+        self.assertEqual(dossier.read_text(), studied)
+        self.assertEqual(next(r for r in self.load(REFS)["refs"] if r["id"] == "R1")["status"], "studied")
+        self.tool("advance")  # research -> brainstorm
+        self.tool("advance")  # brainstorm -> consolidate: nothing open for the slice
         self.tool("complete")
         self.tool("advance")
         self.assertEqual(self.next(), "game-plan restart docs/adr/0001-v.md")
@@ -1102,7 +1404,8 @@ class GameRun(unittest.TestCase):
             self.sync()
 
     def test_the_gdd_is_never_stale_while_the_index_has_no_pages(self):
-        self.to_ideation()  # init wrote an empty wiki.json, and the GDD was never synced
+        self.tool("init")  # an empty wiki.json, and the GDD never synced
+        self.commit()
         self.assertIn("human GDD: in sync", self.tool("status"))
         self.write("docs/game/own-calls.md", "| today | F1 | a call |\n")
         self.write("docs/game/wiki.json", json.dumps({"pages": []}))
@@ -1110,8 +1413,7 @@ class GameRun(unittest.TestCase):
         self.assertIn("human GDD: in sync", self.tool("status"))
 
     def test_brainstorm_share_lets_support_topics_wait_until_consolidate_defers_them(self):
-        self.to_ideation()
-        self.ideate()
+        self.to_brainstorm()
         self.edit("state.json", lambda s: s["limits"].update(budget_sessions=10))
         self.commit()
         for _ in range(2):
@@ -1208,10 +1510,13 @@ class GameRun(unittest.TestCase):
         self.assertIn("stop: waiting for a person", self.next("--no-user"))
         self.assertIn("to do 'game-setup upgrade' together", self.next("--no-user"))
         self.edit("state.json", lambda s: s.update(version=6))
-        (self.root / "docs" / "agents" / "game.md").write_text("# Game workflow\n")
-        (self.root / "docs" / "agents" / "docs.md").write_text("# Docs\n")
-        self.edit("state.json", lambda s: s.update(docs_verified={"place": "ClickUp doc", "date": "2026-11-22"}))
+        self.agent_docs()
+        self.edit("state.json", lambda s: s.update(docs_verified={"place": "ClickUp doc", "date": "2026-11-22"},
+                                                   intent="sell", research_sources=SOURCES))
         self.commit()
+        self.tool("advance")
+        self.scan()  # the scan between them is the agent's alone
+        self.sync()
         self.tool("advance")
         self.edit("state.json", lambda s: s.update(task=None))
         self.commit()

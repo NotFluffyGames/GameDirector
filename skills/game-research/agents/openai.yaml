@@ -1,0 +1,5 @@
+interface:
+  display_name: "Game Research"
+  short_description: "Landscape scan, reference dossiers and homework"
+policy:
+  allow_implicit_invocation: false

@@ -19,6 +19,7 @@
   "skills": [
     "./skills/game-next",
     "./skills/game-setup",
+    "./skills/game-research",
     "./skills/game-ideation",
     "./skills/game-brainstorm",
     "./skills/game-consolidate",
