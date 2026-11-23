@@ -1,17 +1,16 @@
 ---
 name: game-setup
-description: Configure a repo for the game-* skills (autonomy, limits, tracker, where human-facing docs live, state files, the user's seed idea), and later fill and smoke-test the engine adapter commands. The first /game-next session runs it; game-plan runs it again once the engine is chosen.
+description: Configure a repo for the game-* skills with the user (autonomy, limits, the tasks home and the docs place beside it, smoke-tested, wiki and GDD skeletons, state files, the seed idea); fill and smoke-test the engine adapter commands once an engine exists; upgrade a game set up with an older version. The first /game-next session runs it, game-plan runs adapter mode, and /game-next runs upgrade mode for an older game still at setup.
 disable-model-invocation: true
 ---
 
 # Game Setup
 
-Writes the per-repo config every game-* session reads, so no skill hardcodes an engine, platform or tracker. Two modes:
+Writes the per-repo config every game-* session reads, so no skill hardcodes an engine, platform or tracker. Three modes, taken from the task, or with no task from the game:
 
-- **project**: the first run, before any engine is chosen.
-- **adapter**: once an engine exists, fill and smoke-test the build, run and verify commands.
-
-Take the mode from the task. With no task: project mode when `docs/agents/game.md` is missing, otherwise adapter mode.
+- **upgrade**: the task `game-setup upgrade`: an older game's files brought up to this version.
+- **project**: the task `game-setup`; with no task, a game with no `docs/game/state.json` yet, or one whose `phase` is still `setup`. The first run, before any engine is chosen; a session that resumes it skips the steps whose **Done when** already holds.
+- **adapter**: game-plan's step 2 sends you here, or the user asks once an engine exists: fill and smoke-test the build, run and verify commands.
 
 ## Project mode
 
@@ -44,9 +43,9 @@ Read what exists before deciding anything:
 
 The docs place is the tracker's docs feature at the tasks home. When the tracker can't host docs, the user picks a docs tool beside it; local files only when they choose them.
 
-Fill [docs.md](docs.md) as `docs/agents/docs.md`: the tasks home, the docs place, and how to read, write and comment there. Run every step of its Smoke test table in the docs place, remove what the test created, and record each result and date. Set page protection where the tool supports it, so people comment and sessions edit.
+Fill [docs.md](docs.md) as `docs/agents/docs.md`: the tasks home, the docs place, how to read, write and comment there, and which **version** a page has there. Run every step of its Smoke test table in the docs place, remove what the test created, and record each result and date. Protect the wiki's container (the folder, space or doc that holds its pages) so people comment and sessions edit, and pages created later inherit it; where the tool has no page permissions, tell the user and record `not supported (user told)`.
 
-**Done when** every Smoke test row holds a pass and a date, or the user has picked another place and `docs/agents/docs.md` is refilled for it (its Docs place section and its Smoke test table) with every row passing.
+**Done when** every Smoke test row holds a pass and a date (`protect the wiki` may hold `not supported (user told)`), or the user has picked another place and `docs/agents/docs.md` is refilled for it (its Docs place section and its Smoke test table) with every row passing.
 
 ### 4. Create the skeletons
 
@@ -61,14 +60,14 @@ Fill [docs.md](docs.md) as `docs/agents/docs.md`: the tasks home, the docs place
 1. No git repository: `git init` and an initial commit.
 2. `docs/agents/game.md` from [game.md](game.md), with the autonomy mode filled in.
 3. Copy [scripts/gamestate.py](scripts/gamestate.py) to `docs/game/gamestate.py` and run `python3 docs/game/gamestate.py init` (`python` where `python3` doesn't exist). Apply limit overrides to `docs/game/state.json`, and set `docs_verified` to `{"place": "<docs place>", "date": "<today>"}`. Without any Python 3, tell the user the gates become manual and stop.
-4. `docs/game/wiki.json` with the home page as its one page: `id` `index`, `title`, `area` Vision, `link` (from step 4), `version` (the docs tool's version, or 1) and `updated` (today).
+4. `docs/game/wiki.json` with the home page as its one page: `id` `index`, `title`, `area` Vision, `link` (from step 4), `version` (the page's version, read back as `docs/agents/docs.md` says) and `updated` (today's date and a reason, e.g. `2026-11-23: created by setup`).
 5. `docs/game/seed.md`: the user's prompt, verbatim, with any flags. Ideation reads it, and every restart.
 6. In `CLAUDE.md` or `AGENTS.md` (whichever exists; if neither, the one your harness reads), add under `## Agent skills`:
 
    ```markdown
    ### Game workflow
 
-   [autonomous | interactive] game-* workflow, one step per session: run `/game-next`. Agent-facing wiki and state in `docs/game/`; human-facing GDD where `docs/agents/docs.md` says. See `docs/agents/game.md`.
+   [autonomous | interactive] game-* workflow, one step per session: run `/game-next`. State in `docs/game/`; the wiki (for agents) and the GDD (for people) live where `docs/agents/docs.md` says. See `docs/agents/game.md`.
    ```
 
 7. When an engine project already exists, do adapter mode now.
@@ -107,21 +106,24 @@ Task `game-setup upgrade`: bring an older game's files up to this version, with 
 
 ### 1. Upgrade the state
 
-Copy [scripts/gamestate.py](scripts/gamestate.py) over `docs/game/gamestate.py`, then run `python3 docs/game/gamestate.py upgrade`.
+Run this skill's copy of the tool against the repo, before replacing the repo's copy: `python3 <this skill's folder>/scripts/gamestate.py upgrade --root .` (the file is [scripts/gamestate.py](scripts/gamestate.py)). It commits what it changed. When it refuses (no game state here, a game newer than this plugin, a version that isn't a whole number, or a game past setup), it has changed nothing: tell the user what it said and stop. Otherwise copy [scripts/gamestate.py](scripts/gamestate.py) over `docs/game/gamestate.py` and commit it.
 
-**Done when** `upgrade` reports the current version.
+**Done when** `upgrade` reports the current version (or that it was already there) and `docs/game/gamestate.py` is this skill's copy, committed; or it refused and the user has its message.
 
 ### 2. Refresh the shared files
 
-Replace every section of `docs/agents/game.md` with the one in [game.md](game.md), except the autonomy mode and the Commands table, which keep their values. Rename `docs/agents/human-docs.md` to `docs.md` when it exists, and follow its renamed path wherever the repo mentions it.
+1. Replace every section of `docs/agents/game.md` with the one in [game.md](game.md), except the autonomy mode and the Commands table, which keep their values.
+2. Show the user `git diff docs/agents/game.md` and ask which removed lines were their own edits; put back each one they keep, in the section it belongs to. The old text stays in git history.
+3. Rename `docs/agents/human-docs.md` to `docs.md` when it exists, and follow its renamed path wherever the repo mentions it.
+4. Replace the `### Game workflow` block in `CLAUDE.md` or `AGENTS.md` with project step 5.6's, keeping its autonomy mode.
 
-**Done when** `docs/agents/game.md` matches [game.md](game.md) apart from those two, and no `human-docs.md` remains.
+**Done when** `docs/agents/game.md` matches [game.md](game.md) apart from the autonomy mode, the Commands table and the edits the user kept, no `human-docs.md` remains, and the `### Game workflow` block says to run `/game-next`.
 
 ### 3. Verify the docs place
 
-When `docs_verified` in `docs/game/state.json` is set, skip this step. Otherwise run project mode's steps 2 to 4 with the user, then register the home page's `index` entry in `docs/game/wiki.json` as project step 5.4 does (when `wiki.json` has none) and set `docs_verified` as step 5.3 does.
+Skip this step when `docs_verified` in `docs/game/state.json` is set and `docs/game/wiki.json` has an `index` entry with a link. Otherwise, with the user: project mode's steps 2 and 3 when `docs_verified` is unset, and its step 4 for each skeleton page the docs place lacks. Then register the home page's `index` entry in `wiki.json` as project step 5.4 does (when it has none) and set `docs_verified` as step 5.3 does.
 
-**Done when** `docs_verified` is set and `wiki.json` has an `index` entry with a link, or `docs_verified` was set already.
+**Done when** `docs_verified` is set and `wiki.json` has an `index` entry with a link.
 
 ### 4. Close
 

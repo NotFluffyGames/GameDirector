@@ -1,6 +1,6 @@
 # Game workflow
 
-Config for the game-* skills. Every game-* session reads this file first. Edit it freely; it is the project's, not the skills'.
+Config for the game-* skills. Every game-* session reads this file first. Edit it freely; it is the project's, not the skills'. `game-setup upgrade` refreshes the sections the skills own and shows you what it replaces.
 
 ## The goal
 

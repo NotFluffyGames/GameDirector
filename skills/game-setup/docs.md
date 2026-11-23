@@ -12,32 +12,35 @@ Where the wiki and the GDD live, so they sit next to the tasks. The game-* skill
 
 ## How to read, write and comment
 
-<The tools or commands for each: create a page, read its current text and version, update a page, read comments and reply, link a page from a task, delete a page, protect a page. People comment and sessions edit.>
+<The tools or commands for each: create a page, read its current text and version, update a page, read comments and reply, link a page from a task, delete a page, protect the wiki. People comment and sessions edit.>
+
+<A page's **version**, as `wiki.json` records it: the docs tool's version number for the page; where it has none, its last-modified time; where it has neither, a hash of the page's text as read back (`git hash-object --stdin`). Write here which one this place uses.>
+
+<Local files: sessions edit the markdown files. People comment in a `## Comments` section at the end of each page (or in review comments on the commits that change it), and sessions reply there. A page's version is the git hash of its text above that section: `sed '/^## Comments/,$d' <file> | git hash-object --stdin`, so a comment is not an edit. A task links a page by its repo path. Local files can't be protected: tell the user, and record that in the protect row.>
 
 ## Smoke test
 
-Run in the docs place during setup; every step must pass before setup completes.
+Run in the docs place during setup, on a test page; every step must pass before setup completes. The one exception is `protect the wiki`: where the tool has no page permissions, it reads `not supported (user told)` once you have told the user.
 
 | Step | Result | Date |
 | --- | --- | --- |
 | create | | |
 | read | | |
-| edit | | |
+| read version or last-modified | | |
+| edit (and the version moves) | | |
 | comment | | |
 | read comments | | |
 | link from a task | | |
 | delete | | |
-| protect pages | | |
+| protect the wiki | | |
 
 ## Wiki pages
 
 | Page id | Link |
 | --- | --- |
-| vision | |
-| slice | |
-| concepts | |
+| index | |
 
-The ids match `docs/game/wiki.json`, which holds every page; list here the pages that anchor the wiki, such as its home page.
+The ids match `docs/game/wiki.json`, which holds every page; list here the pages that anchor the wiki. Setup records the home page, `index`.
 
 ## GDD pages
 
@@ -57,4 +60,4 @@ The ids match `docs/game/wiki.json`, which holds every page; list here the pages
 | Kept | |
 | Changes | |
 
-game-gdd fills in the ids and links when it creates the pages.
+Setup creates these pages, each holding only its title, and records their links; game-gdd fills them and records any page it adds.
