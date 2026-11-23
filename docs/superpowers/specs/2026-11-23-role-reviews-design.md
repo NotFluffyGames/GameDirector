@@ -24,7 +24,13 @@ Studios avoid this with roles: a creative director, a game designer, an art dire
    - **calibration:** labelling about ten screenshots "our game / not our game" once the first in-game visual target exists;
    - **A/B picks in polish:** choosing between before-and-after captures.
 6. **A role's judgment can fail a verdict only when it is anchored to the person.** It must point to something the person set that the build contradicts: a calibration label, a reference they chose, or a page rule. A judgment without an anchor stays a note that becomes work.
-7. **Research is its own phase, between setup and ideation** (see "Research phase").
+7. **Research is its own phase, between setup and ideation** (see "Research phase"). It is thorough by structure:
+   - one session per reference;
+   - each relevant role studies it from its own angle, in parallel;
+   - evidence the gate checks;
+   - an audit that blocks shallow work.
+
+   The agent does what it can, including playing browser games. What it can't do becomes a homework list for the person, and **ideation waits until each item is answered or skipped**.
 8. **Structure: one skill per role, one agent per role, and one review skill.**
    - The **role skill** holds the role's process for every phase and its page template. The main session uses it with the person.
    - The **role agent** is thin: limited tools, its own model, and its role skill preloaded. It runs challenges and reviews in parallel.
@@ -50,6 +56,7 @@ Studios avoid this with roles: a creative director, a game designer, an art dire
 - New roles for producer, technical director and QA. Their work already lives in game-plan (scope, budgets, tech ADRs), game-build (tests) and game-verdict (stability, packaging). This design leaves it there.
 - Role sign-offs on documents. Brainstorm challenges are the one place roles read text, because there is no build yet, and the person answers them.
 - Multi-repo plans 2–4. They come after this (see Calls I made).
+- Public market tests: a store page, wishlists, Steam Next Fest or Playtest. They need a public page, belong after the vertical slice, and publishing is out of scope.
 
 ## Anti-goals (failure even if it works)
 
@@ -143,18 +150,77 @@ The table fixes each role's ownership, page and the kind of checks it runs. The 
 
 ### Research phase (before ideation)
 
-A new phase, `research`, sits between setup and ideation, with a new skill `game-research`. The findings in [docs/research/2026-11-23-game-market-research.md](../../research/2026-11-23-game-market-research.md) set its details (that research is still running as this draft is written). What is decided:
+A new phase, `research`, sits between setup and ideation, with a new skill `game-research`. Its findings come from [docs/research/2026-11-23-game-market-research.md](../../research/2026-11-23-game-market-research.md).
 
-- **It runs without the person, from the seed** (`docs/game/seed.md`): it gathers and reads data, so unattended runs can do it. Ideation is where the person meets it.
-- **It hands ideation a research brief** (a wiki page, `research`, area Vision, plus data files under `docs/game/research/`):
-  - comparable games and what their numbers and reviews show;
-  - who plays games like this and why;
-  - **the genre default**: what most games of this kind do, which the `creative` role asks the person to depart from;
-  - references per aspect (play, look, sound, tone), each with what to take and what to avoid;
-  - risks.
-- **Ideation opens by going through the brief with the person.** They correct it before the vision is set, and the roles' north stars start from its references.
-- **Its depth follows the person's intent**, asked in setup: `commercial` gets numbers and positioning; `hobby` gets mostly references and genre conventions.
-- **It runs again on a restart.** The restart ADR's lessons may change which games are comparable.
+**What it is for.** It produces a short positioning package, not a market report.
+- **Comparable games** ("comps"), with dated, sourced ranges.
+- **The genre's anchors** (what players expect), plus two or three hook candidates (departures).
+- **The player**, described by motivations: Quantic Foundry's motivations for who the game is for; Self-Determination Theory and PENS for what any satisfying game must give.
+- **The platform, price and session-length norms** the comps set.
+- **What players complain about in the comps.** 57% of negative Steam reviews are about design, so this is the richest design input.
+- **References per aspect**, each with what to take and what to avoid.
+- **Risks.**
+
+Sales numbers and saturation only change scope and the go/no-go call, so they're done only when the game is meant to sell.
+
+**How it runs.** The agent works to the best of its abilities, without the person. What it can't do becomes the person's homework, and ideation waits for it.
+
+**Intent comes from setup.** Setup asks one question: `sell` or `hobby`, stored in `state.json` `intent`. `hobby` drops the sales and saturation work and keeps comps, anchors, the player, references and complaints.
+
+**Sources are checked in setup** the way the docs place is. Setup records which research hosts this machine reaches, for example `store.steampowered.com` and `api.steampowered.com`, optionally SteamSpy and itch.io RSS. It respects their terms: SteamDB forbids scraping, and Steam's review API needs all languages passed. An unreachable source turns its work into homework.
+
+**Steps, one session each:**
+
+1. **Scan** (`game-research`). From the seed, find:
+   - the comps (`sell`: at least three, each with a dated, sourced range from a review-count method, stated as a range by launch year);
+   - the anchors;
+   - the player profile;
+   - the reference list in `docs/game/research/references.json`: comps, plus at least one aspect reference per active role. Each entry has `id`, `title`, `why` (`comp` or `aspect`), `roles`, `sources`, `status` and `how_studied`.
+
+   Market numbers never come from memory.
+2. **Study one reference** (`game-research ref R3`), once per reference:
+   - **Shared material, once.** The main session gathers the store page, screenshots, negative and positive reviews (all languages), wikis and guides. When the game is playable in a browser, the agent **plays it** with Playwright and records its own captures and frame strips. Images are downscaled and saved under `docs/game/research/refs/R3/`.
+   - **The roles, in parallel.** The reference's roles each run their role skill's `research` mode on the material and write their section of the reference's dossier (`docs/game/research/refs/R3/<role>.md`). The research report lists what each role records:
+     - design: the loop, verbs, systems and numbers;
+     - art: saved shots, the extracted palette, shape and value notes, UI layout;
+     - feel: strips and timing notes;
+     - audio: what sound and music do, from descriptions (stated as unheard);
+     - narrative: premise, tone and writing samples;
+     - ux: the first minute and the HUD;
+     - creative: the hook and what's overdone.
+   - **How studied.** Each section records it per role: `played`, `watched` (frames), `read`, or `not-assessed` with the reason. It names its sources: at least three across the dossier.
+   - **Audit.** A `creative` pass audits the dossier against the role skills' dossier requirements: claims without sources, generic lines ("great art style"), missing numbers or images. Its findings are anchored to those requirements, so they block. They're fixed in the session, at most two rounds; what still can't be done becomes homework.
+3. **Brief** (`game-research brief`).
+   - **The brief page:** the `research` wiki page (area Vision), synthesized from the dossiers. It holds the comps table, anchors and hook candidates, the player, norms, complaint themes, references per aspect with take and avoid, risks, and what's still unknown.
+   - **The homework list:** at most ten items, ranked by how much each changes a decision. Each item has:
+     - what to do ("play R3 for 20 minutes", "find three screenshots of how X shows damage", "check the X community for what players miss");
+     - why: the decision or role it feeds;
+     - the questions to answer;
+     - a time estimate.
+
+     It's published as a page next to the tasks and as `ready-for-human` tickets, and added to the human queue as entries of kind `homework`.
+   - **No hook is chosen yet.** The person chooses in ideation.
+
+**The person's answers** come back through `game-research answers <file>`. Answers fill the dossiers: `played` by the person is the strongest evidence. They update the brief, and anything that contradicts a decided north star or page later becomes a topic.
+
+- **Ideation waits** until every homework item is answered or the person marks it `skip`. They may not own a game, for example.
+- **Ideation opens** by going through the brief and the answers with the person. They pick:
+  - which comps count as "us";
+  - which anchors to break;
+  - the hook;
+  - the references the roles' north stars start from.
+
+**Gate.** `research` completes when:
+- `references.json` meets the minimums for the intent;
+- every reference is `studied`, with a dossier section for each of its roles. Each section's required fields are filled and its `how_studied` is set;
+- every dossier has at least three sources, and images for the art, ux and feel sections (or `not-assessed` with a reason);
+- no audit finding is open;
+- the `research` page is in `wiki.json`;
+- the homework list exists (it may be empty, with a reason).
+
+Ideation's start then waits on the homework as above.
+
+**Restart.** A restart re-runs the scan, because a changed direction changes which games are comparable. Existing dossiers are kept.
 
 ### Ideation: north stars with the person
 
@@ -346,7 +412,7 @@ Every polish feature names its role and is reviewed by it plus `creative` agains
 
 - `ROLES = ["creative", "design", "feel", "art", "audio", "narrative", "ux"]`.
 - The new `AREAS`, with `SLICE_AREAS` excluding Modes and sessions as before.
-- Phase `research` between `setup` and `ideation`, with its gate: the brief page and the data files exist, at the depth `state.json` `intent` asks for.
+- Phase `research` between `setup` and `ideation`, with the gate above. `state.json` gets `intent` (`sell` or `hobby`) and the research sources setup verified. The human queue gets kind `homework`, and ideation waits on it.
 - `roles` on topics and features, validated as above.
 - `reviews` on features, and the review JSON shape (with `anchor`, `item` and `decision`) and its pass rule.
 - Fun item kind `review`, with `roles`, scoring and the `not-assessed` rule.
@@ -357,8 +423,9 @@ Every polish feature names its role and is reviewed by it plus `creative` agains
 ### Skills and files touched
 
 **New:**
+- `skills/game-research/`: SKILL.md with scan, ref, brief and answers modes;
 - `skills/game-review/`: SKILL.md and `scripts/measure.py`;
-- `skills/game-role-{creative,design,feel,art,audio,narrative,ux}/`: SKILL.md with `north-star`, `challenge` and `review` modes (`creative` also has `decide`), plus reference files for its questions, page template and checklist;
+- `skills/game-role-{creative,design,feel,art,audio,narrative,ux}/`: SKILL.md with `north-star`, `research`, `challenge` and `review` modes (`creative` also has `decide` and the research audit), plus reference files for its questions, page template and checklist;
 - `agents/{creative,design,feel,art,audio,narrative,ux}.md`.
 
 **Changed:**
@@ -396,3 +463,8 @@ Every polish feature names its role and is reviewed by it plus `creative` agains
 13. **A small `creative` decide pass runs after the reviews, only when notes exist.** The builder carries the decisions out and can't choose `wontfix` on its own work.
 14. **What calibration anchors:** stills anchor art, ux and creative; frame strips anchor feel. Audio taste stays with the person. Narrative and design are anchored by their pages and bot traces.
 15. **`review` items don't count toward the fun checklist's 10-item cap.**
+16. **Reference images are committed to the game repo, downscaled.** Cloud containers are fresh each session, so git-ignored files would be lost. Setup warns when the repo is public.
+17. **Homework is capped at ten items, ranked by impact**, so it stays a short list rather than a chore.
+18. **The research audit blocks, and so do the gate's minimums:**
+    - `sell`: at least three comps and one aspect reference per active role;
+    - `hobby`: one reference per active role.
