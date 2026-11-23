@@ -26,6 +26,19 @@ VISION_JSON = {
               "quality_bar": {"code": "production", "feel": "representative", "art": "representative",
                               "audio": "representative", "ui": "representative", "onboarding": "representative"}},
     "directions": {"count": 4, "choice": "C2"},
+    "north_stars": {
+        "creative": {"statement": "a duel you retell", "references": ["Samurai Gunn", "Towerfall"],
+                     "genre_default": "arena brawler", "departure": "ink-wash duels"},
+        "design": {"statement": "every round teaches", "references": ["Smash", "Rivals of Aether"]},
+        "feel": {"statement": "hits land with weight", "references": ["Hades", "Celeste"],
+                 "actions": {"dash": {"words": ["snappy"], "references": ["Celeste dash"]}}},
+        "art": {"statement": "ink on paper", "references": ["Okami", "Sumi-e"], "directions": 3, "choice": "A2"},
+        "audio": {"statement": "taiko drives the match", "references": ["Ghost of Tsushima", "Katana Zero"]},
+        "narrative": {"statement": "a rivalry in few words", "references": ["Hades", "Bastion"]},
+        "ux": {"statement": "one glance, one button", "references": ["Celeste menus", "Dead Cells"]},
+    },
+    "invariants": ["the ink-wash palette", "one-button dash"],
+    "roles_off": {},
 }
 
 AREAS = ["Vision", "Mechanics", "Controls", "Systems", "Content", "Modes and sessions",
@@ -56,7 +69,9 @@ SEED_TOPICS = {"topics": [
     topic("T1", parent=None, priority="core", status="resolved", pages=["vision"]),
     topic("T2", priority="core"), topic("T3"),
     topic("T4", stage="production"), topic("T5", stage="production"),
-    topic("T6", priority="later", stage="production")]}
+    topic("T6", priority="later", stage="production"),
+    topic("T7", roles=("feel",)), topic("T8", roles=("art",)), topic("T9", roles=("audio",)),
+    topic("T10", roles=("narrative",)), topic("T11", roles=("ux",))]}
 
 FUN = {"items": [
     {"id": "FC1", "statement": "the lead changes", "scope": "core-loop", "kind": "proxy",
@@ -325,7 +340,7 @@ class GameRun(unittest.TestCase):
         self.ideate()
         self.assertTrue(self.next().startswith("with-user: game-brainstorm T2"))  # core before support
         self.write_wiki(SLICE_AREAS)
-        self.resolve("T2", "T3")  # the slice's topics; T4-T6 wait for production
+        self.resolve("T2", "T3", "T7", "T8", "T9", "T10", "T11")  # the slice's topics; T4-T6 wait for production
         self.sync()
         self.tool("advance")
         self.assertEqual(self.next(), "game-consolidate")
@@ -416,8 +431,9 @@ class GameRun(unittest.TestCase):
         self.to_ideation()
         self.ideate()
         self.edit("vision.json", lambda v: v.update(roles_off={"audio": "muted"}))
+        self.edit("topics.json", lambda d: d.update(topics=[t for t in d["topics"] if t["id"] != "T9"]))
         self.write_wiki([a for a in SLICE_AREAS if a != "Audio"])
-        self.resolve("T2", "T3")
+        self.resolve("T2", "T3", "T7", "T8", "T10", "T11")
         self.sync()
         self.tool("advance")
         self.assertEqual(self.next(), "game-consolidate")
@@ -526,7 +542,7 @@ class GameRun(unittest.TestCase):
     def test_production_topics_wait_until_the_slice_ships(self):
         self.to_plan()
         self.plan()
-        self.edit("topics.json", lambda d: d["topics"].append(topic("T7", priority="core", stage="production")))
+        self.edit("topics.json", lambda d: d["topics"].append(topic("T20", priority="core", stage="production")))
         self.commit()
         self.assertTrue(self.next().startswith("game-build F1"))
 
@@ -611,12 +627,12 @@ class GameRun(unittest.TestCase):
         self.to_ideation()
         self.write("docs/game/wiki.json", json.dumps({"pages": [
             "vision", {"id": ["x"], "area": "Vision"}, {"id": "slice", "area": "Vision", "link": "https://d/s"}]}))
-        self.edit("topics.json", lambda d: d["topics"].append(topic("T9", parent=None, pages=[["vision"]])))
+        self.edit("topics.json", lambda d: d["topics"].append(topic("T21", parent=None, pages=[["vision"]])))
         self.edit("features.json", lambda d: d["features"].append(dict(feature("F1", "core-loop"), pages=[["x"]])))
         out = self.tool("check", ok=False)
         for expected in ("wiki.json pages: entry 1 is not an object", "wiki.json pages: entry 2 has no id",
                          "page slice: missing title", "page slice: missing version", "page slice: missing updated",
-                         "topic T9: pages must be a list of page ids", "F1: pages must be a list of page ids"):
+                         "topic T21: pages must be a list of page ids", "F1: pages must be a list of page ids"):
             self.assertIn(expected, out)
         self.assertNotIn("Traceback", out)
         self.assertNotIn("Traceback", self.tool("status"))
@@ -630,6 +646,62 @@ class GameRun(unittest.TestCase):
         self.assertIn("features.json must hold a JSON object", out)
         self.assertNotIn("Traceback", out)
 
+    def test_ideation_needs_a_north_star_per_active_role_and_invariants(self):
+        self.to_ideation()
+        v = json.loads(json.dumps(VISION_JSON))
+        del v["north_stars"]["art"]
+        v["invariants"] = ["one"]
+        (self.game / "vision.json").write_text(json.dumps(v))
+        out = self.tool("complete", ok=False)
+        self.assertIn("vision.json north_stars: art missing", out)
+        self.assertIn("vision.json invariants: 1; needs 2-5", out)
+
+    def test_north_stars_need_a_statement_and_two_references(self):
+        self.to_ideation()
+        v = json.loads(json.dumps(VISION_JSON))
+        v["north_stars"]["ux"] = {"statement": " ", "references": ["one"]}
+        (self.game / "vision.json").write_text(json.dumps(v))
+        out = self.tool("complete", ok=False)
+        self.assertIn("north_stars.ux: no statement", out)
+        self.assertIn("north_stars.ux: 1 references; needs 2", out)
+
+    def test_art_direction_and_feel_actions_are_required(self):
+        self.to_ideation()
+        v = json.loads(json.dumps(VISION_JSON))
+        v["north_stars"]["art"].update(directions=1, choice="")
+        v["north_stars"]["feel"]["actions"] = {}
+        (self.game / "vision.json").write_text(json.dumps(v))
+        out = self.tool("complete", ok=False)
+        self.assertIn("north_stars.art: directions 1; needs 2-3", out)
+        self.assertIn("north_stars.art: no choice", out)
+        self.assertIn("north_stars.feel: no core action", out)
+
+    def test_each_role_with_a_page_has_a_slice_topic(self):
+        self.to_ideation()
+        (self.game / "vision.json").write_text(json.dumps(VISION_JSON))
+        self.edit("topics.json", lambda d: d.update(topics=[t for t in SEED_TOPICS["topics"] if t["id"] != "T8"]))
+        self.write_wiki(["Vision"])
+        self.commit()
+        self.assertIn("no slice topic for role art (its page)", self.tool("complete", ok=False))
+        v = dict(VISION_JSON, roles_off={"art": "no art role"})
+        v["north_stars"] = {r: s for r, s in VISION_JSON["north_stars"].items() if r != "art"}
+        (self.game / "vision.json").write_text(json.dumps(v))
+        self.commit()
+        self.tool("complete")
+
+    def test_malformed_north_stars_invariants_and_roles_off_are_reasons(self):
+        self.to_ideation()
+        self.edit("vision.json", lambda d: d.update(north_stars=[], invariants="x", roles_off={"art": " "}))
+        out = self.tool("gate", ok=False)
+        self.assertNotIn("Traceback", out)
+        self.assertIn("vision.json north_stars is not an object", out)
+        self.assertIn("vision.json invariants is not a list", out)
+        self.assertIn("vision.json roles_off: art has no reason", out)
+        self.edit("vision.json", lambda d: d.update(north_stars={}, invariants=[], roles_off=[]))
+        out = self.tool("gate", ok=False)
+        self.assertNotIn("Traceback", out)
+        self.assertIn("vision.json roles_off is not an object", out)
+
     def test_blank_anti_pillars_count_as_none(self):
         self.to_ideation()
         self.edit("vision.json", lambda d: d.update(VISION_JSON, anti_pillars=["", "  "]))
@@ -639,7 +711,7 @@ class GameRun(unittest.TestCase):
         self.to_ideation()
         self.ideate()
         self.write_wiki([a for a in SLICE_AREAS if a != "Feel"])
-        self.resolve("T2", "T3")
+        self.resolve("T2", "T3", "T7", "T8", "T9", "T10", "T11")
         self.sync()
         self.tool("advance")
         self.assertIn("wiki.json has no page in area 'Feel'", self.tool("gate", ok=False))
@@ -648,7 +720,7 @@ class GameRun(unittest.TestCase):
         self.to_ideation()
         self.ideate()
         self.write_wiki(SLICE_AREAS)
-        self.resolve("T2", "T3")
+        self.resolve("T2", "T3", "T7", "T8", "T9", "T10", "T11")
         self.sync()
         self.tool("advance")
         (self.game / "fun-checklist.json").write_text(json.dumps(
@@ -661,7 +733,7 @@ class GameRun(unittest.TestCase):
         self.to_ideation()
         self.ideate()
         self.write_wiki(SLICE_AREAS)
-        self.resolve("T2", "T3")
+        self.resolve("T2", "T3", "T7", "T8", "T9", "T10", "T11")
         self.sync()
         self.tool("advance")
         (self.game / "fun-checklist.json").write_text(json.dumps(
@@ -968,23 +1040,23 @@ class GameRun(unittest.TestCase):
     def test_topics_opened_during_build_interrupt_the_work_that_needs_them(self):
         self.to_plan()
         self.plan()
-        self.edit("topics.json", lambda d: d["topics"].append(topic("T7", unblocks=["F2"])))
-        self.edit("topics.json", lambda d: d["topics"].append(topic("T8")))
+        self.edit("topics.json", lambda d: d["topics"].append(topic("T20", unblocks=["F2"])))
+        self.edit("topics.json", lambda d: d["topics"].append(topic("T21")))
         self.commit()
-        self.assertTrue(self.next().startswith("with-user: game-brainstorm T7"))  # unblocks F2; T8 waits
-        self.resolve("T7")
+        self.assertTrue(self.next().startswith("with-user: game-brainstorm T20"))  # unblocks F2; T21 waits
+        self.resolve("T20")
         self.assertTrue(self.next().startswith("game-build F1"))
-        self.edit("topics.json", lambda d: d["topics"].append(topic("T9", priority="core")))
+        self.edit("topics.json", lambda d: d["topics"].append(topic("T22", priority="core")))
         self.commit()
-        self.assertTrue(self.next().startswith("with-user: game-brainstorm T9"))
+        self.assertTrue(self.next().startswith("with-user: game-brainstorm T22"))
 
     def test_without_a_person_the_run_builds_around_open_topics_then_waits(self):
         self.to_plan()
         self.plan()
-        self.edit("topics.json", lambda d: d["topics"].append(topic("T7", unblocks=["F1"])))
+        self.edit("topics.json", lambda d: d["topics"].append(topic("T20", unblocks=["F1"])))
         self.commit()
-        self.assertTrue(self.next().startswith("with-user: game-brainstorm T7"))
-        self.assertTrue(self.next("--no-user").startswith("game-build F2"))  # F1 waits on T7
+        self.assertTrue(self.next().startswith("with-user: game-brainstorm T20"))
+        self.assertTrue(self.next("--no-user").startswith("game-build F2"))  # F1 waits on T20
         self.set_passes("F2")
         self.assertIn("stop: waiting for a person", self.next("--no-user"))
 
@@ -1054,7 +1126,7 @@ class GameRun(unittest.TestCase):
         self.commit()
         self.assertIn("topic T3: open (support)", self.tool("complete", ok=False))
         self.edit("topics.json", lambda d: [t.update(status="deferred", resolution="after the slice")
-                                            for t in d["topics"] if t["id"] == "T3"])
+                                            for t in d["topics"] if t["id"] in ("T3", "T7", "T8", "T9", "T10", "T11")])
         self.commit()
         self.tool("complete")
 

@@ -73,6 +73,7 @@ CALIBRATED_ROLES = ["creative", "feel", "art", "ux"]  # roles whose taste judgme
 LABELS = "docs/game/calibration/labels.json"
 DECISION_RE = r"^(fixed [0-9a-f]{7,40}|feature F\d+|topic T\d+|wontfix: \S.*)$"
 MIN_SEED_TOPICS = 5
+PAGE_ROLES = ("feel", "art", "audio", "narrative", "ux")  # roles whose page ideation seeds a slice topic for
 NICE_RESERVE = 10  # sessions kept back for verdicts and polish before nice features are built
 
 CURRENT_VERSION = 6
@@ -361,6 +362,16 @@ class Game:
         sl = v.get("slice")
         if isinstance(sl, dict) and not isinstance(sl.get("quality_bar", {}), dict):
             why.append("vision.json slice quality_bar is not an object")
+        if not isinstance(v.get("north_stars", {}), dict):
+            why.append("vision.json north_stars is not an object")
+        if not isinstance(v.get("invariants", []), list):
+            why.append("vision.json invariants is not a list")
+        off = v.get("roles_off", {})
+        if not isinstance(off, dict):
+            why.append("vision.json roles_off is not an object")
+        else:
+            why += [f"vision.json roles_off: {r} has no reason" for r, reason in off.items()
+                    if not str(reason or "").strip()]
         return why
 
     def items(self):
@@ -929,6 +940,7 @@ class Game:
                 why.append(f"vision.json slice quality bar: {aspect} missing")
             elif level not in QUALITY_BARS:
                 why.append(f"vision.json slice quality bar: {aspect} is '{level}'; needs one of {QUALITY_BARS}")
+        why += self._north_star_reasons(v)
         ids = self.page_ids()
         why += [f"wiki.json has no page '{i}'" for i in REQUIRED_PAGES if i not in ids]
         seeded = [t for t in self.topics() if t.get("parent") is not None]
@@ -938,6 +950,39 @@ class Game:
             why.append(f"topics.json has {len(seeded)} follow-up topics; seed at least {MIN_SEED_TOPICS}")
         if not any(t.get("priority") == "core" for t in seeded):
             why.append("no core topic seeded")
+        for r in self.active_roles():
+            if r in PAGE_ROLES and not any(t.get("stage") == "slice" and isinstance(t.get("roles"), list)
+                                           and r in t["roles"] for t in seeded):
+                why.append(f"no slice topic for role {r} (its page)")
+        return why
+
+    def _north_star_reasons(self, v):
+        """Reasons the north stars and invariants ideation sets are missing or thin."""
+        stars = v.get("north_stars") if isinstance(v.get("north_stars"), dict) else {}
+        why = []
+        for r in self.active_roles():
+            star = stars.get(r)
+            if not isinstance(star, dict):
+                why.append(f"vision.json north_stars: {r} missing")
+                continue
+            if not str(star.get("statement") or "").strip():
+                why.append(f"north_stars.{r}: no statement")
+            refs = star.get("references")
+            n = len([x for x in refs if str(x).strip()]) if isinstance(refs, list) else 0
+            if n < 2:
+                why.append(f"north_stars.{r}: {n} references; needs 2")
+            if r == "art":
+                d = star.get("directions")
+                if not isinstance(d, int) or isinstance(d, bool) or not 2 <= d <= 3:
+                    why.append(f"north_stars.art: directions {d if isinstance(d, int) else 0}; needs 2-3")
+                if not str(star.get("choice") or "").strip():
+                    why.append("north_stars.art: no choice")
+            if r == "feel" and not (isinstance(star.get("actions"), dict) and star["actions"]):
+                why.append("north_stars.feel: no core action")
+        inv = v.get("invariants") if isinstance(v.get("invariants"), list) else []
+        n = len([x for x in inv if str(x).strip()])
+        if not 2 <= n <= 5:
+            why.append(f"vision.json invariants: {n}; needs 2-5")
         return why
 
     def _consolidate_gate(self):
